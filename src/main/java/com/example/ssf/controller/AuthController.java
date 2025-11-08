@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AuthController.class);
+
     @Autowired
     private AuthenticationManager authenticationManager;
 
@@ -62,8 +64,7 @@ public class AuthController {
                         .body("Invalid token");
             }
         } catch (JwtException | IllegalArgumentException e) {
-            Logger logger = LoggerFactory.getLogger(AuthController.class);
-            logger.error("Token validation failed: {}", e.getMessage(), e);
+            LOGGER.error("Token validation failed: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body("Token validation failed");
         }

@@ -23,10 +23,14 @@ public class AuthQuery {
     @QueryMapping
     public User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated() && auth.getName() != null && !auth.getName().isEmpty() && !"anonymousUser".equals(auth.getName())) {
+        if (isAuthenticatedUser(auth)) {
             // For now, return a basic User object. In a real app, fetch from database
             return new User(null, auth.getName(), null); // id and email would come from DB
         }
         return null;
+    }
+
+    private static boolean isAuthenticatedUser(Authentication auth) {
+        return auth != null && auth.isAuthenticated() && auth.getName() != null && !auth.getName().isEmpty() && !"anonymousUser".equals(auth.getName());
     }
 }

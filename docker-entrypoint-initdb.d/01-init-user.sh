@@ -24,7 +24,5 @@ GRANT CREATE INDEX TO ssfuser;
 GRANT UNLIMITED TABLESPACE TO ssfuser;
 
 -- Create necessary tables
-ALTER SESSION SET CURRENT_SCHEMA=ssfuser;
-
 exit;
 EOF

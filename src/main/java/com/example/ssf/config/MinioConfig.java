@@ -27,17 +27,7 @@ public class MinioConfig {
 
     @PostConstruct
     public void validateMinioConfiguration() {
-        String[] activeProfiles = environment.getActiveProfiles();
-        boolean isProduction = java.util.Arrays.asList(activeProfiles).contains("prod") 
-                || java.util.Arrays.asList(activeProfiles).contains("production");
-
-        // In production, enforce secure configuration
-        if (isProduction) {
-            validateProductionConfiguration();
-        } else {
-            // In non-production, apply safe defaults and warn if using defaults
-            applyNonProductionDefaults();
-        }
+        validateConfiguration();
     }
 
     private void validateProductionConfiguration() {
@@ -62,23 +52,17 @@ public class MinioConfig {
 
         // Validate URL uses HTTPS
         if (!minioUrl.startsWith("https://")) {
-            throw new IllegalStateException(
-                    "Production profile detected: MinIO URL must use HTTPS (secure protocol). " +
-                    "Found: " + minioUrl + " - Update minio.url to use https://");
+            throw new IllegalStateException("MINIO_URL_NOT_HTTPS");
         }
 
         // Check for default credentials
         if ("minioadmin".equals(minioAccessKey) || "minioadmin".equals(minioSecretKey)) {
-            throw new IllegalStateException(
-                    "Production profile detected: Default MinIO credentials (minioadmin/minioadmin) are not allowed. " +
-                    "Configure secure credentials via MINIO_ACCESS_KEY and MINIO_SECRET_KEY environment variables.");
+            throw new IllegalStateException("MINIO_DEFAULT_CREDENTIALS");
         }
 
         // Warn if credentials are weak (too short)
         if (minioAccessKey.length() < 3 || minioSecretKey.length() < 8) {
-            throw new IllegalStateException(
-                    "Production profile detected: MinIO credentials are too weak. " +
-                    "Access key must be at least 3 characters, secret key must be at least 8 characters.");
+            throw new IllegalStateException("MINIO_WEAK_CREDENTIALS");
         }
     }
 
@@ -105,9 +89,24 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient() {
+        validateConfiguration();
         return MinioClient.builder()
                 .endpoint(minioUrl)
                 .credentials(minioAccessKey, minioSecretKey)
                 .build();
+    }
+
+    private void validateConfiguration() {
+        String[] activeProfiles = environment.getActiveProfiles();
+        boolean isProduction = java.util.Arrays.asList(activeProfiles).contains("prod") 
+                || java.util.Arrays.asList(activeProfiles).contains("production");
+
+        // In production, enforce secure configuration
+        if (isProduction) {
+            validateProductionConfiguration();
+        } else {
+            // In non-production, apply safe defaults and warn if using defaults
+            applyNonProductionDefaults();
+        }
     }
 }

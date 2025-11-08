@@ -9,6 +9,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
+import org.springframework.util.StringUtils;
 
 @Controller
 public class AuthMutation {
@@ -21,6 +22,12 @@ public class AuthMutation {
 
     @MutationMapping
     public AuthResponse login(@Argument String username, @Argument String password) {
+        if (!StringUtils.hasText(username)) {
+            throw new IllegalArgumentException("Username must not be blank");
+        }
+        if (!StringUtils.hasText(password)) {
+            throw new IllegalArgumentException("Password must not be blank");
+        }
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password)
