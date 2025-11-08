@@ -8,22 +8,24 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final Map<String, String> CLIENT_MESSAGES = Map.of(
-            "Username must not be blank", "Username is required",
-            "Email must not be blank", "Email is required",
-            "Email format is invalid", "Email format is invalid",
-            "Username is already in use", "Username already exists",
-            "Email is already in use", "Email already exists",
-            "Password must not be blank", "Password is required",
-            "Password must be provided in raw form", "Password must be provided in plain text",
-            "Password must be at least 8 characters long", "Password must be at least 8 characters long",
-            "User not found", "User not found"
+            "USERNAME_BLANK", "Username is required",
+            "EMAIL_BLANK", "Email is required",
+            "EMAIL_INVALID", "Email format is invalid",
+            "USERNAME_IN_USE", "Username already exists",
+            "EMAIL_IN_USE", "Email already exists",
+            "PASSWORD_BLANK", "Password is required",
+            "PASSWORD_ENCODED", "Password must be provided unhashed; ensure it is sent over a secure channel (e.g., HTTPS)",
+            "PASSWORD_TOO_SHORT", "Password must be at least 8 characters long",
+            "USER_NOT_FOUND", "User not found"
     );
     private static final String DEFAULT_MESSAGE = "Invalid request";
 
@@ -36,12 +38,12 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, String>> handleValidationException(MethodArgumentNotValidException ex) {
+    public ResponseEntity<Map<String, List<String>>> handleValidationException(MethodArgumentNotValidException ex) {
         LOGGER.warn("Validation failed", ex);
-        String message = ex.getBindingResult().getAllErrors().stream()
-                .findFirst()
+        List<String> errors = ex.getBindingResult().getAllErrors().stream()
                 .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .orElse("Validation failed");
-        return ResponseEntity.badRequest().body(Map.of("error", message));
+                .filter(Objects::nonNull)
+                .toList();
+        return ResponseEntity.badRequest().body(Map.of("errors", errors));
     }
 }

@@ -40,7 +40,7 @@ public class UserService {
 
     public User updateUser(UUID userId, String newUsername, String newEmail, Optional<String> newPassword) {
         User existing = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
 
         if (StringUtils.hasText(newUsername) && !newUsername.equals(existing.getUsername())) {
             ensureUsernameAvailable(newUsername, existing.getId());
@@ -67,7 +67,7 @@ public class UserService {
 
     private void validateNewUser(User user) {
         if (!StringUtils.hasText(user.getUsername())) {
-            throw new IllegalArgumentException("Username must not be blank");
+            throw new IllegalArgumentException("USERNAME_BLANK");
         }
         validateEmailFormat(user.getEmail());
         validateRawPassword(user.getPassword());
@@ -75,22 +75,22 @@ public class UserService {
 
     private void validateRawPassword(String password) {
         if (!StringUtils.hasText(password)) {
-            throw new IllegalArgumentException("Password must not be blank");
+            throw new IllegalArgumentException("PASSWORD_BLANK");
         }
         if (looksEncoded(password)) {
-            throw new IllegalArgumentException("Password must be provided in raw form");
+            throw new IllegalArgumentException("PASSWORD_ENCODED");
         }
         if (password.length() < 8) {
-            throw new IllegalArgumentException("Password must be at least 8 characters long");
+            throw new IllegalArgumentException("PASSWORD_TOO_SHORT");
         }
     }
 
     private void validateEmailFormat(String email) {
         if (!StringUtils.hasText(email)) {
-            throw new IllegalArgumentException("Email must not be blank");
+            throw new IllegalArgumentException("EMAIL_BLANK");
         }
         if (!EMAIL_PATTERN.matcher(email).matches()) {
-            throw new IllegalArgumentException("Email format is invalid");
+            throw new IllegalArgumentException("EMAIL_INVALID");
         }
     }
 
@@ -98,7 +98,7 @@ public class UserService {
         userRepository.findByUsername(username)
                 .filter(existing -> currentUserId == null || !existing.getId().equals(currentUserId))
                 .ifPresent(existing -> {
-                    throw new IllegalArgumentException("Username is already in use");
+                    throw new IllegalArgumentException("USERNAME_IN_USE");
                 });
     }
 
@@ -106,7 +106,7 @@ public class UserService {
         userRepository.findByEmail(email)
                 .filter(existing -> currentUserId == null || !existing.getId().equals(currentUserId))
                 .ifPresent(existing -> {
-                    throw new IllegalArgumentException("Email is already in use");
+                    throw new IllegalArgumentException("EMAIL_IN_USE");
                 });
     }
 

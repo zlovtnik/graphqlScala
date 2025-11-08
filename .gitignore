@@ -16,7 +16,7 @@ Thumbs.db
 .settings/
 # Build and dependency outputs
 /build/
-
+/.bloop/
 /.gradle/
 !gradle/wrapper/gradle-wrapper.jar
 !gradle/wrapper/gradle-wrapper.properties
@@ -47,3 +47,5 @@ temp/
 
 # Local data artifacts
 data/*.db
+
+.fake

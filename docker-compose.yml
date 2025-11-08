@@ -1,0 +1,89 @@
+version: '3.9'
+
+services:
+  # Oracle Database Free
+  oracle:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: oracle-free
+    environment:
+      ORACLE_PWD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
+      ORACLE_CHARACTERSET: AL32UTF8
+    ports:
+      - "1521:1521"
+      - "5500:5500"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - ssf-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    shm_size: 2gb
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio:latest
+    container_name: minio-server
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - ssf-network
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Spring Boot Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssf-app
+    depends_on:
+      oracle:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      ORACLE_HOST: oracle
+      ORACLE_PORT: 1521
+      ORACLE_DB: FREE
+      ORACLE_USER: ${ORACLE_USER:-ssfuser}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-ssfuser}
+      ORACLE_ADMIN_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      JWT_SECRET: ${JWT_SECRET:-0123456789abcdefghijklmnopqrstuv0123456789abcdefghijklmnopqrstuv}
+      KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD:-changeit}
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./data:/app/data
+    networks:
+      - ssf-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://localhost:8443/actuator/health", "-k"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  oracle_data:
+  minio_data:
+
+networks:
+  ssf-network:
+    driver: bridge

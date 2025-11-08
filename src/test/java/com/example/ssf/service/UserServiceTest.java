@@ -200,14 +200,14 @@ class UserServiceTest {
     }
 
     @Test
-    void updateUser_WhenUserNotFound_ThrowsNotFoundException() {
+    void updateUser_WhenUserNotFound_ThrowsIllegalArgumentException() {
         UUID userId = testUser.getId();
         when(userRepository.findById(userId)).thenReturn(Optional.empty());
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userService.updateUser(userId, null, null, Optional.empty()));
 
-        assertEquals("User not found", exception.getMessage());
+        assertEquals("USER_NOT_FOUND", exception.getMessage());
         verify(userRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(anyString());
     }
@@ -230,14 +230,14 @@ class UserServiceTest {
     }
 
     @Test
-    void updateUser_WhenPasswordEmpty_ThrowsValidationException() {
+    void updateUser_WhenPasswordEmpty_ThrowsIllegalArgumentException() {
         UUID userId = testUser.getId();
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userService.updateUser(userId, null, null, Optional.of("")));
 
-        assertEquals("Password must not be blank", exception.getMessage());
+        assertEquals("PASSWORD_BLANK", exception.getMessage());
         verify(userRepository).findById(userId);
         verify(userRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(anyString());

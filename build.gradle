@@ -26,12 +26,17 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-jetty'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
-	implementation 'org.hibernate.orm:hibernate-community-dialects:6.4.4.Final'
+	
+	// Oracle Database Driver
+	implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
+	
+	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
-	implementation 'io.minio:minio:8.5.7'
+	
+	// MinIO
+	implementation 'io.minio:minio:8.6.0'
 	
 	compileOnly 'org.projectlombok:lombok:1.18.32'
 	annotationProcessor 'org.projectlombok:lombok:1.18.32'

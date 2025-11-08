@@ -1,0 +1,19 @@
+type Query {
+    validateToken(token: String!): Boolean!
+    getCurrentUser: User
+}
+
+type Mutation {
+    login(username: String!, password: String!): AuthResponse!
+    logout: Boolean!
+}
+
+type AuthResponse {
+    token: String!
+}
+
+type User {
+    id: ID!
+    username: String!
+    email: String
+}

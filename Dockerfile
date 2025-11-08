@@ -16,6 +16,15 @@ WORKDIR /app
 
 COPY --from=build /app/build/libs/ssf-0.0.1-SNAPSHOT.jar app.jar
 
+# Create non-root user and group
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup -h /app -s /sbin/nologin
+
+# Change ownership of application files
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
 ENV JAVA_OPTS=""
 EXPOSE 8443
 
