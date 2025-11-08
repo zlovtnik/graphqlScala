@@ -29,7 +29,7 @@ jobs:
           arguments: clean test jacocoTestReport
 
       - name: Build Docker image
-        run: docker build -t ssf-app-ci .
+        run: docker build -f ./Dockerfile -t ssf-app-ci .
 
       - name: Upload test results
         if: success() || failure()

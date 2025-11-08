@@ -14,7 +14,7 @@ RUN chmod +x gradlew \
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=build /app/build/libs/*.jar app.jar
+COPY --from=build /app/build/libs/ssf-0.0.1-SNAPSHOT.jar app.jar
 
 ENV JAVA_OPTS=""
 EXPOSE 8443

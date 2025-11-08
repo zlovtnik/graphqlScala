@@ -213,7 +213,7 @@ class UserServiceTest {
     }
 
     @Test
-    void updateUser_NullInputs_HandleValidationOrThrowIllegalArgument() {
+    void updateUser_WhenAllInputsNull_PreservesExistingValues() {
         UUID userId = testUser.getId();
         when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
         when(userRepository.save(testUser)).thenReturn(testUser);
@@ -224,12 +224,22 @@ class UserServiceTest {
         assertEquals("test@example.com", result.getEmail());
         assertEquals("password123", result.getPassword());
 
+        verify(userRepository).findById(userId);
+        verify(userRepository).save(testUser);
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
+    void updateUser_WhenPasswordEmpty_ThrowsValidationException() {
+        UUID userId = testUser.getId();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(testUser));
+
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> userService.updateUser(userId, null, null, Optional.of("")));
 
         assertEquals("Password must not be blank", exception.getMessage());
-        verify(userRepository, times(2)).findById(userId);
-        verify(userRepository).save(testUser);
+        verify(userRepository).findById(userId);
+        verify(userRepository, never()).save(any());
         verify(passwordEncoder, never()).encode(anyString());
     }
 
