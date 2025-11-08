@@ -83,7 +83,7 @@ public class MinioConfigSecurityTest {
                         fail("Context should not load with invalid config");
                     });
         } catch (Exception e) {
-            assertTrue(e.getMessage().contains("credentials are too weak") || e instanceof IllegalStateException);
+            assertTrue(e.getMessage().contains("MINIO_WEAK_CREDENTIALS") || e instanceof IllegalStateException);
         }
     }
 
