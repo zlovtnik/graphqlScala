@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.example.ssf.SsfApplicationTests" tests="1" skipped="0" failures="0" errors="0" timestamp="2025-05-20T01:21:19.502Z" hostname="Mac.lan" time="0.002">
-  <properties/>
-  <testcase name="contextLoads()" classname="com.example.ssf.SsfApplicationTests" time="0.002"/>
-  <system-out><![CDATA[2025-05-19T21:21:19.501-04:00  INFO 36594 --- [ssf] [    Test worker] t.c.s.AnnotationConfigContextLoaderUtils : Could not detect default configuration classes for test class [com.example.ssf.SsfApplicationTests]: SsfApplicationTests does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
-2025-05-19T21:21:19.501-04:00  INFO 36594 --- [ssf] [    Test worker] .b.t.c.SpringBootTestContextBootstrapper : Found @SpringBootConfiguration com.example.ssf.SsfApplication for test class com.example.ssf.SsfApplicationTests
-]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
