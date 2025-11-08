@@ -25,7 +25,7 @@ server:
     key-alias: ssf
 
 jwt:
-  secret: ${JWT_SECRET:your-secret-key}
+  secret: ${JWT_SECRET:0123456789abcdefghijklmnopqrstuv}
 
 minio:
   url: http://localhost:9000
