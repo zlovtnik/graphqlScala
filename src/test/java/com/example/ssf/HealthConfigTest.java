@@ -120,7 +120,7 @@ class HealthConfigTest {
     void testDatabaseFileHealthIndicator() {
         Health health = healthConfig.databaseFileHealthIndicator().health();
         assertEquals(Status.UP, health.getStatus());
-        assertEquals("exists", health.getDetails().get("databaseFile"));
+        assertEquals("in-memory", health.getDetails().get("databaseFile"));
     }
 
     @Test

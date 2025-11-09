@@ -11,6 +11,9 @@ export PATH=$ORACLE_HOME/bin:$PATH
 
 # Check if database is up and accepting connections
 sqlplus -s / as sysdba << EOF
+   WHENEVER SQLERROR EXIT SQL.SQLCODE
+   WHENEVER OSERROR EXIT FAILURE
+   SET SERVEROUTPUT ON
    ALTER SESSION SET CONTAINER = FREEPDB1;
    DECLARE
      v_count NUMBER;

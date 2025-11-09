@@ -2,7 +2,7 @@ spring:
   application:
     name: ssf
   datasource:
-    url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREE}
+    url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
     driver-class-name: oracle.jdbc.OracleDriver
     username: ${ORACLE_USER:ssfuser}
     password: ${ORACLE_PASSWORD:ssfuser}

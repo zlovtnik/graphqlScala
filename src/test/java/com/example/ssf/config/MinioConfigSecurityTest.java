@@ -2,7 +2,7 @@ package com.example.ssf.config;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.assertj.ApplicationContextAssert;
+import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,7 +31,7 @@ public class MinioConfigSecurityTest {
     @Test
     @DisplayName("Should reject HTTP URL in production")
     void testRejectHttpInProduction() {
-        assertThrows(IllegalStateException.class, () -> contextRunner
+        contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
                         "minio.url=http://insecure-minio.example.com:9000",
@@ -39,14 +39,15 @@ public class MinioConfigSecurityTest {
                         "minio.secret-key=secureSecretKeyMinimum8"
                 )
                 .run(context -> {
-                    context.getBean(MinioConfig.class);
-                }));
+                    assertNotNull(context.getStartupFailure());
+                    assertTrue(context.getStartupFailure() instanceof BeanCreationException);
+                });
     }
 
     @Test
     @DisplayName("Should reject default credentials in production")
     void testRejectDefaultCredentials() {
-        assertThrows(IllegalStateException.class, () -> contextRunner
+        contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
                         "minio.url=https://secure-minio.example.com:9000",
@@ -54,14 +55,15 @@ public class MinioConfigSecurityTest {
                         "minio.secret-key=minioadmin"
                 )
                 .run(context -> {
-                    context.getBean(MinioConfig.class);
-                }));
+                    assertNotNull(context.getStartupFailure());
+                    assertTrue(context.getStartupFailure() instanceof BeanCreationException);
+                });
     }
 
     @Test
     @DisplayName("Should reject weak credentials in production")
     void testRejectWeakCredentials() {
-        assertThrows(IllegalStateException.class, () -> contextRunner
+        contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
                         "minio.url=https://secure-minio.example.com:9000",
@@ -69,8 +71,9 @@ public class MinioConfigSecurityTest {
                         "minio.secret-key=short"
                 )
                 .run(context -> {
-                    context.getBean(MinioConfig.class);
-                }));
+                    assertNotNull(context.getStartupFailure());
+                    assertTrue(context.getStartupFailure() instanceof BeanCreationException);
+                });
     }
 
     @Test

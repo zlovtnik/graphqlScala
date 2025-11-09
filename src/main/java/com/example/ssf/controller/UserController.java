@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.net.URI;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -45,9 +46,30 @@ public class UserController {
         return ResponseEntity.created(location).body(savedUser);
     }
 
+    @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<User> updateUser(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
+        User updatedUser = userService.updateUser(id, request.username(), request.email(),
+                Optional.ofNullable(request.password()));
+        return ResponseEntity.ok(updatedUser);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable UUID id) {
+        if (userService.deleteUser(id)) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.notFound().build();
+    }
+
     public record CreateUserRequest(
             @NotBlank String username,
             @NotBlank @Email String email,
             @NotBlank @Size(min = 8, max = 100) String password
+    ) {}
+
+    public record UpdateUserRequest(
+            @Size(max = 50) String username,
+            @Email @Size(max = 254) String email,
+            @Size(min = 8, max = 100) String password
     ) {}
 }

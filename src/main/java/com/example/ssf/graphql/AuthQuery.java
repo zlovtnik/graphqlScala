@@ -2,6 +2,7 @@ package com.example.ssf.graphql;
 
 import com.example.ssf.dto.User;
 import com.example.ssf.security.JwtTokenProvider;
+import com.example.ssf.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
@@ -15,6 +16,9 @@ public class AuthQuery {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
+    @Autowired
+    private UserService userService;
+
     @QueryMapping
     public Boolean validateToken(@Argument String token) {
         return jwtTokenProvider.validateToken(token);
@@ -24,8 +28,10 @@ public class AuthQuery {
     public User getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (isAuthenticatedUser(auth)) {
-            // For now, return a basic User object. In a real app, fetch from database
-            return new User(null, auth.getName(), null); // id and email would come from DB
+            // Fetch user from database using username
+            return userService.findByUsername(auth.getName())
+                    .map(u -> new User(u.getId(), u.getUsername(), u.getEmail()))
+                    .orElse(null);
         }
         return null;
     }

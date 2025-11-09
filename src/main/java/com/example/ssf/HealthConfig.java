@@ -56,6 +56,10 @@ public class HealthConfig {
     public HealthIndicator databaseFileHealthIndicator() {
         return () -> {
             String dbUrlLocal = env.getProperty("spring.datasource.url");
+            if (dbUrlLocal != null && dbUrlLocal.startsWith("jdbc:h2:mem:")) {
+                // H2 database, no file to check
+                return org.springframework.boot.actuate.health.Health.up().withDetail(DATABASE_FILE, "in-memory").build();
+            }
             String dbPath = dbUrlLocal != null ? dbUrlLocal.replace("jdbc:sqlite:", "") : "";
             File dbFile = new File(dbPath);
             if (dbFile.exists()) {
