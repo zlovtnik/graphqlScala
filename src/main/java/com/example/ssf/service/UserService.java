@@ -19,7 +19,6 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -110,10 +109,7 @@ public class UserService {
                 null
         );
 
-        DynamicCrudResponse response = dynamicCrudGateway.execute(request);
-        response.optionalGeneratedId()
-                .map(UUID::fromString)
-                .ifPresent(user::setId);
+        dynamicCrudGateway.execute(request);
         return user;
     }
 
@@ -138,10 +134,11 @@ public class UserService {
             existing.setPassword(passwordEncoder.encode(password));
         });
 
-        List<DynamicCrudColumnValue> columns = new ArrayList<>();
-        columns.add(new DynamicCrudColumnValue("username", existing.getUsername()));
-        columns.add(new DynamicCrudColumnValue("email", existing.getEmail()));
-        columns.add(new DynamicCrudColumnValue("password", existing.getPassword()));
+        List<DynamicCrudColumnValue> columns = List.of(
+                new DynamicCrudColumnValue("username", existing.getUsername()),
+                new DynamicCrudColumnValue("email", existing.getEmail()),
+                new DynamicCrudColumnValue("password", existing.getPassword())
+        );
 
         List<DynamicCrudFilter> filters = List.of(new DynamicCrudFilter("id", "=", userId.toString()));
 
