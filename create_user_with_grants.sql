@@ -8,7 +8,7 @@
 CREATE USER app_user IDENTIFIED BY &PASSWORD
 DEFAULT TABLESPACE users
 TEMPORARY TABLESPACE temp
-QUOTA 10G ON users; -- Review with DBA/storage team; adjust per environment capacity
+QUOTA 10G ON users; -- Production default: enforce quota to catch runaway growth
 
 -- Grant basic connection privileges
 GRANT CONNECT TO app_user;
@@ -26,8 +26,7 @@ GRANT CREATE TRIGGER TO app_user;
 GRANT CREATE TYPE TO app_user;
 GRANT CREATE SYNONYM TO app_user;
 
--- System privileges
-GRANT UNLIMITED TABLESPACE TO app_user;
+-- System privileges (quota enforced above; do not grant unlimited tablespace by default)
 GRANT EXECUTE ON DBMS_CRYPTO TO app_user;
 GRANT EXECUTE ON DBMS_LOCK TO app_user;
 GRANT EXECUTE ON DBMS_OUTPUT TO app_user;

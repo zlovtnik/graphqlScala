@@ -59,7 +59,7 @@ Key use cases include:
 
 ## Architecture
 
-```
+```text
 clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
          │    ├─ GraphQL endpoint (/graphql)
          │    ├─ GraphiQL IDE (/graphiql)
@@ -186,7 +186,7 @@ mutation {
 
 Use the returned token in the `Authorization` header:
 
-```
+```http
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
 ```
 

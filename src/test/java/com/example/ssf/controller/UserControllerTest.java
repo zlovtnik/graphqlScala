@@ -44,9 +44,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UserControllerTest {
 
     @Autowired
-    private UserController userController;
-
-    @Autowired
     private MockMvc mockMvc;
 
     private static final SecurityMockMvcRequestPostProcessors.UserRequestPostProcessor AUTHENTICATED_USER =
@@ -64,7 +61,7 @@ class UserControllerTest {
 
         @Bean
         PasswordEncoder passwordEncoder() {
-            return new BCryptPasswordEncoder();
+            return new BCryptPasswordEncoder(10); // Match default production strength
         }
 
         @Bean
