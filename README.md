@@ -1,177 +1,249 @@
 <div align="center">
-  <h1>🚀 Spring Boot GraphQL API</h1>
+  <h1>✨ SSF GraphQL Platform</h1>
+  <p>Secure, cloud-ready GraphQL APIs powered by Spring Boot 3, JWT, Oracle Database, and MinIO object storage.</p>
   <p>
+    <a href="https://openjdk.org/projects/jdk/21/">
+      <img alt="Java" src="https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white" />
+    </a>
     <a href="https://spring.io/projects/spring-boot">
-      <img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white" />
+      <img alt="Spring Boot" src="https://img.shields.io/badge/Spring%20Boot-3.4.5-6DB33F?style=for-the-badge&logo=springboot&logoColor=white" />
     </a>
     <a href="https://graphql.org/">
-      <img alt="GraphQL" src="https://img.shields.io/badge/GraphQL-E10098?style=for-the-badge&logo=graphql&logoColor=white" />
+      <img alt="GraphQL" src="https://img.shields.io/badge/GraphQL-Query%20First-E10098?style=for-the-badge&logo=graphql&logoColor=white" />
     </a>
-    <a href="https://www.sqlite.org/">
-      <img alt="SQLite" src="https://img.shields.io/badge/SQLite-07405E?style=for-the-badge&logo=sqlite&logoColor=white" />
+    <a href="https://www.oracle.com/database/technologies/appdev/xe.html">
+      <img alt="Oracle Database" src="https://img.shields.io/badge/Oracle%20DB-Enterprise-red?style=for-the-badge&logo=oracle&logoColor=white" />
+    </a>
+    <a href="https://min.io/">
+      <img alt="MinIO" src="https://img.shields.io/badge/MinIO-Object%20Storage-C72E49?style=for-the-badge&logo=min.io&logoColor=white" />
     </a>
   </p>
-  
-  <p>Modern GraphQL API built with Spring Boot, featuring JWT authentication, MinIO integration, and more.</p>
 </div>
 
-## 📋 Table of Contents
-- [✨ Features](#-features)
-- [🚀 Quick Start](#-quick-start)
-- [⚙️ Configuration](#️-configuration)
-- [🔧 Development](#-development)
-- [🔒 Security](#-security)
-- [📊 API Documentation](#-api-documentation)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
+> **SSF** (Secure Services Framework) delivers authentication-first GraphQL endpoints with auditable login flows, hardened JWT validation, and production-friendly observability baked in.
 
-## ✨ Features
+---
 
-<div align="center">
-  <table>
-    <tr>
-      <td align="center"><b>Feature</b></td>
-      <td align="center"><b>Status</b></td>
-      <td align="center"><b>Description</b></td>
-    </tr>
-    <tr>
-      <td>🚀 GraphQL API</td>
-      <td>✅ Ready</td>
-      <td>Modern GraphQL API with type-safe queries and mutations</td>
-    </tr>
-    <tr>
-      <td>💾 SQLite Database</td>
-      <td>✅ Ready</td>
-      <td>Lightweight, file-based database for local development</td>
-    </tr>
-    <tr>
-      <td>🔒 JWT Authentication</td>
-      <td>🔧 In Progress</td>
-      <td>Secure token-based authentication</td>
-    </tr>
-    <tr>
-      <td>📦 MinIO Integration</td>
-      <td>🔧 In Progress</td>
-      <td>Object storage for files and media</td>
-    </tr>
-    <tr>
-      <td>🔐 HTTPS Support</td>
-      <td>✅ Ready</td>
-      <td>Secure communication with SSL/TLS</td>
-    </tr>
-  </table>
-</div>
+## 📚 Table of Contents
+- [Overview](#overview)
+- [Highlights](#highlights)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [GraphQL & REST Interfaces](#graphql--rest-interfaces)
+- [Quality & Operations](#quality--operations)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
-## 🚀 Quick Start
+## Overview
+
+SSF is a Spring Boot 3 application exposing a GraphQL API secured with JWT. It integrates with Oracle databases, MinIO object storage, and Spring Actuator health checks to support enterprise-grade deployments.
+
+Key use cases include:
+
+- Authenticating users via username/password and issuing signed JWT access tokens
+- Managing user profiles through GraphQL queries and mutations
+- Uploading artifacts to MinIO-compatible object storage services
+- Monitoring system health with custom contributors for database files, JDBC connections, and MinIO reachability
+
+## Highlights
+
+| Capability | Why it matters |
+| --- | --- |
+| **JWT-first security** | Strict validation (length, entropy, expiration) with custom filters and GraphQL instrumentation |
+| **GraphQL gateway** | Typed schema, mutations for login/logout, and queries for user discovery |
+| **Oracle-ready** | Defaults to Oracle JDBC with environment overrides for production |
+| **MinIO integration** | Health probes and configuration properties for S3-compatible storage |
+| **Observability** | Spring Actuator endpoints and composite health contributors for runtime insights |
+
+## Architecture
+
+```
+clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
+         │    ├─ GraphQL endpoint (/graphql)
+         │    ├─ GraphiQL IDE (/graphiql)
+         │    └─ REST auth endpoints (/api/auth/**)
+         │
+         ├─▶ Security Pipeline
+         │    ├─ JwtAuthenticationFilter (servlet)
+         │    ├─ SecurityFilterChain (access rules)
+         │    └─ GraphQLAuthorizationInstrumentation
+         │
+         ├─▶ Services & Data
+         │    ├─ UserService (JPA + Oracle)
+         │    ├─ MinIO client (object storage)
+         │    └─ AuditService (login/session logging)
+         │
+         └─▶ Observability
+              ├─ Custom health indicators
+              └─ Spring Actuator (/actuator/**)
+```
+
+## Quick Start
 
 ### Prerequisites
-- Java 17+
-- Gradle 7.0+
-- (Optional) Docker for MinIO
 
-### Running the Application
+- Java 21 (configured via Gradle toolchains)
+- Gradle 8+
+- Oracle Database reachable at `ORACLE_HOST:ORACLE_PORT`
+- (Optional) Docker for MinIO local testing
+
+### 1. Clone & Build
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/ssf.git
-cd ssf
+git clone https://github.com/your-org/graphqlScala.git
+cd graphqlScala
 
-# Build the application
-./gradlew build
+# Run unit tests and build artifacts
+./gradlew clean build
+```
 
-# Run the application
+### 2. Prepare Environment
+
+Create a `.env` or export variables in your shell:
+
+```bash
+export ORACLE_HOST=localhost
+export ORACLE_PORT=1521
+export ORACLE_DB=FREEPDB1
+export ORACLE_USER=ssfuser
+export ORACLE_PASSWORD=ssfuser
+
+export JWT_SECRET="change-me-to-a-65-char-super-secret"
+
+export MINIO_ACCESS_KEY=minioadmin
+export MINIO_SECRET_KEY=minioadmin
+export MINIO_URL=http://localhost:9000
+
+# Optional: provide a custom SSL keystore password
+export KEYSTORE_PASSWORD=changeit
+```
+
+> 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters with ≥10 distinct characters. The application enforces this at startup.
+
+### 3. Launch the Application
+
+```bash
 ./gradlew bootRun
 ```
 
-The application will be available at:  
-🌐 **GraphQL Playground**: [http://localhost:8080/graphiql](http://localhost:8080/graphiql)  
-🔌 **GraphQL Endpoint**: [http://localhost:8080/graphql](http://localhost:8080/graphql)
+The server boots with HTTPS on `https://localhost:8443`. Since a development keystore is bundled (`src/main/resources/keystore.p12`), your browser/HTTP client may require a trust override.
 
-## ⚙️ Configuration
-
-Configuration can be managed through `application.properties` or environment variables:
-
-```properties
-# Server Configuration
-server.port=8080
-server.ssl.enabled=true
-
-# Database Configuration
-spring.datasource.url=jdbc:sqlite:./data/ssf.db
-spring.datasource.driver-class-name=org.sqlite.JDBC
-
-# JWT Configuration (update with your own values)
-jwt.secret=your-secret-key
-jwt.expiration=86400000
-
-# MinIO Configuration
-minio.url=http://localhost:9000
-minio.access-key=your-access-key
-minio.secret-key=your-secret-key
-minio.bucket-name=ssf-files
-```
-
-## 🔧 Development
-
-### Project Structure
-
-```
-src/
-├── main/
-│   ├── java/
-│   │   └── com/example/ssf/
-│   │       ├── config/       # Configuration classes
-│   │       ├── controller/   # GraphQL controllers
-│   │       ├── model/        # Data models
-│   │       ├── repository/   # Data repositories
-│   │       ├── security/     # Security configuration
-│   │       └── service/      # Business logic
-│   └── resources/
-│       ├── graphql/         # GraphQL schema files
-│       └── application.properties
-└── test/                    # Test files
-```
-
-### Building and Testing
+### 4. Optional: Start Dependencies with Docker
 
 ```bash
-# Run tests
-./gradlew test
+# Oracle Database XE (example)
+docker run -d --name oracle-xe \
+  -p 1521:1521 -p 5500:5500 \
+  -e ORACLE_PASSWORD=ssfuser \
+  gvenzl/oracle-xe:21-slim
 
-# Build the application
-./gradlew build
-
-# Run with custom profile
-SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
+# MinIO
+docker run -d --name minio \
+  -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin \
+  quay.io/minio/minio server /data --console-address :9001
 ```
 
-## 🔒 Security
+## Configuration
 
-This application implements JWT-based authentication. To secure your endpoints:
+Spring Boot properties can be set via `application.yml`, profile-specific files, or environment variables. Key properties include:
 
-1. Obtain a token from the authentication endpoint
-2. Include the token in the `Authorization` header: `Bearer <token>`
+| Property | Description | Default |
+| --- | --- | --- |
+| `server.port` | HTTPS port | `8443` |
+| `server.ssl.*` | Keystore path, password, alias | Bundled PKCS12 keystore |
+| `spring.datasource.url` | Oracle JDBC URL | `jdbc:oracle:thin:@//${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_DB}` |
+| `spring.datasource.username` / `password` | Database credentials | `ssfuser` / `ssfuser` |
+| `jwt.secret` | Symmetric signing key | Fallback demo value (override in all environments) |
+| `jwt.expiration` | Token lifetime (ms) | `86400000` (1 day) |
+| `minio.url` | MinIO endpoint | `http://localhost:9000` |
+| `minio.access-key` / `secret-key` | MinIO credentials | `minioadmin` / `minioadmin` |
 
-## 📊 API Documentation
+Profile-specific overrides live under `src/main/resources/application-*.yml`.
 
-Explore the GraphQL API using the built-in GraphiQL interface at [http://localhost:8080/graphiql](http://localhost:8080/graphiql)
+## GraphQL & REST Interfaces
 
-## 🤝 Contributing
+### Endpoints
 
-Contributions are welcome! Please follow these steps:
+- `POST https://localhost:8443/graphql` — GraphQL operations
+- `GET https://localhost:8443/graphiql` — in-browser IDE
+- `POST https://localhost:8443/api/auth/login` — REST login
+- `POST https://localhost:8443/api/auth/validate` — REST token validation
+- `GET https://localhost:8443/actuator/health` — health probe
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+### Example: Authenticate via GraphQL
 
-## 📄 License
+```graphql
+mutation {
+  login(username: "demo", password: "changeit") {
+    token
+  }
+}
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Use the returned token in the `Authorization` header:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+```
+
+### Example: Fetch Current User
+
+```graphql
+query {
+  getUserByUsername(username: "demo") {
+    id
+    username
+    email
+  }
+}
+```
+
+## Quality & Operations
+
+### Test & Coverage
+
+```bash
+./gradlew test               # Unit & integration tests
+./gradlew jacocoTestReport   # HTML coverage (build/jacocoHtml)
+```
+
+### Observability
+
+- Composite health contributor registers `databaseFile`, `databaseConnection`, and `minio`
+- Custom Actuator indicator `you` surfaces AI readiness (`{"ai":"I am up and running!"}`)
+- Enable additional Actuator endpoints by adjusting `management.endpoints.web.exposure.include`
+
+### Building an OCI Image
+
+```bash
+./gradlew bootBuildImage --imageName=ssf-graphql:latest
+```
+
+## Troubleshooting
+
+| Symptom | Resolution |
+| --- | --- |
+| **`IllegalStateException: JWT secret must be provided`** | Set `JWT_SECRET` with ≥32 characters before starting the app |
+| **`ORA-01017` authentication errors** | Verify `ORACLE_USER`/`ORACLE_PASSWORD`; if running locally ensure Oracle XE container is healthy |
+| **GraphiQL reports `Authentication required`** | Supply a valid JWT token in the `Authorization` header or disable enforcement temporarily in `SecurityConfig` (dev only) |
+| **MinIO health check is DOWN** | Confirm MinIO container is reachable and credentials match `minio.*` properties |
+
+## Contributing
+
+1. Fork the repository and create a feature branch: `git checkout -b feature/awesome`
+2. Keep changes focused and covered by tests (`./gradlew test`)
+3. Submit a pull request describing the change and its motivation
+
+## License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for full text.
 
 ---
 
 <div align="center">
-  Made with ❤️ and Spring Boot
+  Crafted with ❤️ using Spring Boot, GraphQL, and a relentless focus on security.
 </div>
