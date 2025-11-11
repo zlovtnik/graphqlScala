@@ -1,96 +1,3 @@
--- Oracle Schema for GraphQL Scala App
--- All business logic implemented in procedures and functions, no triggers used.
---
--- IMPORTANT: Before executing this script, run grant_privileges.sql as SYS/DBA to grant necessary privileges to the application user.
-
--- Make script idempotent for development
-
--- Create users table (skip if exists)
-BEGIN
-    EXECUTE IMMEDIATE 'CREATE TABLE users (
-        id VARCHAR2(36) PRIMARY KEY,
-        username VARCHAR2(255) NOT NULL UNIQUE,
-        password VARCHAR2(255) NOT NULL,
-        email VARCHAR2(255) NOT NULL UNIQUE,
-        created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-        updated_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
-    )';
-EXCEPTION
-    WHEN OTHERS THEN
--- Types for dynamic CRUD operations (used by dynamic_crud_pkg)
-CREATE OR REPLACE TYPE dyn_column_name_nt AS TABLE OF VARCHAR2(128);
-/
-
-CREATE OR REPLACE TYPE dyn_column_value_nt AS TABLE OF VARCHAR2(4000);
-/
-
-CREATE OR REPLACE TYPE dyn_filter_rec AS OBJECT (
-    column_name VARCHAR2(128),
-    operator    VARCHAR2(10),
-    value       VARCHAR2(4000)
-);
-/
-
-CREATE OR REPLACE TYPE dyn_filter_nt AS TABLE OF dyn_filter_rec;
-/
-
-CREATE OR REPLACE TYPE dyn_row_op_rec AS OBJECT (
-    column_names  dyn_column_name_nt,
-    column_values dyn_column_value_nt
-);
-/
-
-CREATE OR REPLACE TYPE dyn_row_op_nt AS TABLE OF dyn_row_op_rec;
-/
-
-CREATE OR REPLACE TYPE dyn_audit_ctx_rec AS OBJECT (
-    actor     VARCHAR2(128),
-    trace_id  VARCHAR2(128),
-    client_ip VARCHAR2(45),
-    metadata  CLOB
-);
-/
-
--- Package specification for dynamic CRUD operations
-CREATE OR REPLACE PACKAGE dynamic_crud_pkg AS
-    -- Supported operation names
-    c_op_create CONSTANT VARCHAR2(10) := 'CREATE';
-    c_op_read   CONSTANT VARCHAR2(10) := 'READ';
-    c_op_update CONSTANT VARCHAR2(10) := 'UPDATE';
-    c_op_delete CONSTANT VARCHAR2(10) := 'DELETE';
-
-    SUBTYPE t_operation IS VARCHAR2(10);
-
-    -- Metadata helpers
-    FUNCTION is_table_allowed(p_table_name IN VARCHAR2) RETURN BOOLEAN;
-    FUNCTION normalize_table_name(p_table_name IN VARCHAR2) RETURN VARCHAR2;
-
-    -- Execute a single-row CRUD operation
-    PROCEDURE execute_operation(
-        p_table_name    IN VARCHAR2,
-        p_operation     IN t_operation,
-        p_column_names  IN dyn_column_name_nt,
-        p_column_values IN dyn_column_value_nt,
-        p_filters       IN dyn_filter_nt DEFAULT NULL,
-        p_audit         IN dyn_audit_ctx_rec DEFAULT NULL,
-        p_message       OUT VARCHAR2,
-        p_generated_id  OUT VARCHAR2,
-        p_affected_rows OUT NUMBER
-    );
-
-    -- Execute a bulk CRUD operation using collection payload
-    PROCEDURE execute_bulk(
-        p_table_name IN VARCHAR2,
-        p_operation  IN t_operation,
-        p_rows       IN dyn_row_op_nt,
-        p_filters    IN dyn_filter_nt DEFAULT NULL,
-        p_audit      IN dyn_audit_ctx_rec DEFAULT NULL,
-        p_message    OUT VARCHAR2,
-        p_affected   OUT NUMBER
-    );
-END dynamic_crud_pkg;
-/
-
 CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
 
     TYPE t_allowed_table_nt IS TABLE OF VARCHAR2(128);
@@ -171,7 +78,7 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
 
     PROCEDURE record_audit(
         p_table_name   IN VARCHAR2,
-        p_operation    IN t_operation,
+        p_operation    IN VARCHAR2,
         p_audit        IN dyn_audit_ctx_rec,
         p_status       IN VARCHAR2,
         p_message      IN VARCHAR2,
@@ -304,13 +211,14 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
         v_cursor INTEGER;
     BEGIN
         v_cursor := DBMS_SQL.OPEN_CURSOR;
-        BEGIN
-            DBMS_SQL.PARSE(v_cursor, p_sql, DBMS_SQL.NATIVE);
-            bind_values(v_cursor, p_bindings, p_bind_index);
-            p_rows_affected := DBMS_SQL.EXECUTE(v_cursor);
-        FINALLY
+        DBMS_SQL.PARSE(v_cursor, p_sql, DBMS_SQL.NATIVE);
+        bind_values(v_cursor, p_bindings, p_bind_index);
+        p_rows_affected := DBMS_SQL.EXECUTE(v_cursor);
+        DBMS_SQL.CLOSE_CURSOR(v_cursor);
+    EXCEPTION
+        WHEN OTHERS THEN
             DBMS_SQL.CLOSE_CURSOR(v_cursor);
-        END;
+            RAISE;
     END execute_dynamic_dml;
 
     FUNCTION find_value_for_column(
@@ -492,6 +400,7 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
         v_total NUMBER := 0;
         v_message VARCHAR2(4000);
         v_generated_id VARCHAR2(4000);
+        v_affected NUMBER;
     BEGIN
         IF p_rows IS NULL OR p_rows.COUNT = 0 THEN
             RAISE_APPLICATION_ERROR(-20914, 'Bulk payload is empty');
@@ -507,9 +416,9 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
                 p_audit,
                 v_message,
                 v_generated_id,
-                p_affected
+                v_affected
             );
-            v_total := v_total + NVL(p_affected, 0);
+            v_total := v_total + NVL(v_affected, 0);
         END LOOP;
 
         p_message := 'BULK ' || UPPER(p_operation) || ' SUCCESS';
@@ -517,250 +426,4 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
     END execute_bulk;
 
 END dynamic_crud_pkg;
-/
-
--- Create package for user operations
-CREATE OR REPLACE PACKAGE user_pkg AS
-    -- Procedure to create a new user
-    PROCEDURE create_user(
-        p_username IN VARCHAR2,
-        p_password IN VARCHAR2,
-        p_email IN VARCHAR2,
-        p_user_id OUT VARCHAR2
-    );
-
-    -- Function to get user by ID
-    FUNCTION get_user_by_id(p_user_id IN VARCHAR2) RETURN SYS_REFCURSOR;
-
-    -- Function to get user by username
-    FUNCTION get_user_by_username(p_username IN VARCHAR2) RETURN SYS_REFCURSOR;
-
-    -- Function to get user by email
-    FUNCTION get_user_by_email(p_email IN VARCHAR2) RETURN SYS_REFCURSOR;
-
-    -- Procedure to update user
-    PROCEDURE update_user(
-        p_user_id IN VARCHAR2,
-        p_username IN VARCHAR2 DEFAULT NULL,
-        p_email IN VARCHAR2 DEFAULT NULL,
-        p_password IN VARCHAR2 DEFAULT NULL
-    );
-
-    -- Function to delete user and return rows deleted
-    FUNCTION delete_user(p_user_id IN VARCHAR2) RETURN NUMBER;
-
-    -- Function to check if username exists
-    FUNCTION username_exists(p_username IN VARCHAR2) RETURN BOOLEAN;
-
-    -- Function to check if email exists
-    FUNCTION email_exists(p_email IN VARCHAR2) RETURN BOOLEAN;
-
-    -- Procedure to log login attempt
-    PROCEDURE log_login_attempt(
-        p_username IN VARCHAR2,
-        p_success IN NUMBER,
-        p_ip_address IN VARCHAR2 DEFAULT NULL,
-        p_user_agent IN VARCHAR2 DEFAULT NULL,
-        p_failure_reason IN VARCHAR2 DEFAULT NULL
-    );
-
-    -- Procedure to log session start
-    PROCEDURE log_session_start(
-        p_user_id IN VARCHAR2,
-        p_token_hash IN VARCHAR2,
-        p_ip_address IN VARCHAR2 DEFAULT NULL,
-        p_user_agent IN VARCHAR2 DEFAULT NULL
-    );
-END user_pkg;
-/
-
-CREATE OR REPLACE PACKAGE BODY user_pkg AS
-    -- Helper function to generate UUID
-    FUNCTION generate_uuid RETURN VARCHAR2 IS
-        v_uuid RAW(16);
-        v_hex VARCHAR2(32);
-    BEGIN
-        v_uuid := SYS_GUID();
-        v_hex := RAWTOHEX(v_uuid);
-        RETURN LOWER(SUBSTR(v_hex, 1, 8) || '-' || SUBSTR(v_hex, 9, 4) || '-' || SUBSTR(v_hex, 13, 4) || '-' || SUBSTR(v_hex, 17, 4) || '-' || SUBSTR(v_hex, 21, 12));
-    END generate_uuid;
-
-    PROCEDURE create_user(
-        p_username IN VARCHAR2,
-        p_password IN VARCHAR2,
-        p_email IN VARCHAR2,
-        p_user_id OUT VARCHAR2
-    ) IS
-        v_count NUMBER;
-    BEGIN
-        -- Validate email format
-        IF NOT REGEXP_LIKE(p_email, '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$', 'i') THEN
-            RAISE_APPLICATION_ERROR(-20005, 'Invalid email format');
-        END IF;
-
-        -- Validate password length
-        IF LENGTH(p_password) < 8 THEN
-            RAISE_APPLICATION_ERROR(-20006, 'Password must be at least 8 characters');
-        END IF;
-
-        -- Check if username already exists
-        IF username_exists(p_username) THEN
-            RAISE_APPLICATION_ERROR(-20001, 'Username already exists');
-        END IF;
-
-        -- Check if email already exists
-        IF email_exists(p_email) THEN
-            RAISE_APPLICATION_ERROR(-20002, 'Email already exists');
-        END IF;
-
-        -- Generate UUID
-        p_user_id := generate_uuid();
-
-        -- Insert user (password is already hashed by application)
-        INSERT INTO users (id, username, password, email, created_at, updated_at)
-        VALUES (p_user_id, p_username, p_password, p_email, SYSTIMESTAMP, SYSTIMESTAMP);
-
-        COMMIT;
-    EXCEPTION
-        WHEN OTHERS THEN
-            ROLLBACK;
-            RAISE;
-    END create_user;
-
-    FUNCTION get_user_by_id(p_user_id IN VARCHAR2) RETURN SYS_REFCURSOR IS
-        v_cursor SYS_REFCURSOR;
-    BEGIN
-        OPEN v_cursor FOR
-            SELECT id, username, email
-            FROM users
-            WHERE id = p_user_id;
-        RETURN v_cursor;
-    END get_user_by_id;
-
-    FUNCTION get_user_by_username(p_username IN VARCHAR2) RETURN SYS_REFCURSOR IS
-        v_cursor SYS_REFCURSOR;
-    BEGIN
-        OPEN v_cursor FOR
-            SELECT id, username, email
-            FROM users
-            WHERE username = p_username;
-        RETURN v_cursor;
-    END get_user_by_username;
-
-    FUNCTION get_user_by_email(p_email IN VARCHAR2) RETURN SYS_REFCURSOR IS
-        v_cursor SYS_REFCURSOR;
-    BEGIN
-        OPEN v_cursor FOR
-            SELECT id, username, email
-            FROM users
-            WHERE email = p_email;
-        RETURN v_cursor;
-    END get_user_by_email;
-
-    PROCEDURE update_user(
-        p_user_id IN VARCHAR2,
-        p_username IN VARCHAR2 DEFAULT NULL,
-        p_email IN VARCHAR2 DEFAULT NULL,
-        p_password IN VARCHAR2 DEFAULT NULL
-    ) IS
-        v_count NUMBER;
-    BEGIN
-        -- Check if user exists
-        SELECT COUNT(*) INTO v_count FROM users WHERE id = p_user_id;
-        IF v_count = 0 THEN
-            RAISE_APPLICATION_ERROR(-20004, 'User not found');
-        END IF;
-
-        -- Update user
-        UPDATE users
-        SET username = NVL(p_username, username),
-            email = NVL(p_email, email),
-            password = NVL(p_password, password),
-            updated_at = SYSTIMESTAMP
-        WHERE id = p_user_id;
-
-        COMMIT;
-    EXCEPTION
-        WHEN DUP_VAL_ON_INDEX THEN
-            IF p_username IS NOT NULL THEN
-                RAISE_APPLICATION_ERROR(-20001, 'Username already exists');
-            ELSIF p_email IS NOT NULL THEN
-                RAISE_APPLICATION_ERROR(-20002, 'Email already exists');
-            ELSE
-                RAISE;
-            END IF;
-        WHEN OTHERS THEN
-            ROLLBACK;
-            RAISE;
-    END update_user;
-
-    FUNCTION delete_user(p_user_id IN VARCHAR2) RETURN NUMBER IS
-        v_count NUMBER;
-        v_deleted NUMBER;
-    BEGIN
-        -- Check if user exists
-        SELECT COUNT(*) INTO v_count FROM users WHERE id = p_user_id;
-        IF v_count = 0 THEN
-            RAISE_APPLICATION_ERROR(-20004, 'User not found');
-        END IF;
-
-        -- Delete user
-        DELETE FROM users WHERE id = p_user_id;
-        v_deleted := SQL%ROWCOUNT;
-
-        COMMIT;
-        RETURN v_deleted;
-    EXCEPTION
-        WHEN OTHERS THEN
-            ROLLBACK;
-            RAISE;
-    END delete_user;
-
-    FUNCTION username_exists(p_username IN VARCHAR2) RETURN BOOLEAN IS
-        v_count NUMBER;
-    BEGIN
-        SELECT COUNT(*) INTO v_count FROM users WHERE username = p_username;
-        RETURN v_count > 0;
-    END username_exists;
-
-    FUNCTION email_exists(p_email IN VARCHAR2) RETURN BOOLEAN IS
-        v_count NUMBER;
-    BEGIN
-        SELECT COUNT(*) INTO v_count FROM users WHERE email = p_email;
-        RETURN v_count > 0;
-    END email_exists;
-
-    PROCEDURE log_login_attempt(
-        p_username IN VARCHAR2,
-        p_success IN NUMBER,
-        p_ip_address IN VARCHAR2 DEFAULT NULL,
-        p_user_agent IN VARCHAR2 DEFAULT NULL,
-        p_failure_reason IN VARCHAR2 DEFAULT NULL
-    ) IS
-    BEGIN
-        INSERT INTO audit_login_attempts (id, username, success, ip_address, user_agent, failure_reason)
-        VALUES (audit_seq.NEXTVAL, p_username, p_success, p_ip_address, p_user_agent, p_failure_reason);
-        COMMIT;
-    EXCEPTION
-        WHEN OTHERS THEN
-            -- Log error but don't fail the login process
-            NULL;
-    END log_login_attempt;
-
-    PROCEDURE log_session_start(
-        p_user_id IN VARCHAR2,
-        p_token_hash IN VARCHAR2,
-        p_ip_address IN VARCHAR2 DEFAULT NULL,
-        p_user_agent IN VARCHAR2 DEFAULT NULL
-    ) IS
-    BEGIN
-        INSERT INTO audit_sessions (id, user_id, token_hash, ip_address, user_agent)
-        VALUES (audit_seq.NEXTVAL, p_user_id, p_token_hash, p_ip_address, p_user_agent);
-        COMMIT;
-    EXCEPTION
-        WHEN OTHERS THEN
-            -- Log error but don't fail the session
-            NULL;
-    END log_session_start;
-END user_pkg;
 /

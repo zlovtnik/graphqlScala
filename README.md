@@ -89,6 +89,29 @@ clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
 - Oracle Database reachable at `ORACLE_HOST:ORACLE_PORT`
 - (Optional) Docker for MinIO local testing
 
+### Database Setup
+
+1. **Create the application user** (run as SYS or DBA):
+
+   ```sql
+   -- Run one of these scripts to create the user and basic grants
+   @create_user_with_grants.sql
+   -- OR for development with debug privileges
+   @create_user_with_debug_grants.sql
+   ```
+
+2. **Set up the schema** (run as the application user, e.g., `ssfuser`):
+
+   ```sql
+   @master.sql
+   ```
+
+3. **Apply additional grants** (run as SYS or DBA):
+
+   ```sql
+   @grant_privileges.sql
+   ```
+
 ### 1. Clone & Build
 
 ```bash
