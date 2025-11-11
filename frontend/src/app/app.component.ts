@@ -13,5 +13,6 @@ import { NzMenuModule } from 'ng-zorro-antd/menu';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
+  title: string = 'SSF GraphQL Platform';
   isCollapsed = false;
 }

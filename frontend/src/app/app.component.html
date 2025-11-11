@@ -8,7 +8,7 @@
     <div class="sidebar-logo">
       <a href="https://ng.ant.design/" target="_blank">
         <img src="assets/logo.svg" alt="logo">
-        <h1>Ant Design Of Angular</h1>
+        <h1>{{ title }}</h1>
       </a>
     </div>
     <ul nz-menu nzTheme="dark" nzMode="inline" [nzInlineCollapsed]="isCollapsed">
@@ -17,17 +17,17 @@
           <li nz-menu-item nzMatchRouter>
             <a routerLink="/welcome">Welcome</a>
           </li>
-          <li nz-menu-item nzMatchRouter>
+          <li nz-menu-item nzDisabled="true" aria-disabled="true" title="Monitor - Coming Soon">
             <a>Monitor</a>
           </li>
-          <li nz-menu-item nzMatchRouter>
+          <li nz-menu-item nzDisabled="true" aria-disabled="true" title="Workplace - Coming Soon">
             <a>Workplace</a>
           </li>
         </ul>
       </li>
       <li nz-submenu nzOpen nzTitle="Form" nzIcon="form">
         <ul>
-          <li nz-menu-item nzMatchRouter>
+          <li nz-menu-item nzDisabled="true" aria-disabled="true" title="Basic Form - Coming Soon">
             <a>Basic Form</a>
           </li>
         </ul>

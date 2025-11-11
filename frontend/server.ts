@@ -5,6 +5,15 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import bootstrap from './src/main.server';
 
+// Custom error class for SSR render timeouts
+class SSRTimeoutError extends Error {
+  constructor() {
+    super('SSR render timeout');
+    this.name = 'SSRTimeoutError';
+    Object.setPrototypeOf(this, SSRTimeoutError.prototype);
+  }
+}
+
 // The Express app is exported so that it can be used by serverless Functions.
 export function app(): express.Express {
   const server = express();
@@ -30,37 +39,182 @@ export function app(): express.Express {
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  const hostPattern = /^[A-Za-z0-9.-]+(:\d{1,5})?$/;
+
+  // Strict hostname validation following RFC 1123 and RFC 952
+  function isValidHostname(hostname: string): boolean {
+    // Basic length checks
+    if (hostname.length === 0 || hostname.length > 253) {
+      return false;
+    }
+
+    // Split into labels
+    const labels = hostname.split('.');
+
+    // Must have at least one label
+    if (labels.length === 0) {
+      return false;
+    }
+
+    // Each label must be valid
+    for (const label of labels) {
+      // Label length 1-63 chars
+      if (label.length === 0 || label.length > 63) {
+        return false;
+      }
+
+      // Must start and end with alphanumeric
+      if (!/^[a-zA-Z0-9]/.test(label) || !/[a-zA-Z0-9]$/.test(label)) {
+        return false;
+      }
+
+      // May contain only alphanumeric and hyphens (internal)
+      if (!/^[a-zA-Z0-9-]+$/.test(label)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Port validation (1-65535)
+  function isValidPort(port: string): boolean {
+    const portNum = parseInt(port, 10);
+    return portNum >= 1 && portNum <= 65535;
+  }
+
+  // Combined host:port validation
+  function isValidHostHeader(hostHeader: string): boolean {
+    if (!hostHeader) return false;
+
+    const parts = hostHeader.split(':');
+    if (parts.length > 2) return false; // Too many colons
+
+    const hostname = parts[0];
+    const port = parts[1];
+
+    // Validate hostname
+    if (!isValidHostname(hostname)) return false;
+
+    // Validate port if present
+    if (port !== undefined && !isValidPort(port)) return false;
+
+    return true;
+  }
 
   // All regular routes use the Angular engine
   server.get('**', (req, res, next) => {
     const { protocol, originalUrl, baseUrl, headers } = req;
     const hostHeader = String(headers.host ?? '').trim();
+    const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
 
-    if (!hostHeader || !hostPattern.test(hostHeader) ||
-      (allowedHosts.length > 0 && !allowedHosts.includes(hostHeader))) {
-      console.warn(`Rejected request with disallowed host header: "${hostHeader}"`);
+    // Check for missing Host header
+    if (!hostHeader) {
+      console.warn(`Rejected request: Missing Host header`, {
+        clientIp,
+        method: req.method,
+        path: req.path,
+        userAgent: headers['user-agent'],
+      });
       res.status(400).send('Invalid host header');
       return;
     }
 
-    commonEngine
-      .render({
-        bootstrap,
-        documentFilePath: indexHtml,
-        url: `${protocol}://${hostHeader}${originalUrl}`,
-        publicPath: browserDistFolder,
-        providers: [{ provide: APP_BASE_HREF, useValue: baseUrl }],
-      })
+    // Check for invalid Host header format
+    if (!isValidHostHeader(hostHeader)) {
+      console.warn(`Rejected request: Invalid Host header format`, {
+        hostHeader,
+        clientIp,
+        method: req.method,
+        path: req.path,
+        userAgent: headers['user-agent'],
+      });
+      res.status(400).send('Invalid host header');
+      return;
+    }
+
+    // Check if Host header is in allowlist (if allowlist is enabled)
+    if (allowedHosts.length > 0 && !allowedHosts.includes(hostHeader)) {
+      console.warn(`Rejected request: Host header not in allowlist`, {
+        hostHeader,
+        allowedHosts,
+        clientIp,
+        method: req.method,
+        path: req.path,
+        userAgent: headers['user-agent'],
+      });
+      res.status(400).send('Invalid host header');
+      return;
+    }
+
+    const renderPromise = commonEngine.render({
+      bootstrap,
+      documentFilePath: indexHtml,
+      url: `${protocol}://${hostHeader}${originalUrl}`,
+      publicPath: browserDistFolder,
+      providers: [{ provide: APP_BASE_HREF, useValue: baseUrl }],
+    });
+
+    // Add timeout to prevent hanging renders (30 seconds)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new SSRTimeoutError()), 30000);
+    });
+
+    Promise.race([renderPromise, timeoutPromise])
       .then((html) => res.send(html))
-      .catch((err) => next(err));
+      .catch((err) => {
+        const isTimeout = err instanceof SSRTimeoutError;
+        const errorContext = {
+          error: {
+            message: err.message,
+            stack: err.stack,
+            name: err.name,
+          },
+          request: {
+            method: req.method,
+            originalUrl: req.originalUrl,
+            baseUrl: req.baseUrl,
+            protocol: req.protocol,
+            host: hostHeader,
+            userAgent: req.headers['user-agent'],
+            accept: req.headers.accept,
+            fullUrl: `${req.protocol}://${hostHeader}${req.originalUrl}`,
+          },
+          providers: {
+            baseHref: baseUrl,
+            documentFilePath: indexHtml,
+            publicPath: browserDistFolder,
+          },
+          timestamp: new Date().toISOString(),
+          isTimeout,
+        };
+
+        console.error('SSR render error:', JSON.stringify(errorContext, null, 2));
+        next(err);
+      });
   });
 
   return server;
 }
 
 export function run(): void {
-  const port = process.env['PORT'] || 4000;
+  // Parse and validate PORT environment variable
+  const portEnv = process.env['PORT'];
+  let port: number = 4000; // Default fallback
+
+  if (portEnv !== undefined) {
+    // Validate that the string contains only digits
+    if (!/^\d+$/.test(portEnv)) {
+      console.error(`Invalid PORT environment variable: "${portEnv}" is not a valid port number. Using default port 4000.`);
+    } else {
+      const parsedPort = parseInt(portEnv, 10);
+      // Check if the port is within the valid range
+      if (parsedPort < 1 || parsedPort > 65535) {
+        console.error(`Invalid PORT environment variable: ${parsedPort} is out of valid port range (1-65535). Using default port 4000.`);
+      } else {
+        port = parsedPort;
+      }
+    }
+  }
 
   // Start up the Node server
   const server = app();

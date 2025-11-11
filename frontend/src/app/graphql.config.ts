@@ -14,6 +14,11 @@ export const graphqlProvider = provideApollo(() => {
   });
 
   const auth = setContext((_, { headers }) => {
+    // Guard against SSR: localStorage is only available in the browser
+    if (typeof window === 'undefined') {
+      return {};
+    }
+
     const token = localStorage.getItem('auth_token');
     if (!token) {
       return {};
@@ -36,7 +41,7 @@ export const graphqlProvider = provideApollo(() => {
         errorPolicy: 'all'
       },
       query: {
-        fetchPolicy: 'network-only',
+        fetchPolicy: 'cache-first',
         errorPolicy: 'all'
       },
       mutate: {

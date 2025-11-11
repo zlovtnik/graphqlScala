@@ -4,7 +4,7 @@ Angular 18 + NG-ZORRO + Apollo client application targeting the SSF GraphQL back
 
 ## Prerequisites
 
-- Node.js 18+ (currently using v25 for development)
+- Node.js 18.x or 20.x (LTS); v25 is used by some developers but is optional - verify compatibility if using newer versions
 - npm (bundled with Node.js)
 - Java backend running at `http://localhost:8080/graphql`
 

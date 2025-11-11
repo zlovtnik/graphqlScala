@@ -12,6 +12,10 @@
     "codegen:watch": "graphql-codegen --config codegen.yml --watch"
   },
   "private": true,
+  "engines": {
+    "node": ">=18.0.0 <21.0.0",
+    "npm": ">=8.0.0"
+  },
   "dependencies": {
     "@angular/animations": "~18.2.0",
     "@angular/common": "~18.2.0",
