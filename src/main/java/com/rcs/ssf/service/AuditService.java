@@ -1,6 +1,7 @@
 package com.rcs.ssf.service;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
@@ -15,20 +16,20 @@ public class AuditService {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public AuditService(DataSource dataSource) {
+    public AuditService(@NonNull DataSource dataSource) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
     }
 
     public void logLoginAttempt(String username, boolean success, String ipAddress, String userAgent, String failureReason) {
         jdbcTemplate.execute((Connection con) -> {
-            CallableStatement cs = con.prepareCall("{ call user_pkg.log_login_attempt(?, ?, ?, ?, ?) }");
-            cs.setString(1, username);
-            cs.setInt(2, success ? 1 : 0);
-            cs.setString(3, ipAddress);
-            cs.setString(4, userAgent);
-            cs.setString(5, failureReason);
-            cs.execute();
-            cs.close();
+            try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_login_attempt(?, ?, ?, ?, ?) }")) {
+                cs.setString(1, username);
+                cs.setInt(2, success ? 1 : 0);
+                cs.setString(3, ipAddress);
+                cs.setString(4, userAgent);
+                cs.setString(5, failureReason);
+                cs.execute();
+            }
             return null;
         });
     }
@@ -36,13 +37,13 @@ public class AuditService {
     public void logSessionStart(String userId, String token, String ipAddress, String userAgent) {
         String tokenHash = hashToken(token);
         jdbcTemplate.execute((Connection con) -> {
-            CallableStatement cs = con.prepareCall("{ call user_pkg.log_session_start(?, ?, ?, ?) }");
-            cs.setString(1, userId);
-            cs.setString(2, tokenHash);
-            cs.setString(3, ipAddress);
-            cs.setString(4, userAgent);
-            cs.execute();
-            cs.close();
+            try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_session_start(?, ?, ?, ?) }")) {
+                cs.setString(1, userId);
+                cs.setString(2, tokenHash);
+                cs.setString(3, ipAddress);
+                cs.setString(4, userAgent);
+                cs.execute();
+            }
             return null;
         });
     }

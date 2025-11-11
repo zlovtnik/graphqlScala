@@ -14,6 +14,7 @@
             type="text"
             formControlName="username"
             placeholder="Enter your username"
+            autocomplete="username"
             [class.ng-invalid]="loginForm.get('username')?.invalid && loginForm.get('username')?.touched"
           />
         </nz-form-control>
@@ -27,6 +28,7 @@
             type="password"
             formControlName="password"
             placeholder="Enter your password"
+            autocomplete="current-password"
             [class.ng-invalid]="loginForm.get('password')?.invalid && loginForm.get('password')?.touched"
           />
         </nz-form-control>

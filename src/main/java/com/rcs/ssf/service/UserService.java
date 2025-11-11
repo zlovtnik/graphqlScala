@@ -9,6 +9,7 @@ import com.rcs.ssf.dynamic.DynamicCrudResponse;
 import com.rcs.ssf.entity.User;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.lang.NonNull;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,7 +35,7 @@ public class UserService {
 
     private static final RowMapper<User> USER_ROW_MAPPER = new RowMapper<User>() {
         @Override
-        public User mapRow(ResultSet rs, int rowNum) throws SQLException {
+        public User mapRow(@NonNull ResultSet rs, int rowNum) throws SQLException {
             User user = new User();
             user.setId(UUID.fromString(rs.getString("id")));
             user.setUsername(rs.getString("username"));
@@ -43,7 +44,7 @@ public class UserService {
         }
     };
 
-    public UserService(DataSource dataSource, PasswordEncoder passwordEncoder, DynamicCrudGateway dynamicCrudGateway) {
+    public UserService(@NonNull DataSource dataSource, PasswordEncoder passwordEncoder, DynamicCrudGateway dynamicCrudGateway) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.passwordEncoder = passwordEncoder;
         this.dynamicCrudGateway = dynamicCrudGateway;
@@ -219,16 +220,17 @@ public class UserService {
     }
 
     private void ensureUsernameAvailable(String username, UUID currentUserId) {
-        boolean exists = jdbcTemplate.execute((Connection con) -> {
+        Boolean exists = jdbcTemplate.execute((Connection con) -> {
             try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.username_exists(?) }")) {
                 cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
                 cs.setString(2, username);
                 cs.execute();
                 boolean result = cs.getBoolean(1);
+                if (cs.wasNull()) result = false;
                 return result;
             }
         });
-        if (exists) {
+        if (Boolean.TRUE.equals(exists)) {
             // Check if it's the current user
             if (currentUserId != null) {
                 Optional<User> existingUser = findByUsername(username);
@@ -242,16 +244,17 @@ public class UserService {
     }
 
     private void ensureEmailAvailable(String email, UUID currentUserId) {
-        boolean exists = jdbcTemplate.execute((Connection con) -> {
+        Boolean exists = jdbcTemplate.execute((Connection con) -> {
             try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.email_exists(?) }")) {
                 cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
                 cs.setString(2, email);
                 cs.execute();
                 boolean result = cs.getBoolean(1);
+                if (cs.wasNull()) result = false;
                 return result;
             }
         });
-        if (exists) {
+        if (Boolean.TRUE.equals(exists)) {
             // Check if it's the current user
             if (currentUserId != null) {
                 Optional<User> existingUser = findByEmail(email);

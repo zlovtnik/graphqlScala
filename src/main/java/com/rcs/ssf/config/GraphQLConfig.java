@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.graphql.server.WebGraphQlInterceptor;
 import org.springframework.graphql.server.WebGraphQlRequest;
 import org.springframework.graphql.server.WebGraphQlResponse;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -30,7 +31,7 @@ public class GraphQLConfig {
         private static final Logger logger = LoggerFactory.getLogger(GraphQLLoggingInterceptor.class);
 
         @Override
-        public Mono<WebGraphQlResponse> intercept(WebGraphQlRequest request, Chain chain) {
+        public @NonNull Mono<WebGraphQlResponse> intercept(@NonNull WebGraphQlRequest request, @NonNull Chain chain) {
             // Log GraphQL requests if needed
             String query = request.getDocument();
             if (query != null && !query.isEmpty()) {
@@ -40,4 +41,3 @@ public class GraphQLConfig {
         }
     }
 }
-

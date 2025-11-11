@@ -1,10 +1,8 @@
 package com.rcs.ssf.graphql;
 
 import com.rcs.ssf.dto.User;
-import com.rcs.ssf.security.JwtTokenProvider;
 import com.rcs.ssf.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -14,15 +12,7 @@ import org.springframework.stereotype.Controller;
 public class AuthQuery {
 
     @Autowired
-    private JwtTokenProvider jwtTokenProvider;
-
-    @Autowired
     private UserService userService;
-
-    @QueryMapping
-    public Boolean validateToken(@Argument String token) {
-        return jwtTokenProvider.validateToken(token);
-    }
 
     @QueryMapping
     public User getCurrentUser() {

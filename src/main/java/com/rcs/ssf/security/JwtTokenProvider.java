@@ -18,7 +18,7 @@ public class JwtTokenProvider {
 
     private static final Logger logger = LoggerFactory.getLogger(JwtTokenProvider.class);
 
-    @Value("${jwt.secret}")
+    @Value("${app.jwt.secret}")
     private String jwtSecret;
 
     @Value("${jwt.expiration:86400000}")
@@ -29,16 +29,19 @@ public class JwtTokenProvider {
     @PostConstruct
     public void init() {
         if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
-            throw new IllegalStateException("JWT secret must be provided via jwt.secret property");
+            throw new IllegalStateException("JWT secret must be provided via app.jwt.secret property");
         }
-        if (jwtSecret.length() < 32) {
-            throw new IllegalStateException("JWT secret must be at least 32 characters long");
+        byte[] secretBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+        if (secretBytes.length < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 bytes (256 bits) long");
         }
-        // Basic entropy check - ensure not a repeated character or common weak string
-        if (jwtSecret.chars().distinct().count() < 10) {
-            throw new IllegalStateException("JWT secret must have sufficient entropy (at least 10 unique characters)");
+        long uniqueChars = jwtSecret.chars().distinct().count();
+        long requiredUnique = Math.min(20, jwtSecret.length() / 2);
+        if (uniqueChars < requiredUnique) {
+            throw new IllegalStateException("JWT secret must have sufficient entropy (at least " + requiredUnique + " unique characters, found " + uniqueChars + ")");
         }
-        this.key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        this.key = Keys.hmacShaKeyFor(secretBytes);
+        logger.info("JWT token provider initialized successfully with {} byte secret", secretBytes.length);
     }
 
     public String generateToken(Authentication authentication) {

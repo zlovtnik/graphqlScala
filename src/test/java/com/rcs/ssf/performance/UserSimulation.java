@@ -3,8 +3,8 @@ package com.rcs.ssf.performance;
 import io.gatling.javaapi.core.*;
 import io.gatling.javaapi.http.*;
 import java.util.*;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
-import java.util.stream.Collectors;
 
 import static io.gatling.javaapi.core.CoreDsl.*;
 import static io.gatling.javaapi.http.HttpDsl.*;
@@ -16,20 +16,15 @@ public class UserSimulation extends Simulation {
             .acceptHeader("application/json")
             .contentTypeHeader("application/json");
 
-    private final Iterator<Map<String, Object>> feeder = 
-        Stream.iterate(1, i -> i + 1)
-            .limit(10000)
-            .map(i -> {
-                Map<String, Object> map = new HashMap<>();
-                map.put("username", "user" + i);
-                map.put("email", "user" + i + "@example.com");
-                map.put("password", "password" + i);
-                return map;
-            })
-            .collect(Collectors.toList())
-            .iterator();
-
-    private final ScenarioBuilder createUserScenario = scenario("Create User")
+    private final Iterator<Map<String, Object>> feeder =
+        Stream.generate(() -> {
+            int index = ThreadLocalRandom.current().nextInt(1, 10001); // Generate random index from 1 to 10000
+            Map<String, Object> map = new HashMap<>();
+            map.put("username", "user" + index);
+            map.put("email", "user" + index + "@example.com");
+            map.put("password", "password" + index);
+            return map;
+        }).iterator();    private final ScenarioBuilder createUserScenario = scenario("Create User")
             .feed(feeder)
             .exec(http("Create User Request")
                     .post("/api/users")

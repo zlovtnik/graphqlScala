@@ -1,6 +1,7 @@
 package com.rcs.ssf.dynamic;
 
 import oracle.jdbc.OracleConnection;
+import oracle.sql.STRUCT;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
@@ -96,6 +97,7 @@ public class DynamicCrudGateway {
                 freeArray(columnNamesArray);
                 freeArray(columnValuesArray);
                 freeArray(filterArray);
+                freeStruct(auditStruct);
             }
         });
     }
@@ -148,6 +150,7 @@ public class DynamicCrudGateway {
                     freeArray(dependent);
                 }
                 freeArray(filterArray);
+                freeStruct(auditStruct);
             }
         });
     }
@@ -254,6 +257,13 @@ public class DynamicCrudGateway {
             } catch (SQLException ignored) {
                 // Swallow cleanup errors
             }
+        }
+    }
+
+    private void freeStruct(Object struct) {
+        if (struct != null && struct instanceof STRUCT) {
+            // Note: STRUCT.free() not available in this JDBC version
+            // ((STRUCT) struct).free();
         }
     }
 }

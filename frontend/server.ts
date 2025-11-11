@@ -1,6 +1,6 @@
 import { APP_BASE_HREF } from '@angular/common';
 import { CommonEngine } from '@angular/ssr';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import bootstrap from './src/main.server';
@@ -16,7 +16,7 @@ class SSRTimeoutError extends Error {
 }
 
 // The Express app is exported so that it can be used by serverless Functions.
-export function app(): any {
+export function app(): express.Express {
   const server = express();
   const serverDistFolder = dirname(fileURLToPath(import.meta.url));
   const browserDistFolder = resolve(serverDistFolder, '../browser');
@@ -40,12 +40,12 @@ export function app(): any {
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
     // Skip rate limiting for health checks or specific paths if needed
-    skip: (req: any): boolean => {
+    skip: (req: Request): boolean => {
       const path = req.originalUrl.split('?')[0];
       return path === '/health' || path === '/healthcheck';
     },
     // Custom handler for rate limit exceeded
-    handler: (req: any, res: any): void => {
+    handler: (req: Request, res: Response, next?: NextFunction): void => {
       const path = req.originalUrl.split('?')[0];
       console.warn(`Rate limit exceeded for IP: ${req.ip}`, {
         path: path,
@@ -61,6 +61,9 @@ export function app(): any {
     },
   });
 
+  // Apply rate limiting middleware to protect against DoS attacks
+  server.use(limiter);
+
   // Example Express Rest API endpoints
   // server.get('/api/**', (req, res) => { });
   // Serve static files from /browser
@@ -68,9 +71,6 @@ export function app(): any {
     maxAge: '1y',
     index: false,
   }));
-
-  // Apply rate limiting middleware to protect against DoS attacks
-  server.use(limiter);
 
   const allowedHostsEnv = process.env['ALLOWED_HOSTS'] ?? '';
   const allowedHosts = allowedHostsEnv

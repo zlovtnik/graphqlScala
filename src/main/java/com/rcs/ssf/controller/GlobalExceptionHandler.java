@@ -2,16 +2,15 @@ package com.rcs.ssf.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.MessageSource;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -22,7 +21,6 @@ public class GlobalExceptionHandler {
     private final MessageSource messageSource;
     private static final String DEFAULT_MESSAGE = "Invalid request";
 
-    @Autowired
     public GlobalExceptionHandler(MessageSource messageSource) {
         this.messageSource = messageSource;
     }
@@ -30,8 +28,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgumentException(IllegalArgumentException ex) {
         LOGGER.warn("Illegal argument received", ex);
-        String rawMessage = ex.getMessage();
-        String clientMessage = messageSource.getMessage(rawMessage, null, DEFAULT_MESSAGE, Locale.getDefault());
+        String messageKey = "error.invalid.argument";
+        String clientMessage = messageSource.getMessage(messageKey, null, DEFAULT_MESSAGE, LocaleContextHolder.getLocale());
         return ResponseEntity.badRequest().body(Map.of("error", clientMessage));
     }
 

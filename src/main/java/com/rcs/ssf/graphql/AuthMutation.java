@@ -60,7 +60,7 @@ public class AuthMutation {
             auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
             throw GraphqlErrorException.newErrorException()
                     .message("Authentication failed")
-                    .extensions(Map.of("reason", e.getMessage() == null ? "UNKNOWN" : e.getMessage()))
+                    .extensions(Map.of("reason", "INVALID_CREDENTIALS"))
                     .cause(e)
                     .build();
         }

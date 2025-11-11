@@ -103,16 +103,19 @@ export class RegisterComponent implements OnInit {
       });
   }
 
+  private capitalizeField(field: string): string {
+    return field.charAt(0).toUpperCase() + field.slice(1);
+  }
+
   getErrorMessage(field: string): string {
+    const fieldName = this.capitalizeField(field);
     const control = this.registerForm.get(field);
     if (control?.hasError('required')) {
-      return `${field.charAt(0).toUpperCase() + field.slice(1)} is required`;
+      return `${fieldName} is required`;
     }
     if (control?.hasError('minlength')) {
       const minLength = control.getError('minlength').requiredLength;
-      return `${
-        field.charAt(0).toUpperCase() + field.slice(1)
-      } must be at least ${minLength} characters`;
+      return `${fieldName} must be at least ${minLength} characters`;
     }
     if (control?.hasError('email')) {
       return 'Please enter a valid email';

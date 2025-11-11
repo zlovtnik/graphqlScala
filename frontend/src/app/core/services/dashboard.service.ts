@@ -6,8 +6,10 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 export interface DashboardStats {
   totalUsers: number;
   activeSessions: number;
-  apiCalls: number;
-  lastLogin: string;
+  totalAuditLogs: number;
+  systemHealth: string;
+  apiCallsToday: number;
+  failedLoginAttempts: number;
 }
 
 @Injectable({
@@ -42,13 +44,10 @@ export class DashboardService {
     return {
       totalUsers: 0,
       activeSessions: 1,
-      apiCalls: 0,
-      lastLogin: new Date().toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
-      })
+      totalAuditLogs: 0,
+      systemHealth: 'HEALTHY',
+      apiCallsToday: 0,
+      failedLoginAttempts: 0
     };
   }
 }

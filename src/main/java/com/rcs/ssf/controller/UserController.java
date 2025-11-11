@@ -39,10 +39,7 @@ public class UserController {
         user.setPassword(request.password());
 
         User savedUser = userService.createUser(user);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}")
-                .buildAndExpand(savedUser.getId())
-                .toUri();
+        URI location = URI.create("/api/users/" + savedUser.getId());
         return ResponseEntity.created(location).body(savedUser);
     }
 
@@ -62,13 +59,13 @@ public class UserController {
     }
 
     public record CreateUserRequest(
-            @NotBlank String username,
-            @NotBlank @Email String email,
+            @NotBlank @Size(min = 3, max = 50) String username,
+            @NotBlank @Email @Size(max = 254) String email,
             @NotBlank @Size(min = 8, max = 100) String password
     ) {}
 
     public record UpdateUserRequest(
-            @Size(max = 50) String username,
+            @Size(min = 3, max = 50) String username,
             @Email @Size(max = 254) String email,
             @Size(min = 8, max = 100) String password
     ) {}

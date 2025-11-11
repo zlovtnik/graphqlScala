@@ -145,6 +145,83 @@ export KEYSTORE_PASSWORD=changeit
 
 > 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters with ≥10 distinct characters (longer secrets improve entropy). The application enforces this at startup.
 
+### Required Environment Variables
+
+The following environment variables **MUST** be set before starting the application. The application will fail fast with a clear error message if any are missing:
+
+| Environment Variable | Purpose | Notes |
+| --- | --- | --- |
+| `JWT_SECRET` | Symmetric key for signing and validating JWT tokens | Must be ≥32 characters with ≥10 distinct characters. Longer, more random values are better. |
+| `MINIO_ACCESS_KEY` | Access key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
+| `MINIO_SECRET_KEY` | Secret key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
+
+**Example: Setting Strong Credentials**
+
+```bash
+# Generate a secure 32+ character JWT_SECRET
+export JWT_SECRET=$(openssl rand -base64 32)
+
+# MinIO credentials (use strong, unique values in production)
+export MINIO_ACCESS_KEY=$(openssl rand -base64 16)
+export MINIO_SECRET_KEY=$(openssl rand -base64 32)
+```
+
+### Secrets Management for Production
+
+**IMPORTANT:** Never commit or hardcode secrets in your application. For production deployments, use a dedicated secrets manager:
+
+#### HashiCorp Vault
+
+```bash
+# 1. Install Vault CLI and authenticate
+vault login -method=ldap username=<your-username>
+
+# 2. Retrieve secrets and set environment variables
+export JWT_SECRET=$(vault kv get -field=jwt_secret secret/ssf/prod)
+export MINIO_ACCESS_KEY=$(vault kv get -field=access_key secret/ssf/prod)
+export MINIO_SECRET_KEY=$(vault kv get -field=secret_key secret/ssf/prod)
+
+# 3. Start the application
+./gradlew bootRun
+```
+
+#### AWS Secrets Manager
+
+```bash
+# 1. Install AWS CLI and configure credentials
+aws configure
+
+# 2. Retrieve secrets and set environment variables
+export JWT_SECRET=$(aws secretsmanager get-secret-value --secret-id ssf/jwt_secret --query SecretString --output text)
+export MINIO_ACCESS_KEY=$(aws secretsmanager get-secret-value --secret-id ssf/minio_access_key --query SecretString --output text)
+export MINIO_SECRET_KEY=$(aws secretsmanager get-secret-value --secret-id ssf/minio_secret_key --query SecretString --output text)
+
+# 3. Start the application
+./gradlew bootRun
+```
+
+#### Docker / Kubernetes
+
+For containerized environments, inject secrets via:
+
+- **Docker:** Use `docker run --env-file .env` or Docker Secrets
+- **Kubernetes:** Use Kubernetes Secrets mounted as environment variables or files
+- **Docker Compose:** Reference secrets in `.env` file (keep `.env` outside version control)
+
+Example `docker-compose.yml` with secrets:
+
+```yaml
+version: '3.8'
+services:
+  app:
+    image: ssf-graphql:latest
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    # ... other configuration
+```
+
 ### 3. Launch the Application
 
 ```bash
@@ -174,16 +251,30 @@ docker run -d --name minio \
 
 Spring Boot properties can be set via `application.yml`, profile-specific files, or environment variables. Key properties include:
 
-| Property | Description | Default |
-| --- | --- | --- |
-| `server.port` | HTTPS port | `8443` |
-| `server.ssl.*` | Keystore path, password, alias | Bundled PKCS12 keystore |
-| `spring.datasource.url` | Oracle JDBC URL | `jdbc:oracle:thin:@//${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_DB}` |
-| `spring.datasource.username` / `password` | Database credentials | `ssfuser` / `ssfuser` |
-| `jwt.secret` | Symmetric signing key | Fallback demo value (override in all environments) |
-| `jwt.expiration` | Token lifetime (ms) | `86400000` (1 day) |
-| `minio.url` | MinIO endpoint | `http://localhost:9000` |
-| `minio.access-key` / `secret-key` | MinIO credentials | `minioadmin` / `minioadmin` |
+| Property | Description | Required | Default |
+| --- | --- | --- | --- |
+| `server.port` | HTTPS port | No | `8443` |
+| `server.ssl.*` | Keystore path, password, alias | No | Bundled PKCS12 keystore |
+| `spring.datasource.url` | Oracle JDBC URL | No | `jdbc:oracle:thin:@//${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_DB}` |
+| `spring.datasource.username` / `password` | Database credentials | No | `ssfuser` / `ssfuser` |
+| `app.jwt.secret` | Symmetric signing key for JWT | **YES** | **None** (must be set via `JWT_SECRET` environment variable) |
+| `jwt.expiration` | Token lifetime (ms) | No | `86400000` (1 day) |
+| `app.minio.url` | MinIO endpoint | No | `http://localhost:9000` |
+| `app.minio.access-key` | MinIO credentials | **YES** | **None** (must be set via `MINIO_ACCESS_KEY` environment variable) |
+| `app.minio.secret-key` | MinIO credentials | **YES** | **None** (must be set via `MINIO_SECRET_KEY` environment variable) |
+| `security.password.bcrypt.strength` | BCrypt cost factor for password hashing (4-31) | No | `12` |
+
+**BCrypt Strength Configuration:**
+
+The `security.password.bcrypt.strength` property controls the computational cost of password hashing. Valid range is 4-31, with higher values providing better security but slower performance:
+
+- **Strength 10**: ~100ms per hash (suitable for development)
+- **Strength 12**: ~400ms per hash (balanced security/performance)
+- **Strength 14**: ~1600ms per hash (high security)
+
+When increasing strength in production, load-test authentication endpoints to ensure acceptable response times. The default of 12 provides strong security for most deployments.
+
+**Breaking Change:** `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` no longer have unsafe default values. All three must be explicitly set via environment variables or the application will fail at startup with a clear error message.
 
 Profile-specific overrides live under `src/main/resources/application-*.yml`.
 
@@ -250,6 +341,7 @@ query {
 
 | Symptom | Resolution |
 | --- | --- |
+| **`IllegalStateException: Missing required environment variables`** | Set `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` environment variables before starting the app. See [Required Environment Variables](#required-environment-variables) section above. |
 | **`IllegalStateException: JWT secret must be provided`** | Set `JWT_SECRET` with ≥32 characters before starting the app |
 | **`ORA-01017` authentication errors** | Verify `ORACLE_USER`/`ORACLE_PASSWORD`; if running locally ensure Oracle XE container is healthy |
 | **GraphiQL reports `Authentication required`** | Supply a valid JWT token in the `Authorization` header. As a last resort for local development only, you may temporarily disable enforcement in `SecurityConfig`; never commit, push, or enable this bypass outside your machine. Prefer safer alternatives such as generating a valid JWT, using a temporary environment-only feature flag, or mocking auth locally, and audit commits plus CI/CD configs before merge/deploy. |

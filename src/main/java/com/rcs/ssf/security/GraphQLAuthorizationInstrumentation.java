@@ -3,6 +3,7 @@ package com.rcs.ssf.security;
 import org.springframework.graphql.server.WebGraphQlInterceptor;
 import org.springframework.graphql.server.WebGraphQlRequest;
 import org.springframework.graphql.server.WebGraphQlResponse;
+import org.springframework.lang.NonNull;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -26,7 +27,7 @@ import reactor.core.publisher.Mono;
 public class GraphQLAuthorizationInstrumentation implements WebGraphQlInterceptor {
 
     @Override
-    public Mono<WebGraphQlResponse> intercept(WebGraphQlRequest request, Chain chain) {
+    public @NonNull Mono<WebGraphQlResponse> intercept(@NonNull WebGraphQlRequest request, @NonNull Chain chain) {
         // Enforce authentication for GraphQL operations
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -34,13 +35,12 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
         if (authentication == null ||
                 !authentication.isAuthenticated() ||
                 authentication instanceof AnonymousAuthenticationToken) {
-            throw new AccessDeniedException(
+            return Mono.error(new AccessDeniedException(
                     "Authentication required: Missing or invalid JWT token. " +
-                    "Please provide a valid JWT token in the Authorization header.");
+                    "Please provide a valid JWT token in the Authorization header."));
         }
 
         // Continue with the chain
         return chain.next(request);
     }
 }
-

@@ -6,17 +6,21 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Configuration
 public class MinioConfig {
 
-    @Value("${minio.url:}")
+    private static final Logger logger = LoggerFactory.getLogger(MinioConfig.class);
+
+    @Value("${app.minio.url:}")
     private String minioUrl;
 
-    @Value("${minio.access-key:}")
+    @Value("${app.minio.access-key:}")
     private String minioAccessKey;
 
-    @Value("${minio.secret-key:}")
+    @Value("${app.minio.secret-key:}")
     private String minioSecretKey;
 
     private final Environment environment;
@@ -52,17 +56,17 @@ public class MinioConfig {
 
         // Validate URL uses HTTPS
         if (!minioUrl.startsWith("https://")) {
-            throw new IllegalStateException("MINIO_URL_NOT_HTTPS");
+            throw new IllegalStateException("MINIO URL must use HTTPS");
         }
 
         // Check for default credentials
         if ("minioadmin".equals(minioAccessKey) || "minioadmin".equals(minioSecretKey)) {
-            throw new IllegalStateException("MINIO_DEFAULT_CREDENTIALS");
+            throw new IllegalStateException("Minio credentials must not use default 'minioadmin' username or secret");
         }
 
         // Warn if credentials are weak (too short)
         if (minioAccessKey.length() < 3 || minioSecretKey.length() < 8) {
-            throw new IllegalStateException("MINIO_WEAK_CREDENTIALS");
+            throw new IllegalStateException("Minio access key must be at least 3 characters and secret key at least 8 characters");
         }
     }
 
@@ -70,26 +74,25 @@ public class MinioConfig {
         // Apply development defaults only if not explicitly configured
         if (minioUrl == null || minioUrl.trim().isEmpty()) {
             minioUrl = "http://localhost:9000";
-            System.out.println("[MinIO] Using development default URL: http://localhost:9000");
+            logger.info("[MinIO] Using development default URL: http://localhost:9000");
         }
 
         if (minioAccessKey == null || minioAccessKey.trim().isEmpty()) {
             minioAccessKey = "minioadmin";
-            System.out.println("[MinIO] Using development default access key: minioadmin");
+            logger.info("[MinIO] Using development default access key: minioadmin");
         }
 
         if (minioSecretKey == null || minioSecretKey.trim().isEmpty()) {
             minioSecretKey = "minioadmin";
-            System.out.println("[MinIO] Using development default secret key: minioadmin");
+            logger.info("[MinIO] Using development default secret key: minioadmin");
         }
 
-        System.out.println("[MinIO] ⚠️  WARNING: Using development defaults for MinIO. " +
+        logger.warn("[MinIO] ⚠️  WARNING: Using development defaults for MinIO. " +
                 "Do NOT use these defaults in production!");
     }
 
     @Bean
     public MinioClient minioClient() {
-        validateConfiguration();
         return MinioClient.builder()
                 .endpoint(minioUrl)
                 .credentials(minioAccessKey, minioSecretKey)

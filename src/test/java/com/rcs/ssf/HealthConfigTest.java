@@ -27,6 +27,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.stream.Stream;
 
+import org.springframework.boot.test.mock.mockito.MockBean;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -39,9 +40,9 @@ import static org.mockito.Mockito.*;
     "spring.datasource.password=",
     "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
     "spring.jpa.hibernate.ddl-auto=create-drop",
-    "minio.url=" + HealthConfigTest.MINIO_URL,
-    "minio.access-key=" + HealthConfigTest.MINIO_ACCESS_KEY,
-    "minio.secret-key=" + HealthConfigTest.MINIO_SECRET_KEY
+    "app.minio.url=" + HealthConfigTest.MINIO_URL,
+    "app.minio.access-key=" + HealthConfigTest.MINIO_ACCESS_KEY,
+    "app.minio.secret-key=" + HealthConfigTest.MINIO_SECRET_KEY
 })
 class HealthConfigTest {
     static final String MINIO_URL = "http://localhost:9000";
@@ -66,22 +67,18 @@ class HealthConfigTest {
     @Autowired
     private DataSource dataSource;
 
+    @MockBean
+    private MinioClient minioClient;
+
     private Path dbFilePath;
     private HealthConfig healthConfig;
 
     @BeforeEach
     void setUp() throws Exception {
-        // Create and configure mock MinioClient
-        MinioClient minioClient = mock(MinioClient.class);
+        // Configure mock MinioClient
         doReturn(new ArrayList<Bucket>()).when(minioClient).listBuckets();
         
-        MinioProperties minioProperties = new MinioProperties();
-        minioProperties.setUrl(MINIO_URL);
-        minioProperties.setAccessKey(MINIO_ACCESS_KEY);
-        minioProperties.setSecretKey(MINIO_SECRET_KEY);
-
-        healthConfig = new HealthConfig(environment, minioProperties);
-        healthConfig.setMinioClient(minioClient);
+        healthConfig = new HealthConfig(environment, minioClient);
         
         // Create test database file
         Path dbDir = Path.of("./data");
@@ -118,9 +115,9 @@ class HealthConfigTest {
 
     @Test
     void testDatabaseFileHealthIndicator() {
-        Health health = healthConfig.databaseFileHealthIndicator().health();
+        Health health = healthConfig.sqliteDatabaseFileHealthIndicator().health();
         assertEquals(Status.UP, health.getStatus());
-        assertEquals("in-memory", health.getDetails().get("databaseFile"));
+        assertEquals("not file-based", health.getDetails().get("databaseFile"));
     }
 
     @Test

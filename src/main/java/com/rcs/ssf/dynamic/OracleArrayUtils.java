@@ -13,13 +13,32 @@ final class OracleArrayUtils {
     }
 
     static Array toVarcharArray(Connection connection, String sqlTypeName, List<String> values) throws SQLException {
-        OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+        if (sqlTypeName == null) {
+            throw new IllegalArgumentException("sqlTypeName cannot be null");
+        }
+        OracleConnection oracleConnection;
+        try {
+            oracleConnection = connection.unwrap(OracleConnection.class);
+        } catch (SQLException e) {
+            throw new IllegalArgumentException("Connection is not an OracleConnection: " + e.getMessage(), e);
+        }
         Object[] data = values != null ? values.toArray() : new Object[0];
         return oracleConnection.createARRAY(sqlTypeName, data);
     }
 
     static Array toStructArray(Connection connection, String arrayTypeName, String structTypeName, List<Object[]> attributes) throws SQLException {
-        OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
+        if (arrayTypeName == null) {
+            throw new IllegalArgumentException("arrayTypeName cannot be null");
+        }
+        if (structTypeName == null) {
+            throw new IllegalArgumentException("structTypeName cannot be null");
+        }
+        OracleConnection oracleConnection;
+        try {
+            oracleConnection = connection.unwrap(OracleConnection.class);
+        } catch (SQLException e) {
+            throw new IllegalArgumentException("Connection is not an OracleConnection: " + e.getMessage(), e);
+        }
         Object[] structs;
         if (attributes == null || attributes.isEmpty()) {
             structs = new Object[0];

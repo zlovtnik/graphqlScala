@@ -63,9 +63,9 @@
         <nz-card class="stat-card card">
           <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
             <div nz-col class="stat-content">
-              <h3>API Calls</h3>
+              <h3>API Calls Today</h3>
               <nz-statistic 
-                [nzValue]="(stats$ | async)?.apiCalls || 0" 
+                [nzValue]="(stats$ | async)?.apiCallsToday || 0" 
                 [ngStyle]="{'color': 'var(--tertiary-base)'}">
               </nz-statistic>
             </div>
@@ -78,10 +78,81 @@
         <nz-card class="stat-card card">
           <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
             <div nz-col class="stat-content">
-              <h3>Last Login</h3>
-              <p class="last-login-time">{{ (stats$ | async)?.lastLogin || 'N/A' }}</p>
+              <h3>System Health</h3>
+              <div class="health-status">
+                <nz-tag 
+                  [nzColor]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'green' : 'red'"
+                  class="health-tag">
+                  {{ (stats$ | async)?.systemHealth || 'UNKNOWN' }}
+                </nz-tag>
+              </div>
             </div>
-            <span nz-icon nzType="clock-circle" nzTheme="outline" class="stat-icon icon-quaternary"></span>
+            <span nz-icon 
+              [nzType]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'check-circle' : 'close-circle'" 
+              nzTheme="outline" 
+              class="stat-icon icon-quaternary">
+            </span>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+
+    <!-- System Alerts -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px" *ngIf="alerts.length > 0">
+      <nz-col [nzSpan]="24">
+        <nz-card class="alerts-card card" nzTitle="System Alerts">
+          <div class="alerts-container">
+            <nz-alert
+              *ngFor="let alert of alerts"
+              [nzType]="alert.type"
+              [nzMessage]="alert.message"
+              [nzDescription]="alert.timestamp | date:'short'"
+              nzShowIcon
+              nzCloseable
+              class="system-alert">
+            </nz-alert>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+
+    <!-- Charts Section -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px">
+      <nz-col [nzSpan]="12">
+        <nz-card class="chart-card card" nzTitle="User Activity Trends (Last 7 Days)">
+          <div class="chart-placeholder">
+            <div class="chart-data">
+              <div class="chart-bar" *ngFor="let day of [1,2,3,4,5,6,7]" 
+                   [style.height.%]="getRandomHeight(day)">
+                <span class="bar-value">{{ getRandomValue(day) }}</span>
+              </div>
+            </div>
+            <div class="chart-labels">
+              <span *ngFor="let day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']">{{ day }}</span>
+            </div>
+          </div>
+        </nz-card>
+      </nz-col>
+
+      <nz-col [nzSpan]="12">
+        <nz-card class="chart-card card" nzTitle="Audit Logs Overview">
+          <div class="audit-overview">
+            <div class="audit-stat">
+              <h4>Total Logs</h4>
+              <nz-statistic [nzValue]="(stats$ | async)?.totalAuditLogs || 0"></nz-statistic>
+            </div>
+            <div class="audit-stat">
+              <h4>Failed Attempts</h4>
+              <nz-statistic [nzValue]="(stats$ | async)?.failedLoginAttempts || 0" [ngStyle]="{'color': 'red'}"></nz-statistic>
+            </div>
+            <div class="audit-stat">
+              <h4>Success Rate</h4>
+              <nz-statistic 
+                [nzValue]="getSuccessRate((stats$ | async)?.totalAuditLogs || 0, (stats$ | async)?.failedLoginAttempts || 0)" 
+                [nzSuffix]="'%'"
+                [ngStyle]="{'color': 'green'}">
+              </nz-statistic>
+            </div>
           </div>
         </nz-card>
       </nz-col>

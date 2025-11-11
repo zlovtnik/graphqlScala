@@ -32,7 +32,7 @@ import { ThemeService } from './core/services/theme.service';
 export class AppComponent {
   title: string = 'SSF GraphQL Platform';
   isCollapsed = false;
-  currentYear: number = new Date().getFullYear();
+  readonly currentYear: number = new Date().getFullYear();
 
   protected authService = inject(AuthService);
   protected themeService = inject(ThemeService);

@@ -3,9 +3,17 @@ package com.rcs.ssf.controller;
 import com.rcs.ssf.config.TestDatabaseConfig;
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.service.UserService;
+import com.rcs.ssf.dynamic.DynamicCrudGateway;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.minio.MinioClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -20,7 +28,6 @@ import org.springframework.security.config.annotation.authentication.builders.Au
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -36,45 +43,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Import({TestDatabaseConfig.class, UserControllerTest.NoOpSecurityConfig.class})
-@ComponentScan(excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = com.rcs.ssf.config.SecurityConfig.class))
+@Import(TestDatabaseConfig.class)
+@ComponentScan(excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = com.rcs.ssf.config.MinioConfig.class))
 @TestPropertySource(properties = {
-    "spring.jpa.hibernate.ddl-auto=none"
+    "spring.jpa.hibernate.ddl-auto=none",
+    "app.minio.url=http://localhost:9000",
+    "app.minio.access-key=test-access-key",
+    "app.minio.secret-key=test-secret-key",
+    "app.jwt.secret=test-jwt-secret-with-sufficient-entropy-for-validation-purposes-abcdef123456"
 })
 class UserControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    private static final SecurityMockMvcRequestPostProcessors.UserRequestPostProcessor AUTHENTICATED_USER =
-            SecurityMockMvcRequestPostProcessors.user("test-user").roles("USER");
-
     @MockBean
     private UserService userService;
+
+    @MockBean
+    private MinioClient minioClient;
+
+    @MockBean
+    private DynamicCrudGateway dynamicCrudGateway;
 
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Configuration
-    @EnableWebSecurity
-    static class NoOpSecurityConfig {
-
-        @Bean
-        PasswordEncoder passwordEncoder() {
-            return new BCryptPasswordEncoder(10); // Match default production strength
-        }
-
-        @Bean
-        AuthenticationManager authenticationManager(AuthenticationManagerBuilder builder, PasswordEncoder encoder) throws Exception {
-            builder.inMemoryAuthentication()
-                    .withUser("test-user")
-                    .password(encoder.encode("test-password"))
-                    .roles("USER");
-            return builder.build();
-        }
-    }
-
     @Test
+    @SuppressWarnings("null")
     void getUserById_WhenUserExists_ReturnsUser() throws Exception {
         User user = new User();
         UUID userId = UUID.randomUUID();
@@ -86,7 +82,6 @@ class UserControllerTest {
         when(userService.findById(userId)).thenReturn(Optional.of(user));
 
         mockMvc.perform(get("/api/users/" + userId)
-                .with(AUTHENTICATED_USER)
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
@@ -96,18 +91,19 @@ class UserControllerTest {
     }
 
     @Test
+    @SuppressWarnings("null")
     void getUserById_WhenUserDoesNotExist_ReturnsEmpty() throws Exception {
         UUID userId = UUID.randomUUID();
         when(userService.findById(userId)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/users/" + userId)
-                .with(AUTHENTICATED_USER)
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string(""));
     }
 
     @Test
+    @SuppressWarnings("null")
     void createUser_WhenValidInput_ReturnsCreatedUser() throws Exception {
         User user = new User();
         user.setUsername("newuser");
@@ -129,7 +125,6 @@ class UserControllerTest {
         );
 
         mockMvc.perform(post("/api/users")
-                .with(AUTHENTICATED_USER)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())

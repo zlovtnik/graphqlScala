@@ -19,9 +19,9 @@ public class MinioConfigSecurityTest {
         contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
-                        "minio.url=https://secure-minio.example.com:9000",
-                        "minio.access-key=secureAccessKey",
-                        "minio.secret-key=secureSecretKeyMinimum8"
+                        "app.minio.url=https://secure-minio.example.com:9000",
+                        "app.minio.access-key=secureAccessKey",
+                        "app.minio.secret-key=secureSecretKeyMinimum8"
                 )
                 .run(context -> {
                     assertNotNull(context.getBean(MinioConfig.class));
@@ -34,9 +34,9 @@ public class MinioConfigSecurityTest {
         contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
-                        "minio.url=http://insecure-minio.example.com:9000",
-                        "minio.access-key=secureAccessKey",
-                        "minio.secret-key=secureSecretKeyMinimum8"
+                        "app.minio.url=http://insecure-minio.example.com:9000",
+                        "app.minio.access-key=secureAccessKey",
+                        "app.minio.secret-key=secureSecretKeyMinimum8"
                 )
                 .run(context -> {
                     assertNotNull(context.getStartupFailure());
@@ -50,9 +50,9 @@ public class MinioConfigSecurityTest {
         contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
-                        "minio.url=https://secure-minio.example.com:9000",
-                        "minio.access-key=minioadmin",
-                        "minio.secret-key=minioadmin"
+                        "app.minio.url=https://secure-minio.example.com:9000",
+                        "app.minio.access-key=minioadmin",
+                        "app.minio.secret-key=minioadmin"
                 )
                 .run(context -> {
                     assertNotNull(context.getStartupFailure());
@@ -66,9 +66,9 @@ public class MinioConfigSecurityTest {
         contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=production",
-                        "minio.url=https://secure-minio.example.com:9000",
-                        "minio.access-key=key",
-                        "minio.secret-key=short"
+                        "app.minio.url=https://secure-minio.example.com:9000",
+                        "app.minio.access-key=key",
+                        "app.minio.secret-key=short"
                 )
                 .run(context -> {
                     assertNotNull(context.getStartupFailure());
@@ -82,9 +82,9 @@ public class MinioConfigSecurityTest {
         contextRunner
                 .withPropertyValues(
                         "spring.profiles.active=development",
-                        "minio.url=",
-                        "minio.access-key=",
-                        "minio.secret-key="
+                        "app.minio.url=",
+                        "app.minio.access-key=",
+                        "app.minio.secret-key="
                 )
                 .run(context -> {
                     assertNotNull(context.getBean(MinioConfig.class));

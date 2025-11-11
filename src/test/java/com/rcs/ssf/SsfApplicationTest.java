@@ -1,9 +1,11 @@
 package com.rcs.ssf;
 
 import com.rcs.ssf.config.TestDatabaseConfig;
+import io.minio.MinioClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 
@@ -19,9 +21,16 @@ import org.springframework.test.context.TestPropertySource;
     "spring.datasource.username=sa",
     "spring.datasource.password=",
     "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
-    "spring.jpa.hibernate.ddl-auto=create-drop"
+    "spring.jpa.hibernate.ddl-auto=create-drop",
+    "app.minio.url=http://localhost:9000",
+    "app.minio.access-key=test-access-key",
+    "app.minio.secret-key=test-secret-key",
+    "app.jwt.secret=test-jwt-secret-with-sufficient-entropy-for-validation-purposes-abcdef123456"
 })
 class SsfApplicationTest {
+
+    @MockBean
+    private MinioClient minioClient;
 
     @Autowired
     private ApplicationContext applicationContext;

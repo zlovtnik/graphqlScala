@@ -1,5 +1,6 @@
 import { Injectable, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
+import { environment } from '../../../environments/environment';
 
 /**
  * Token Storage Adapter
@@ -26,7 +27,7 @@ import { isPlatformBrowser } from '@angular/common';
 })
 export class TokenStorageAdapter {
   private readonly TOKEN_STORAGE_KEY = 'auth-token';
-  private isDevelopment = true; // Toggle based on environment
+  private isDevelopment = !environment.production;
   private platformId = inject(PLATFORM_ID);
 
   /**
@@ -106,15 +107,5 @@ export class TokenStorageAdapter {
       localStorage.removeItem(this.TOKEN_STORAGE_KEY);
     }
     // Production: Server clears httpOnly cookie via Set-Cookie with Max-Age=0
-  }
-
-  /**
-   * Set development/production mode
-   * Should be called during app initialization based on environment.
-   * 
-   * @param isDev True for development mode (use localStorage)
-   */
-  setDevelopmentMode(isDev: boolean): void {
-    this.isDevelopment = isDev;
   }
 }

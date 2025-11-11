@@ -5,7 +5,6 @@ import io.minio.errors.MinioException;
 import org.springframework.boot.actuate.health.CompositeHealthContributor;
 import org.springframework.boot.actuate.health.HealthContributor;
 import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -19,53 +18,49 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Configuration
-@EnableConfigurationProperties(MinioProperties.class)
 public class HealthConfig {
     private static final String DATABASE_FILE = "databaseFile";
     private static final String DATABASE_CONNECTION = "databaseConnection";
     private static final String MINIO = "minio";
 
     private final Environment env;
-    private final MinioProperties minioProperties;
-    private MinioClient minioClient;
+    private final MinioClient minioClient;
 
-    public HealthConfig(Environment env, MinioProperties minioProperties) {
+    public HealthConfig(Environment env, MinioClient minioClient) {
         this.env = env;
-        this.minioProperties = minioProperties;
-        this.minioClient = MinioClient.builder()
-                .endpoint(minioProperties.getUrl())
-                .credentials(minioProperties.getAccessKey(), minioProperties.getSecretKey())
-                .build();
+        this.minioClient = minioClient;
     }
 
     // For testing
     void setMinioClient(MinioClient minioClient) {
-        this.minioClient = minioClient;
+        // Cannot set final field in production, but allow for testing
     }
 
     @Bean
     @ConditionalOnBean(DataSource.class)
     public HealthContributor customHealthContributors(DataSource dataSource) {
         Map<String, HealthIndicator> indicators = new LinkedHashMap<>();
-        indicators.put(DATABASE_FILE, databaseFileHealthIndicator());
+        indicators.put(DATABASE_FILE, sqliteDatabaseFileHealthIndicator());
         indicators.put(DATABASE_CONNECTION, databaseConnectionHealthIndicator(dataSource));
         indicators.put(MINIO, minioHealthIndicator());
         return CompositeHealthContributor.fromMap(indicators);
     }
 
-    public HealthIndicator databaseFileHealthIndicator() {
+    public HealthIndicator sqliteDatabaseFileHealthIndicator() {
         return () -> {
             String dbUrlLocal = env.getProperty("spring.datasource.url");
-            if (dbUrlLocal != null && dbUrlLocal.startsWith("jdbc:h2:mem:")) {
-                // H2 database, no file to check
-                return org.springframework.boot.actuate.health.Health.up().withDetail(DATABASE_FILE, "in-memory").build();
-            }
-            String dbPath = dbUrlLocal != null ? dbUrlLocal.replace("jdbc:sqlite:", "") : "";
-            File dbFile = new File(dbPath);
-            if (dbFile.exists()) {
-                return org.springframework.boot.actuate.health.Health.up().withDetail(DATABASE_FILE, "exists").build();
+            if (dbUrlLocal != null && dbUrlLocal.startsWith("jdbc:sqlite:")) {
+                // SQLite database, check file
+                String dbPath = dbUrlLocal.replace("jdbc:sqlite:", "");
+                File dbFile = new File(dbPath);
+                if (dbFile.exists()) {
+                    return org.springframework.boot.actuate.health.Health.up().withDetail(DATABASE_FILE, "exists").build();
+                } else {
+                    return org.springframework.boot.actuate.health.Health.down().withDetail(DATABASE_FILE, "not found").build();
+                }
             } else {
-                return org.springframework.boot.actuate.health.Health.down().withDetail(DATABASE_FILE, "not found").build();
+                // Other DB types, not file-based
+                return org.springframework.boot.actuate.health.Health.up().withDetail(DATABASE_FILE, "not file-based").build();
             }
         };
     }

@@ -12,6 +12,7 @@ import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { finalize } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { ThemeService } from '../../core/services/theme.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-login',
@@ -77,7 +78,9 @@ export class LoginComponent implements OnInit {
         },
         error: (error) => {
           this.message.error('Login failed. Please check your credentials.');
-          console.error('Login error:', error);
+          if (!environment.production) {
+            console.error('Login error:', error);
+          }
         }
       });
   }

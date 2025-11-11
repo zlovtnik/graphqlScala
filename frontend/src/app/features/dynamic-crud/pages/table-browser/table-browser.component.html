@@ -1,0 +1,152 @@
+<div class="table-browser-container">
+  <div class="header-section">
+    <div class="header-left">
+      <button nz-button nzType="default" (click)="goBack()">
+        <span nz-icon nzType="arrow-left"></span>
+        Back to Dashboard
+      </button>
+      <h2>Dynamic CRUD Interface</h2>
+    </div>
+  </div>
+
+  <!-- Table Selection -->
+  <div class="table-selection">
+    <nz-select
+      [(ngModel)]="selectedTable"
+      (ngModelChange)="onTableSelect($event)"
+      nzPlaceHolder="Select a table"
+      nzAllowClear>
+      <nz-option *ngFor="let table of availableTables" [nzValue]="table" [nzLabel]="table"></nz-option>
+    </nz-select>
+  </div>
+
+  <!-- Table Actions -->
+  <div class="table-actions" *ngIf="selectedTable">
+    <div class="action-left">
+      <nz-input-group nzSearch [nzAddOnAfter]="suffixIconButton">
+        <input type="text" nz-input [(ngModel)]="searchValue" placeholder="Search..." />
+      </nz-input-group>
+      <ng-template #suffixIconButton>
+        <button nz-button nzType="primary" nzSearch (click)="onSearch()">
+          <span nz-icon nzType="search"></span>
+        </button>
+      </ng-template>
+    </div>
+
+    <div class="action-right">
+      <button nz-button nzType="primary" (click)="showCreateModal()">
+        <span nz-icon nzType="plus"></span>
+        Add Record
+      </button>
+      <button nz-button nzType="default" (click)="exportData()">
+        <span nz-icon nzType="download"></span>
+        Export CSV
+      </button>
+    </div>
+  </div>
+
+  <!-- Data Table -->
+  <div class="table-container" *ngIf="selectedTable">
+    <nz-table
+      #table
+      [nzData]="tableData"
+      [nzLoading]="loading"
+      [nzFrontPagination]="false"
+      [nzShowPagination]="false"
+      [nzScroll]="{ x: '1000px' }">
+      <thead>
+        <tr>
+          <th *ngFor="let column of columns"
+              [nzSortFn]="false"
+              [nzSortOrder]="column.name === sortField ? (sortOrder === 'ASC' ? 'ascend' : 'descend') : null"
+              (nzSortOrderChange)="onColumnSort(column.name, $event)">
+            {{ column.name | titlecase }}
+          </th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let data of tableData">
+          <td *ngFor="let column of columns">
+            {{ data[column.name] }}
+          </td>
+          <td>
+            <button nz-button nzType="link" nzSize="small" (click)="showEditModal(data)">
+              <span nz-icon nzType="edit"></span>
+              Edit
+            </button>
+            <nz-popconfirm
+              nzTitle="Are you sure you want to delete this record?"
+              (nzOnConfirm)="handleDelete(data)">
+              <button nz-button nzType="link" nzDanger nzSize="small">
+                <span nz-icon nzType="delete"></span>
+                Delete
+              </button>
+            </nz-popconfirm>
+          </td>
+        </tr>
+      </tbody>
+    </nz-table>
+
+    <!-- Pagination -->
+    <div class="pagination-container">
+      <nz-pagination
+        [(nzPageIndex)]="currentPage"
+        [(nzPageSize)]="pageSize"
+        [nzTotal]="totalRecords"
+        [nzShowSizeChanger]="true"
+        [nzPageSizeOptions]="[10, 20, 50, 100]"
+        (nzPageIndexChange)="onPageChange($event)"
+        (nzPageSizeChange)="onPageSizeChange($event)">
+      </nz-pagination>
+    </div>
+  </div>
+
+  <!-- Create Modal -->
+  <nz-modal
+    [(nzVisible)]="isCreateModalVisible"
+    nzTitle="Create New Record"
+    (nzOnCancel)="isCreateModalVisible = false"
+    (nzOnOk)="handleCreate()"
+    [nzOkLoading]="loading">
+    <ng-container *nzModalContent>
+      <form nz-form nzLayout="vertical">
+        <nz-form-item *ngFor="let column of columns">
+          <nz-form-label [nzRequired]="!column.nullable">{{ column.name | titlecase }}</nz-form-label>
+          <nz-form-control>
+            <input
+              nz-input
+              [type]="getInputType(column.type)"
+              [(ngModel)]="formData[column.name]"
+              [name]="column.name"
+              [required]="!column.nullable" />
+          </nz-form-control>
+        </nz-form-item>
+      </form>
+    </ng-container>
+  </nz-modal>
+
+  <!-- Edit Modal -->
+  <nz-modal
+    [(nzVisible)]="isEditModalVisible"
+    nzTitle="Edit Record"
+    (nzOnCancel)="isEditModalVisible = false"
+    (nzOnOk)="handleUpdate()"
+    [nzOkLoading]="loading">
+    <ng-container *nzModalContent>
+      <form nz-form nzLayout="vertical">
+        <nz-form-item *ngFor="let column of columns">
+          <nz-form-label [nzRequired]="!column.nullable">{{ column.name | titlecase }}</nz-form-label>
+          <nz-form-control>
+            <input
+              nz-input
+              [type]="getInputType(column.type)"
+              [(ngModel)]="formData[column.name]"
+              [name]="column.name"
+              [required]="!column.nullable" />
+          </nz-form-control>
+        </nz-form-item>
+      </form>
+    </ng-container>
+  </nz-modal>
+</div>
