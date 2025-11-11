@@ -1,54 +1,227 @@
 <nz-layout class="app-layout">
-  <nz-sider class="menu-sidebar"
+  <nz-sider
+    class="menu-sidebar"
     nzCollapsible
     nzWidth="256px"
     nzBreakpoint="md"
     [(nzCollapsed)]="isCollapsed"
-    [nzTrigger]="null">
+    [nzTrigger]="null"
+  >
     <div class="sidebar-logo">
-      <a href="https://ng.ant.design/" target="_blank">
-        <img src="assets/logo.svg" alt="logo">
-        <h1>{{ title }}</h1>
+      <a routerLink="/main">
+        <span nz-icon nzType="appstore" nzTheme="fill" class="logo-icon"></span>
+        <h1 *ngIf="!isCollapsed">{{ title }}</h1>
       </a>
     </div>
+
     <ul nz-menu nzTheme="dark" nzMode="inline" [nzInlineCollapsed]="isCollapsed">
+      <!-- Dashboard Section -->
       <li nz-submenu nzOpen nzTitle="Dashboard" nzIcon="dashboard">
         <ul>
           <li nz-menu-item nzMatchRouter>
-            <a routerLink="/welcome">Welcome</a>
+            <a routerLink="/main">
+              <span nz-icon nzType="home"></span>
+              <span>Home</span>
+            </a>
           </li>
-          <li nz-menu-item nzDisabled="true" aria-disabled="true" title="Monitor - Coming Soon">
-            <a>Monitor</a>
+          <li nz-menu-item>
+            <a routerLink="/analytics">
+              <span nz-icon nzType="bar-chart"></span>
+              <span>Analytics</span>
+            </a>
           </li>
-          <li nz-menu-item nzDisabled="true" aria-disabled="true" title="Workplace - Coming Soon">
-            <a>Workplace</a>
+          <li nz-menu-item>
+            <a routerLink="/monitor">
+              <span nz-icon nzType="monitor"></span>
+              <span>Monitor</span>
+            </a>
           </li>
         </ul>
       </li>
-      <li nz-submenu nzOpen nzTitle="Form" nzIcon="form">
+
+      <!-- Management Section -->
+      <li nz-submenu nzTitle="Management" nzIcon="control">
         <ul>
-          <li nz-menu-item nzDisabled="true" aria-disabled="true" title="Basic Form - Coming Soon">
-            <a>Basic Form</a>
+          <li nz-menu-item>
+            <a routerLink="/users">
+              <span nz-icon nzType="team"></span>
+              <span>Users</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a routerLink="/data">
+              <span nz-icon nzType="database"></span>
+              <span>Data</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a routerLink="/resources">
+              <span nz-icon nzType="file"></span>
+              <span>Resources</span>
+            </a>
           </li>
         </ul>
+      </li>
+
+      <!-- GraphQL Section -->
+      <li nz-submenu nzTitle="GraphQL" nzIcon="api">
+        <ul>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="code"></span>
+              <span>Queries</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="edit"></span>
+              <span>Mutations</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="file-text"></span>
+              <span>Schema</span>
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Settings Section -->
+      <li nz-submenu nzTitle="Settings" nzIcon="setting">
+        <ul>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="user"></span>
+              <span>Profile</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="lock"></span>
+              <span>Security</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="skin"></span>
+              <span>Theme</span>
+            </a>
+          </li>
+          <li nz-menu-item>
+            <a>
+              <span nz-icon nzType="info-circle"></span>
+              <span>About</span>
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Divider -->
+      <li class="menu-divider"></li>
+
+      <!-- Logout (only shown when authenticated) -->
+      <li nz-menu-item *ngIf="authService.isAuthenticated()" class="logout-menu-item">
+        <a (click)="logout()" (keydown.enter)="logout()" tabindex="0" role="button">
+          <span nz-icon nzType="logout"></span>
+          <span>Logout</span>
+        </a>
+      </li>
+
+      <!-- Login/Register (only shown when not authenticated) -->
+      <li nz-menu-item *ngIf="!authService.isAuthenticated()">
+        <a routerLink="/login">
+          <span nz-icon nzType="login"></span>
+          <span>Login</span>
+        </a>
       </li>
     </ul>
   </nz-sider>
+
   <nz-layout>
-    <nz-header>
-      <div class="app-header">
-        <span class="header-trigger" (click)="isCollapsed = !isCollapsed">
-            <span class="trigger"
-               nz-icon
-               [nzType]="isCollapsed ? 'menu-unfold' : 'menu-fold'"
-            ></span>
+    <nz-header class="app-header">
+      <div class="header-content">
+        <span class="header-trigger" (click)="isCollapsed = !isCollapsed" (keydown.enter)="isCollapsed = !isCollapsed" tabindex="0" role="button">
+          <span
+            nz-icon
+            [nzType]="isCollapsed ? 'menu-unfold' : 'menu-fold'"
+            class="trigger-icon"
+          ></span>
         </span>
+
+        <div class="header-right">
+          <!-- Theme Selector -->
+          <div class="theme-selector-header">
+            <div nz-dropdown [nzDropdownMenu]="themeMenu" nzPlacement="bottomRight">
+              <button nz-button nzType="text" class="theme-trigger">
+                <span nz-icon nzType="skin"></span>
+                <span class="theme-label">{{ (themeService.getCurrentTheme$() | async) | titlecase }}</span>
+              </button>
+            </div>
+            <nz-dropdown-menu #themeMenu="nzDropdownMenu">
+              <ul nz-menu>
+                <li nz-menu-item *ngFor="let theme of themeService.getAvailableThemes()">
+                  <a (click)="themeService.setTheme(theme)" (keydown.enter)="themeService.setTheme(theme)" tabindex="0" role="button">
+                    <span class="theme-dot" [class]="'theme-dot-' + theme"></span>
+                    {{ theme | titlecase }}
+                  </a>
+                </li>
+              </ul>
+            </nz-dropdown-menu>
+          </div>
+
+          <!-- User Menu -->
+          <div class="user-menu" *ngIf="authService.isAuthenticated()">
+            <div nz-dropdown [nzDropdownMenu]="userMenu" nzPlacement="bottomRight">
+              <button nz-button nzType="text" class="user-trigger">
+                <nz-avatar
+                  [nzText]="(authService.getCurrentUser$() | async)?.username?.[0]?.toUpperCase() || '?'"
+                  [nzSize]="32"
+                  class="user-avatar-header"
+                ></nz-avatar>
+              </button>
+            </div>
+            <nz-dropdown-menu #userMenu="nzDropdownMenu">
+              <ul nz-menu>
+                <li nz-menu-item>
+                  <span nz-icon nzType="user"></span>
+                  {{ (authService.getCurrentUser$() | async)?.username || 'User' }}
+                </li>
+                <li nz-menu-divider></li>
+                <li nz-menu-item>
+                  <a>
+                    <span nz-icon nzType="profile"></span>
+                    Profile
+                  </a>
+                </li>
+                <li nz-menu-item>
+                  <a>
+                    <span nz-icon nzType="setting"></span>
+                    Settings
+                  </a>
+                </li>
+                <li nz-menu-divider></li>
+                <li nz-menu-item>
+                  <a (click)="logout()" (keydown.enter)="logout()" tabindex="0" role="button">
+                    <span nz-icon nzType="logout"></span>
+                    Logout
+                  </a>
+                </li>
+              </ul>
+            </nz-dropdown-menu>
+          </div>
+        </div>
       </div>
     </nz-header>
+
     <nz-content>
       <div class="inner-content">
         <router-outlet></router-outlet>
       </div>
     </nz-content>
+
+    <nz-footer class="app-footer">
+      <p>&copy; {{ currentYear }} SSF GraphQL Platform. All rights reserved.</p>
+    </nz-footer>
   </nz-layout>
 </nz-layout>

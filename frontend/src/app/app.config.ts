@@ -9,7 +9,7 @@ import { en_US, provideNzI18n } from 'ng-zorro-antd/i18n';
 import { registerLocaleData } from '@angular/common';
 import en from '@angular/common/locales/en';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withFetch } from '@angular/common/http';
 import { HttpLink } from 'apollo-angular/http';
 import { graphqlProvider } from './graphql.config';
 
@@ -23,7 +23,7 @@ export const appConfig: ApplicationConfig = {
     provideNzIcons(icons),
     provideNzI18n(en_US),
     provideAnimationsAsync(),
-    provideHttpClient(),
+    provideHttpClient(withFetch()),
     graphqlProvider,
     HttpLink
   ]

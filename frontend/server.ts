@@ -4,7 +4,8 @@ import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import bootstrap from './src/main.server';
-
+import validator from 'validator';
+import rateLimit from 'express-rate-limit';
 // Custom error class for SSR render timeouts
 class SSRTimeoutError extends Error {
   constructor() {
@@ -15,7 +16,7 @@ class SSRTimeoutError extends Error {
 }
 
 // The Express app is exported so that it can be used by serverless Functions.
-export function app(): express.Express {
+export function app(): any {
   const server = express();
   const serverDistFolder = dirname(fileURLToPath(import.meta.url));
   const browserDistFolder = resolve(serverDistFolder, '../browser');
@@ -26,6 +27,40 @@ export function app(): express.Express {
   server.set('view engine', 'html');
   server.set('views', browserDistFolder);
 
+  // Configure Express to trust proxy (important for getting correct client IP behind load balancers)
+  // Set to 1 if behind a single proxy, or adjust based on your infrastructure
+  const trustProxyConfig = process.env['TRUST_PROXY'] || (process.env['NODE_ENV'] === 'production' ? '1' : false);
+  server.set('trust proxy', trustProxyConfig);
+
+  // Configure rate limiting middleware for SSR endpoint protection
+  const limiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute window
+    max: parseInt(process.env['RATE_LIMIT_MAX'] || '100', 10), // max requests per IP (default 100)
+    message: 'Too many requests from this IP address, please try again after a minute.',
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    // Skip rate limiting for health checks or specific paths if needed
+    skip: (req: any): boolean => {
+      const path = req.originalUrl.split('?')[0];
+      return path === '/health' || path === '/healthcheck';
+    },
+    // Custom handler for rate limit exceeded
+    handler: (req: any, res: any): void => {
+      const path = req.originalUrl.split('?')[0];
+      console.warn(`Rate limit exceeded for IP: ${req.ip}`, {
+        path: path,
+        method: req.method,
+        userAgent: req.headers['user-agent'],
+        timestamp: new Date().toISOString(),
+      });
+      res.status(429).json({
+        error: 'Too many requests',
+        message: 'You have exceeded the rate limit. Please try again after a minute.',
+        retryAfter: 60,
+      });
+    },
+  });
+
   // Example Express Rest API endpoints
   // server.get('/api/**', (req, res) => { });
   // Serve static files from /browser
@@ -34,46 +69,20 @@ export function app(): express.Express {
     index: false,
   }));
 
+  // Apply rate limiting middleware to protect against DoS attacks
+  server.use(limiter);
+
   const allowedHostsEnv = process.env['ALLOWED_HOSTS'] ?? '';
   const allowedHosts = allowedHostsEnv
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
 
-  // Strict hostname validation following RFC 1123 and RFC 952
+  // Hostname validation using 'validator' library (RFC 1123)
+
+
   function isValidHostname(hostname: string): boolean {
-    // Basic length checks
-    if (hostname.length === 0 || hostname.length > 253) {
-      return false;
-    }
-
-    // Split into labels
-    const labels = hostname.split('.');
-
-    // Must have at least one label
-    if (labels.length === 0) {
-      return false;
-    }
-
-    // Each label must be valid
-    for (const label of labels) {
-      // Label length 1-63 chars
-      if (label.length === 0 || label.length > 63) {
-        return false;
-      }
-
-      // Must start and end with alphanumeric
-      if (!/^[a-zA-Z0-9]/.test(label) || !/[a-zA-Z0-9]$/.test(label)) {
-        return false;
-      }
-
-      // May contain only alphanumeric and hyphens (internal)
-      if (!/^[a-zA-Z0-9-]+$/.test(label)) {
-        return false;
-      }
-    }
-
-    return true;
+    return validator.isFQDN(hostname, { require_tld: false });
   }
 
   // Port validation (1-65535)
@@ -102,7 +111,7 @@ export function app(): express.Express {
   }
 
   // All regular routes use the Angular engine
-  server.get('**', (req, res, next) => {
+  server.get('**', (req: any, res: any, next: any) => {
     const { protocol, originalUrl, baseUrl, headers } = req;
     const hostHeader = String(headers.host ?? '').trim();
     const clientIp = req.ip || req.socket.remoteAddress || 'unknown';
@@ -155,13 +164,18 @@ export function app(): express.Express {
     });
 
     // Add timeout to prevent hanging renders (30 seconds)
+    let timeoutId: NodeJS.Timeout | undefined = undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new SSRTimeoutError()), 30000);
+      timeoutId = setTimeout(() => reject(new SSRTimeoutError()), 30000);
     });
 
     Promise.race([renderPromise, timeoutPromise])
-      .then((html) => res.send(html))
+      .then((html) => {
+        clearTimeout(timeoutId);
+        res.send(html);
+      })
       .catch((err) => {
+        clearTimeout(timeoutId);
         const isTimeout = err instanceof SSRTimeoutError;
         const errorContext = {
           error: {

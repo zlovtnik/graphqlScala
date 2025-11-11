@@ -52,6 +52,6 @@ management:
 logging:
   level:
     root: WARN
-    com.example.ssf: INFO
+    "[com.rcs.ssf]": INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n"

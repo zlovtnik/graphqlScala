@@ -1,0 +1,104 @@
+<div class="register-container">
+  <nz-card class="register-card" [nzBordered]="true">
+    <div class="register-header">
+      <h1>Create Account</h1>
+      <p>Join us today to get started</p>
+    </div>
+
+    <form [formGroup]="registerForm" (ngSubmit)="onSubmit()" class="register-form">
+      <nz-form-item>
+        <nz-form-label nzRequired>Username</nz-form-label>
+        <nz-form-control>
+          <input
+            nz-input
+            type="text"
+            formControlName="username"
+            placeholder="Choose a username"
+            [class.ng-invalid]="registerForm.get('username')?.invalid && registerForm.get('username')?.touched"
+          />
+        </nz-form-control>
+      </nz-form-item>
+
+      <nz-form-item>
+        <nz-form-label nzRequired>Email</nz-form-label>
+        <nz-form-control>
+          <input
+            nz-input
+            type="email"
+            formControlName="email"
+            placeholder="Enter your email"
+            [class.ng-invalid]="registerForm.get('email')?.invalid && registerForm.get('email')?.touched"
+          />
+        </nz-form-control>
+      </nz-form-item>
+
+      <nz-form-item>
+        <nz-form-label nzRequired>Password</nz-form-label>
+        <nz-form-control>
+          <input
+            nz-input
+            type="password"
+            formControlName="password"
+            placeholder="Create a password"
+            [class.ng-invalid]="registerForm.get('password')?.invalid && registerForm.get('password')?.touched"
+          />
+        </nz-form-control>
+      </nz-form-item>
+
+      <nz-form-item>
+        <nz-form-label nzRequired>Confirm Password</nz-form-label>
+        <nz-form-control>
+          <input
+            nz-input
+            type="password"
+            formControlName="confirmPassword"
+            placeholder="Confirm your password"
+            [class.ng-invalid]="
+              (registerForm.get('confirmPassword')?.invalid ||
+                registerForm.hasError('passwordsMismatch')) &&
+              registerForm.get('confirmPassword')?.touched
+            "
+          />
+        </nz-form-control>
+      </nz-form-item>
+
+      <div class="terms-checkbox">
+        <label nz-checkbox formControlName="agreeTerms" htmlFor="agreeTerms">
+          I agree to the Terms and Conditions
+        </label>
+      </div>
+
+      <button
+        nz-button
+        nzType="primary"
+        nzSize="large"
+        nzBlock
+        class="register-btn btn-secondary"
+        [disabled]="isLoading || registerForm.invalid"
+      >
+        <span *ngIf="!isLoading">Create Account</span>
+        <span *ngIf="isLoading">
+          <nz-spin nzSimple></nz-spin>
+        </span>
+      </button>
+    </form>
+
+    <div class="register-footer">
+      <p>Already have an account? <a routerLink="/login" class="login-link">Sign in here</a></p>
+    </div>
+  </nz-card>
+
+  <div class="theme-selector">
+    <div class="theme-label">Theme:</div>
+    <div class="theme-buttons">
+      <button
+        *ngFor="let theme of themeService.getAvailableThemes()"
+        (click)="themeService.setTheme(theme)"
+        [class.active]="(themeService.getCurrentTheme$() | async) === theme"
+        [class]="'theme-btn theme-' + theme"
+      >
+        {{ theme | titlecase }}
+      </button>
+    </div>
+  </div>
+</div>

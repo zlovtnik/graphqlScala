@@ -1,0 +1,81 @@
+<div class="login-container">
+  <nz-card class="login-card" [nzBordered]="true">
+    <div class="login-header">
+      <h1>Welcome Back</h1>
+      <p>Sign in to your account</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
+      <nz-form-item>
+        <nz-form-label nzRequired>Username</nz-form-label>
+        <nz-form-control>
+          <input
+            nz-input
+            type="text"
+            formControlName="username"
+            placeholder="Enter your username"
+            [class.ng-invalid]="loginForm.get('username')?.invalid && loginForm.get('username')?.touched"
+          />
+        </nz-form-control>
+      </nz-form-item>
+
+      <nz-form-item>
+        <nz-form-label nzRequired>Password</nz-form-label>
+        <nz-form-control>
+          <input
+            nz-input
+            type="password"
+            formControlName="password"
+            placeholder="Enter your password"
+            [class.ng-invalid]="loginForm.get('password')?.invalid && loginForm.get('password')?.touched"
+          />
+        </nz-form-control>
+      </nz-form-item>
+
+      <div class="remember-forgot">
+        <label nz-checkbox formControlName="rememberMe" htmlFor="rememberMe">Remember me</label>
+        <button
+          type="button"
+          class="forgot-password"
+          (click)="onForgotPassword()"
+          nz-button
+          nzType="link"
+        >
+          Forgot Password?
+        </button>
+      </div>
+
+      <button
+        nz-button
+        nzType="primary"
+        nzSize="large"
+        nzBlock
+        class="login-btn btn-primary"
+        [disabled]="isLoading || loginForm.invalid"
+      >
+        <span *ngIf="!isLoading">Sign In</span>
+        <span *ngIf="isLoading">
+          <nz-spin nzSimple></nz-spin>
+        </span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <p>Don't have an account? <a routerLink="/register" class="register-link">Sign up here</a></p>
+    </div>
+  </nz-card>
+
+  <div class="theme-selector">
+    <div class="theme-label">Theme:</div>
+    <div class="theme-buttons">
+      <button
+        *ngFor="let theme of themeService.getAvailableThemes()"
+        (click)="themeService.setTheme(theme)"
+        [class.active]="(themeService.getCurrentTheme$() | async) === theme"
+        [class]="'theme-btn theme-' + theme"
+      >
+        {{ theme | titlecase }}
+      </button>
+    </div>
+  </div>
+</div>
