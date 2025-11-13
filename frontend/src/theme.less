@@ -1,9 +1,320 @@
-
 // Custom Theming for NG-ZORRO
 // For more information: https://ng.ant.design/docs/customize-theme/en
 @import "../node_modules/ng-zorro-antd/ng-zorro-antd.less";
 
-// Override less variables to here
-// View all variables: https://github.com/NG-ZORRO/ng-zorro-antd/blob/master/components/style/themes/default.less
+// ============================================================
+// MULTI-THEME COLOR SYSTEM
+// 4 Primary Colors: Blue, Purple, Emerald, Amber
+// Each with 4 Variations: Light, Base, Dark, Darker
+// ============================================================
 
-// @primary-color: #1890ff;
+// Define base color palettes
+@blue-light: #E3F2FD;
+@blue-base: #1E40AF;
+@blue-dark: #0C2340;
+@blue-darker: #051530;
+
+@purple-light: #F3E8FF;
+@purple-base: #7C3AED;
+@purple-dark: #4C1D95;
+@purple-darker: #2D1250;
+
+@emerald-light: #D1FAE5;
+@emerald-base: #059669;
+@emerald-dark: #065F46;
+@emerald-darker: #032D1F;
+
+@amber-light: #FEF3C7;
+@amber-base: #D97706;
+@amber-dark: #92400E;
+@amber-darker: #581C0C;
+
+// Neutral colors
+@neutral-white: #FFFFFF;
+@neutral-light: #F8F9FA;
+@neutral-light-gray: #E9ECEF;
+@neutral-gray: #DEE2E6;
+@neutral-dark-gray: #495057;
+@neutral-dark: #212529;
+@neutral-black: #000000;
+
+// ============================================================
+// DEFAULT THEME: Blue
+// ============================================================
+:root {
+  // Primary color palette
+  --primary-light: @blue-light;
+  --primary-base: @blue-base;
+  --primary-dark: @blue-dark;
+  --primary-darker: @blue-darker;
+  
+  // Secondary colors (Accent palette)
+  --secondary-light: @purple-light;
+  --secondary-base: @purple-base;
+  --secondary-dark: @purple-dark;
+  --secondary-darker: @purple-darker;
+  
+  // Tertiary colors
+  --tertiary-light: @emerald-light;
+  --tertiary-base: @emerald-base;
+  --tertiary-dark: @emerald-dark;
+  --tertiary-darker: @emerald-darker;
+  
+  // Quaternary colors
+  --quaternary-light: @amber-light;
+  --quaternary-base: @amber-base;
+  --quaternary-dark: @amber-dark;
+  --quaternary-darker: @amber-darker;
+  
+  // Neutral colors
+  --neutral-white: @neutral-white;
+  --neutral-light: @neutral-light;
+  --neutral-light-gray: @neutral-light-gray;
+  --neutral-gray: @neutral-gray;
+  --neutral-dark-gray: @neutral-dark-gray;
+  --neutral-dark: @neutral-dark;
+  --neutral-black: @neutral-black;
+  
+  // Theme base colors - for direct theme color reference
+  --theme-blue: @blue-base;
+  --theme-purple: @purple-base;
+  --theme-emerald: @emerald-base;
+  --theme-amber: @amber-base;
+  
+  // Theme light colors
+  --theme-blue-light: @blue-light;
+  --theme-purple-light: @purple-light;
+  --theme-emerald-light: @emerald-light;
+  --theme-amber-light: @amber-light;
+  
+  // Semantic colors
+  --success: var(--tertiary-base);
+  --warning: var(--quaternary-base);
+  --error: #DC2626;
+  --info: var(--primary-base);
+  
+  // Layout
+  --header-height: 64px;
+  --sidebar-width: 256px;
+  --border-radius: 6px;
+  --transition: all 0.3s ease;
+}
+
+// ============================================================
+// THEME: Purple
+// ============================================================
+[data-theme="purple"] {
+  --primary-light: @purple-light;
+  --primary-base: @purple-base;
+  --primary-dark: @purple-dark;
+  --primary-darker: @purple-darker;
+  
+  --secondary-light: @blue-light;
+  --secondary-base: @blue-base;
+  --secondary-dark: @blue-dark;
+  --secondary-darker: @blue-darker;
+  
+  --tertiary-light: @emerald-light;
+  --tertiary-base: @emerald-base;
+  --tertiary-dark: @emerald-dark;
+  --tertiary-darker: @emerald-darker;
+  
+  --quaternary-light: @amber-light;
+  --quaternary-base: @amber-base;
+  --quaternary-dark: @amber-dark;
+  --quaternary-darker: @amber-darker;
+}
+
+// ============================================================
+// THEME: Emerald
+// ============================================================
+[data-theme="emerald"] {
+  --primary-light: @emerald-light;
+  --primary-base: @emerald-base;
+  --primary-dark: @emerald-dark;
+  --primary-darker: @emerald-darker;
+  
+  --secondary-light: @blue-light;
+  --secondary-base: @blue-base;
+  --secondary-dark: @blue-dark;
+  --secondary-darker: @blue-darker;
+  
+  --tertiary-light: @purple-light;
+  --tertiary-base: @purple-base;
+  --tertiary-dark: @purple-dark;
+  --tertiary-darker: @purple-darker;
+  
+  --quaternary-light: @amber-light;
+  --quaternary-base: @amber-base;
+  --quaternary-dark: @amber-dark;
+  --quaternary-darker: @amber-darker;
+}
+
+// ============================================================
+// THEME: Amber
+// ============================================================
+[data-theme="amber"] {
+  --primary-light: @amber-light;
+  --primary-base: @amber-base;
+  --primary-dark: @amber-dark;
+  --primary-darker: @amber-darker;
+  
+  --secondary-light: @blue-light;
+  --secondary-base: @blue-base;
+  --secondary-dark: @blue-dark;
+  --secondary-darker: @blue-darker;
+  
+  --tertiary-light: @purple-light;
+  --tertiary-base: @purple-base;
+  --tertiary-dark: @purple-dark;
+  --tertiary-darker: @purple-darker;
+  
+  --quaternary-light: @emerald-light;
+  --quaternary-base: @emerald-base;
+  --quaternary-dark: @emerald-dark;
+  --quaternary-darker: @emerald-darker;
+}
+
+// ============================================================
+// GLOBAL STYLES
+// ============================================================
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--neutral-light);
+  color: var(--neutral-dark);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+// Button styles
+.btn-primary {
+  background-color: var(--primary-base);
+  color: var(--neutral-white);
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+  
+  &:hover {
+    background-color: var(--primary-dark);
+  }
+  
+  &:active {
+    background-color: var(--primary-darker);
+  }
+}
+
+.btn-secondary {
+  background-color: var(--secondary-base);
+  color: var(--neutral-white);
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+  
+  &:hover {
+    background-color: var(--secondary-dark);
+  }
+  
+  &:active {
+    background-color: var(--secondary-darker);
+  }
+}
+
+.btn-tertiary {
+  background-color: var(--tertiary-base);
+  color: var(--neutral-white);
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+  
+  &:hover {
+    background-color: var(--tertiary-dark);
+  }
+  
+  &:active {
+    background-color: var(--tertiary-darker);
+  }
+}
+
+.btn-quaternary {
+  background-color: var(--quaternary-base);
+  color: var(--neutral-white);
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: var(--transition);
+  
+  &:hover {
+    background-color: var(--quaternary-dark);
+  }
+  
+  &:active {
+    background-color: var(--quaternary-darker);
+  }
+}
+
+// Badge styles
+.badge-primary {
+  background-color: var(--primary-light);
+  color: var(--primary-dark);
+  padding: 4px 8px;
+  border-radius: var(--border-radius);
+}
+
+.badge-secondary {
+  background-color: var(--secondary-light);
+  color: var(--secondary-dark);
+  padding: 4px 8px;
+  border-radius: var(--border-radius);
+}
+
+.badge-tertiary {
+  background-color: var(--tertiary-light);
+  color: var(--tertiary-dark);
+  padding: 4px 8px;
+  border-radius: var(--border-radius);
+}
+
+.badge-quaternary {
+  background-color: var(--quaternary-light);
+  color: var(--quaternary-dark);
+  padding: 4px 8px;
+  border-radius: var(--border-radius);
+}
+
+// Card styles
+.card {
+  background-color: var(--neutral-white);
+  border-radius: var(--border-radius);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  transition: var(--transition);
+  
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+// Input styles
+input, textarea, select {
+  border: 1px solid var(--neutral-gray);
+  border-radius: var(--border-radius);
+  padding: 8px 12px;
+  font-size: 14px;
+  transition: var(--transition);
+  
+  &:focus {
+    outline: none;
+    border-color: var(--primary-base);
+    box-shadow: 0 0 0 3px var(--primary-light);
+  }
+}

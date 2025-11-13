@@ -1,0 +1,122 @@
+.table-browser-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.header-left h2 {
+  margin: 0;
+  color: var(--neutral-dark);
+}
+
+.table-selection {
+  margin-bottom: 24px;
+}
+
+.table-selection nz-select {
+  width: 300px;
+}
+
+.table-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.action-left,
+.action-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.table-container {
+  background: white;
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+nz-table {
+  width: 100%;
+}
+
+nz-table th {
+  background: var(--neutral-light-gray);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+nz-table td {
+  padding: 12px 16px;
+}
+
+nz-table tbody tr:hover {
+  background: var(--neutral-light);
+}
+
+.pagination-container {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid var(--neutral-light-gray);
+}
+
+/* Modal styling */
+nz-modal {
+  width: 600px;
+}
+
+nz-form-item {
+  margin-bottom: 16px;
+}
+
+nz-form-label {
+  font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .table-browser-container {
+    padding: 16px;
+  }
+
+  .header-section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .table-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-left,
+  .action-right {
+    justify-content: center;
+  }
+
+  nz-modal {
+    width: 95vw;
+    margin: 0 auto;
+  }
+}

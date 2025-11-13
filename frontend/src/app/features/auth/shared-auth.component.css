@@ -1,0 +1,59 @@
+/* Shared styles for authentication components */
+
+.theme-selector {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--neutral-white);
+  padding: 12px 16px;
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  .theme-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--neutral-dark);
+  }
+
+  .theme-buttons {
+    display: flex;
+    gap: 8px;
+
+    .theme-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 2px solid var(--neutral-gray);
+      cursor: pointer;
+      transition: all 0.3s ease;
+
+      &.theme-blue {
+        background-color: var(--theme-blue);
+      }
+
+      &.theme-purple {
+        background-color: var(--theme-purple);
+      }
+
+      &.theme-emerald {
+        background-color: var(--theme-emerald);
+      }
+
+      &.theme-amber {
+        background-color: var(--theme-amber);
+      }
+
+      &.active {
+        border-color: var(--neutral-dark);
+        box-shadow: 0 0 0 2px var(--neutral-white), 0 0 0 4px var(--neutral-dark);
+      }
+
+      &:hover:not(.active) {
+        transform: scale(1.1);
+      }
+    }
+  }
+}

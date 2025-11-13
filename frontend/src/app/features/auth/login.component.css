@@ -1,0 +1,122 @@
+@import './shared-auth.component.css';
+
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary-light) 0%, var(--secondary-light) 100%);
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  border-radius: var(--border-radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--neutral-light-gray);
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+
+  h1 {
+    color: var(--primary-dark);
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+  }
+
+  p {
+    color: var(--neutral-dark-gray);
+    font-size: 14px;
+    margin: 0;
+  }
+}
+
+.login-form {
+  nz-form-item {
+    margin-bottom: 16px;
+  }
+
+  nz-form-label {
+    color: var(--neutral-dark);
+    font-weight: 500;
+  }
+
+  input {
+    border-color: var(--neutral-gray) !important;
+    transition: all 0.3s ease;
+
+    &:focus {
+      border-color: var(--primary-base) !important;
+      box-shadow: 0 0 0 2px var(--primary-light) !important;
+    }
+
+    &.ng-invalid {
+      border-color: #DC2626 !important;
+    }
+  }
+}
+
+.remember-forgot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  font-size: 12px;
+
+  .forgot-password {
+    color: var(--primary-base);
+    text-decoration: none;
+    transition: color 0.3s ease;
+
+    &:hover {
+      color: var(--primary-dark);
+    }
+  }
+}
+
+.login-btn {
+  font-weight: 600;
+  height: 40px;
+  font-size: 14px;
+  border: none;
+  border-radius: var(--border-radius);
+  transition: all 0.3s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--neutral-light-gray);
+
+  p {
+    color: var(--neutral-dark-gray);
+    font-size: 12px;
+    margin: 0;
+  }
+
+  .register-link {
+    color: var(--secondary-base);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.3s ease;
+
+    &:hover {
+      color: var(--secondary-dark);
+    }
+  }
+}

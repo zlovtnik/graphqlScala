@@ -1,0 +1,349 @@
+.main-container {
+  min-height: 100vh;
+  padding: 24px;
+  background-color: var(--neutral-light);
+}
+
+.dashboard-header {
+  background: linear-gradient(135deg, var(--primary-base) 0%, var(--secondary-base) 100%);
+  padding: 32px;
+  border-radius: var(--border-radius);
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    color: var(--neutral-white);
+
+    .user-avatar {
+      background-color: var(--neutral-white);
+      color: var(--primary-base);
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .user-details {
+      h2 {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      p {
+        margin: 4px 0 0 0;
+        font-size: 14px;
+        opacity: 0.9;
+      }
+    }
+  }
+
+  .logout-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--neutral-white);
+    border: none;
+    color: var(--primary-base);
+    font-weight: 600;
+    transition: var(--transition);
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+  }
+}
+
+.dashboard-content {
+  max-width: 1400px;
+}
+
+.stat-card {
+  border: 1px solid var(--neutral-light-gray);
+  border-radius: var(--border-radius);
+  transition: var(--transition);
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+
+  .stat-content {
+    h3 {
+      color: var(--neutral-dark-gray);
+      font-size: 12px;
+      font-weight: 600;
+      margin: 0 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  }
+
+  .stat-icon {
+    font-size: 32px;
+    opacity: 0.2;
+  }
+
+  .icon-primary {
+    color: var(--primary-base);
+  }
+
+  .icon-secondary {
+    color: var(--secondary-base);
+  }
+
+  .icon-tertiary {
+    color: var(--tertiary-base);
+  }
+
+  .icon-quaternary {
+    color: var(--quaternary-base);
+  }
+
+  .last-login-time {
+    color: var(--primary-base);
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+  }
+}
+
+.content-card {
+  border: 1px solid var(--neutral-light-gray);
+  border-radius: var(--border-radius);
+}
+
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    border-radius: var(--border-radius);
+    border: none;
+    padding: 10px 16px;
+    transition: var(--transition);
+    font-size: 14px;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+}
+
+.theme-card {
+  border: 1px solid var(--neutral-light-gray);
+  border-radius: var(--border-radius);
+}
+
+.theme-selector-main {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+
+  .theme-info {
+    p {
+      color: var(--neutral-dark);
+      font-size: 14px;
+      margin: 0;
+      font-weight: 500;
+    }
+  }
+
+  .theme-buttons-main {
+    display: flex;
+    gap: 12px;
+
+    .theme-btn-main {
+      padding: 8px 16px;
+      border-radius: var(--border-radius);
+      border: 2px solid var(--neutral-gray);
+      background-color: var(--neutral-white);
+      cursor: pointer;
+      transition: var(--transition);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: capitalize;
+
+      &.theme-blue {
+        color: var(--theme-blue);
+
+        &:hover {
+          border-color: var(--theme-blue);
+          background-color: var(--theme-blue-light);
+        }
+      }
+
+      &.theme-purple {
+        color: var(--theme-purple);
+
+        &:hover {
+          border-color: var(--theme-purple);
+          background-color: var(--theme-purple-light);
+        }
+      }
+
+      &.theme-emerald {
+        color: var(--theme-emerald);
+
+        &:hover {
+          border-color: var(--theme-emerald);
+          background-color: var(--theme-emerald-light);
+        }
+      }
+
+      &.theme-amber {
+        color: var(--theme-amber);
+
+        &:hover {
+          border-color: var(--theme-amber);
+          background-color: var(--theme-amber-light);
+        }
+      }
+
+      &.active {
+        border-color: var(--primary-base);
+        background-color: var(--primary-light);
+        color: var(--primary-dark);
+        box-shadow: 0 0 0 3px var(--primary-light);
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .main-container {
+    padding: 16px;
+  }
+
+  .dashboard-header {
+    padding: 16px;
+
+    .header-content {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .user-info {
+      .user-details {
+        h2 {
+          font-size: 20px;
+        }
+      }
+    }
+
+    .logout-btn, .install-btn {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  .stat-card {
+    .stat-content {
+      h3 {
+        font-size: 10px;
+      }
+    }
+
+    .stat-icon {
+      font-size: 24px;
+    }
+  }
+
+  .quick-actions {
+    flex-direction: column;
+
+    button {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+
+  .theme-selector-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+
+    .theme-buttons-main {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 8px;
+
+      .theme-btn-main {
+        flex: 1;
+        min-width: 80px;
+      }
+    }
+  }
+
+  .chart-placeholder {
+    .chart-data {
+      .chart-bar {
+        width: 30px;
+        margin: 0 2px;
+      }
+    }
+
+    .chart-labels {
+      span {
+        font-size: 10px;
+      }
+    }
+  }
+
+  .audit-overview {
+    .audit-stat {
+      h4 {
+        font-size: 12px;
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header {
+    .user-info {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+
+      .user-details {
+        h2 {
+          font-size: 18px;
+        }
+
+        p {
+          font-size: 12px;
+        }
+      }
+    }
+  }
+
+  .quick-actions {
+    button {
+      font-size: 12px;
+      padding: 8px 12px;
+    }
+  }
+}

@@ -1,0 +1,221 @@
+<div class="main-container">
+  <div class="dashboard-header">
+    <div class="header-content">
+      <div class="user-info">
+        <nz-avatar
+          *ngIf="currentUser"
+          [nzSize]="48"
+          [nzText]="currentUser.username.charAt(0).toUpperCase()"
+          class="user-avatar"
+        ></nz-avatar>
+        <div class="user-details">
+          <h2>Welcome, {{ currentUser?.username }}!</h2>
+          <p>{{ currentUser?.email }}</p>
+        </div>
+      </div>
+      <button
+        nz-button
+        nzType="primary"
+        nzDanger
+        (click)="logout()"
+        class="logout-btn btn-secondary"
+      >
+        <span nz-icon nzType="logout"></span>
+        Logout
+      </button>
+      <button
+        *ngIf="installPromptVisible$ | async"
+        nz-button
+        nzType="default"
+        (click)="installPwa()"
+        class="install-btn"
+      >
+        <span nz-icon nzType="download"></span>
+        Install App
+      </button>
+    </div>
+  </div>
+
+  <div class="dashboard-content">
+    <nz-row [nzGutter]="[16, 16]">
+      <!-- Stats Cards -->
+      <nz-col [nzXs]="24" [nzSm]="12" [nzMd]="6">
+        <nz-card class="stat-card card">
+          <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
+            <div nz-col class="stat-content">
+              <h3>Total Users</h3>
+              <nz-statistic 
+                [nzValue]="(stats$ | async)?.totalUsers || 0" 
+                [ngStyle]="{'color': 'var(--primary-base)'}">
+              </nz-statistic>
+            </div>
+            <span nz-icon nzType="team" nzTheme="outline" class="stat-icon icon-primary"></span>
+          </div>
+        </nz-card>
+      </nz-col>
+
+      <nz-col [nzXs]="24" [nzSm]="12" [nzMd]="6">
+        <nz-card class="stat-card card">
+          <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
+            <div nz-col class="stat-content">
+              <h3>Active Sessions</h3>
+              <nz-statistic 
+                [nzValue]="(stats$ | async)?.activeSessions || 1" 
+                [ngStyle]="{'color': 'var(--secondary-base)'}">
+              </nz-statistic>
+            </div>
+            <span nz-icon nzType="laptop" nzTheme="outline" class="stat-icon icon-secondary"></span>
+          </div>
+        </nz-card>
+      </nz-col>
+
+      <nz-col [nzXs]="24" [nzSm]="12" [nzMd]="6">
+        <nz-card class="stat-card card">
+          <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
+            <div nz-col class="stat-content">
+              <h3>Login Attempts Today</h3>
+              <nz-statistic 
+                [nzValue]="(stats$ | async)?.loginAttemptsToday || 0" 
+                [ngStyle]="{'color': 'var(--tertiary-base)'}">
+              </nz-statistic>
+            </div>
+            <span nz-icon nzType="login" nzTheme="outline" class="stat-icon icon-tertiary"></span>
+          </div>
+        </nz-card>
+      </nz-col>
+
+      <nz-col [nzXs]="24" [nzSm]="12" [nzMd]="6">
+        <nz-card class="stat-card card">
+          <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
+            <div nz-col class="stat-content">
+              <h3>System Health</h3>
+              <div class="health-status">
+                <nz-tag 
+                  [nzColor]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'green' : 'red'"
+                  class="health-tag">
+                  {{ (stats$ | async)?.systemHealth || 'UNKNOWN' }}
+                </nz-tag>
+              </div>
+            </div>
+            <span nz-icon 
+              [nzType]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'check-circle' : 'close-circle'" 
+              nzTheme="outline" 
+              class="stat-icon icon-quaternary">
+            </span>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+
+    <!-- System Alerts -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px" *ngIf="alerts.length > 0">
+      <nz-col [nzSpan]="24">
+        <nz-card class="alerts-card card" nzTitle="System Alerts">
+          <div class="alerts-container">
+            <nz-alert
+              *ngFor="let alert of alerts"
+              [nzType]="alert.type"
+              [nzMessage]="alert.message"
+              [nzDescription]="alert.timestamp | date:'short'"
+              nzShowIcon
+              nzCloseable
+              (nzOnClose)="dismissAlert(alert)"
+              class="system-alert">
+            </nz-alert>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+
+    <!-- Charts Section -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px">
+      <nz-col [nzXs]="24" [nzMd]="12">
+        <nz-card class="chart-card card" nzTitle="User Activity Trends (Last 7 Days)">
+          <div class="chart-placeholder">
+            <div class="chart-data">
+              <div class="chart-bar" *ngFor="let item of chartData" 
+                   [style.height.%]="item.height">
+                <span class="bar-value">{{ item.value }}</span>
+              </div>
+            </div>
+            <div class="chart-labels">
+              <span *ngFor="let item of chartData">{{ item.day }}</span>
+            </div>
+          </div>
+        </nz-card>
+      </nz-col>
+
+      <nz-col [nzXs]="24" [nzMd]="12">
+        <nz-card class="chart-card card" nzTitle="Audit Logs Overview">
+          <div class="audit-overview">
+            <div class="audit-stat">
+              <h4>Total Logs</h4>
+              <nz-statistic [nzValue]="(stats$ | async)?.totalAuditLogs || 0"></nz-statistic>
+            </div>
+            <div class="audit-stat">
+              <h4>Failed Attempts</h4>
+              <nz-statistic [nzValue]="(stats$ | async)?.failedLoginAttempts || 0" [ngStyle]="{'color': 'red'}"></nz-statistic>
+            </div>
+            <div class="audit-stat">
+              <h4>Success Rate</h4>
+              <nz-statistic 
+                [nzValue]="successRate" 
+                [nzSuffix]="'%'"
+                [ngStyle]="{'color': 'green'}">
+              </nz-statistic>
+            </div>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+
+    <!-- Content Sections -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px">
+      <nz-col [nzSpan]="24">
+        <nz-card class="content-card card" nzTitle="Quick Actions">
+          <div class="quick-actions">
+            <button nz-button nzType="primary" class="btn-primary" (click)="navigateToUsers()">
+              <span nz-icon nzType="user-add"></span>
+              Manage Users
+            </button>
+            <button nz-button nzType="primary" class="btn-secondary" (click)="navigateToSettings()">
+              <span nz-icon nzType="setting"></span>
+              Settings
+            </button>
+            <button nz-button nzType="primary" class="btn-tertiary" (click)="navigateToDynamicCrud()">
+              <span nz-icon nzType="database"></span>
+              Dynamic CRUD
+            </button>
+            <button nz-button nzType="default" class="btn-logout" (click)="logout()">
+              <span nz-icon nzType="logout"></span>
+              Logout
+            </button>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+
+    <!-- Theme Selector -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px">
+      <nz-col [nzSpan]="24">
+        <nz-card class="theme-card card" nzTitle="Theme Settings">
+          <div class="theme-selector-main">
+            <div class="theme-info">
+              <p>Select your preferred theme:</p>
+            </div>
+            <div class="theme-buttons-main">
+              <button
+                *ngFor="let theme of themeService.getAvailableThemes()"
+                (click)="themeService.setTheme(theme)"
+                [class.active]="(themeService.getCurrentTheme$() | async) === theme"
+                [class]="'theme-btn-main theme-' + theme"
+              >
+                {{ theme | titlecase }}
+              </button>
+            </div>
+          </div>
+        </nz-card>
+      </nz-col>
+    </nz-row>
+  </div>
+</div>
