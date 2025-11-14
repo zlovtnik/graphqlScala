@@ -89,8 +89,4 @@ public class HealthConfig {
         };
     }
 
-    @Bean
-    public HealthIndicator youHealthIndicator() {
-        return () -> org.springframework.boot.actuate.health.Health.up().withDetail("ai", "I am up and running!").build();
-    }
 }

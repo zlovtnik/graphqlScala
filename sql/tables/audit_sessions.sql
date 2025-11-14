@@ -12,3 +12,8 @@ CREATE TABLE audit_sessions (
 -- Indexes for audit_sessions
 CREATE INDEX idx_audit_sessions_user_id ON audit_sessions(user_id);
 CREATE INDEX idx_audit_sessions_token_hash ON audit_sessions(token_hash);
+
+-- Additional indexes for session management
+CREATE INDEX idx_audit_sessions_created_at ON audit_sessions(created_at);
+CREATE INDEX idx_audit_sessions_user_created ON audit_sessions(user_id, created_at);
+CREATE INDEX idx_audit_sessions_ip_created ON audit_sessions(ip_address, created_at);

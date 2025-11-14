@@ -12,7 +12,6 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.lang.NonNull;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
@@ -20,6 +19,7 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -84,7 +84,6 @@ public class UserService {
         });
     }
 
-    @Transactional
     public User createUser(User user) {
         validateNewUser(user);
         ensureUsernameAvailable(user.getUsername(), null);
@@ -114,32 +113,35 @@ public class UserService {
         return user;
     }
 
-    @Transactional
-    public User updateUser(UUID userId, String newUsername, String newEmail, Optional<String> newPassword) {
+    public User updateUser(UUID userId, Optional<String> newUsername, Optional<String> newEmail, Optional<String> newPassword) {
         User existing = findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
 
-        if (StringUtils.hasText(newUsername) && !newUsername.equals(existing.getUsername())) {
-            ensureUsernameAvailable(newUsername, existing.getId());
-            existing.setUsername(newUsername);
-        }
+        newUsername.ifPresent(username -> {
+            if (!username.equals(existing.getUsername())) {
+                ensureUsernameAvailable(username, existing.getId());
+                existing.setUsername(username);
+            }
+        });
 
-        if (StringUtils.hasText(newEmail) && !newEmail.equals(existing.getEmail())) {
-            validateEmailFormat(newEmail);
-            ensureEmailAvailable(newEmail, existing.getId());
-            existing.setEmail(newEmail);
-        }
+        newEmail.ifPresent(email -> {
+            if (!email.equals(existing.getEmail())) {
+                validateEmailFormat(email);
+                ensureEmailAvailable(email, existing.getId());
+                existing.setEmail(email);
+            }
+        });
+
+        List<DynamicCrudColumnValue> columns = new ArrayList<>(List.of(
+                new DynamicCrudColumnValue("username", existing.getUsername()),
+                new DynamicCrudColumnValue("email", existing.getEmail())
+        ));
 
         newPassword.ifPresent(password -> {
             validateRawPassword(password);
-            existing.setPassword(passwordEncoder.encode(password));
+            String encodedPassword = passwordEncoder.encode(password);
+            columns.add(new DynamicCrudColumnValue("password", encodedPassword));
         });
-
-        List<DynamicCrudColumnValue> columns = List.of(
-                new DynamicCrudColumnValue("username", existing.getUsername()),
-                new DynamicCrudColumnValue("email", existing.getEmail()),
-                new DynamicCrudColumnValue("password", existing.getPassword())
-        );
 
         List<DynamicCrudFilter> filters = List.of(new DynamicCrudFilter("id", "=", userId.toString()));
 
@@ -157,7 +159,6 @@ public class UserService {
         return existing;
     }
 
-    @Transactional
     public boolean deleteUser(UUID userId) {
         List<DynamicCrudFilter> filters = List.of(new DynamicCrudFilter("id", "=", userId.toString()));
         DynamicCrudRequest request = new DynamicCrudRequest(

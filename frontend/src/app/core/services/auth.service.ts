@@ -44,6 +44,8 @@ export class AuthService implements OnDestroy {
   private authStateSubject$ = new BehaviorSubject<AuthState>(AuthState.LOADING);
   // Store subscription for cleanup
   private loadCurrentUserSubscription?: Subscription;
+  private refreshSuccessSubscription?: Subscription;
+  private refreshFailureSubscription?: Subscription;
 
   private apollo = inject(Apollo);
   private tokenStorage = inject(TokenStorageAdapter);
@@ -52,6 +54,7 @@ export class AuthService implements OnDestroy {
 
   constructor() {
     if (isPlatformBrowser(this.platformId)) {
+      this.bindRefreshEvents();
       this.loadCurrentUser();
     }
   }
@@ -144,12 +147,17 @@ export class AuthService implements OnDestroy {
   /**
    * Logout user
    */
-  logout(): void {
+  async logout(): Promise<void> {
     this.refreshTokenService.cancelRefresh();
     this.tokenStorage.clearToken();
+    this.tokenStorage.markAuthenticated(false);
     this.currentUser$.next(null);
     this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
-    this.apollo.client.clearStore();
+    try {
+      await this.apollo.client.clearStore();
+    } catch (error) {
+      console.warn('Failed to clear Apollo cache during logout:', error);
+    }
   }
 
   /**
@@ -199,11 +207,10 @@ export class AuthService implements OnDestroy {
    */
   private setAuthToken(response: AuthResponse): void {
     this.tokenStorage.setToken(response.token);
+    this.tokenStorage.markAuthenticated(true);
     
     // Schedule proactive token refresh
-    this.refreshTokenService.scheduleRefresh(response.token).pipe(
-      take(1)
-    ).subscribe({
+    this.refreshTokenService.scheduleRefresh(response.token).pipe(take(1)).subscribe({
       error: (err) => {
         console.warn('Failed to schedule token refresh:', err);
         // Non-fatal: token will be re-validated on next request
@@ -230,5 +237,23 @@ export class AuthService implements OnDestroy {
     if (this.loadCurrentUserSubscription) {
       this.loadCurrentUserSubscription.unsubscribe();
     }
+    this.refreshSuccessSubscription?.unsubscribe();
+    this.refreshFailureSubscription?.unsubscribe();
+  }
+
+  private bindRefreshEvents(): void {
+    this.refreshSuccessSubscription?.unsubscribe();
+    this.refreshFailureSubscription?.unsubscribe();
+
+    this.refreshSuccessSubscription = this.refreshTokenService.refreshes$()
+      .subscribe((response) => {
+        this.setAuthToken(response);
+      });
+
+    this.refreshFailureSubscription = this.refreshTokenService.refreshFailures$()
+      .subscribe((error) => {
+        console.warn('Token refresh failed after retries:', error);
+        void this.logout();
+      });
   }
 }

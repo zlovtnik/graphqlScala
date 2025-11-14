@@ -33,7 +33,7 @@ public class UserMutation {
 
     @MutationMapping
     public User updateUser(@Argument UUID id, @Argument UpdateUserInput input) {
-        return userService.updateUser(id, input.username(), input.email(),
+        return userService.updateUser(id, Optional.ofNullable(input.username()), Optional.ofNullable(input.email()),
                 Optional.ofNullable(input.password()));
     }
 

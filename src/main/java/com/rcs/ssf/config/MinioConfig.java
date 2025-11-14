@@ -65,8 +65,8 @@ public class MinioConfig {
         }
 
         // Warn if credentials are weak (too short)
-        if (minioAccessKey.length() < 3 || minioSecretKey.length() < 8) {
-            throw new IllegalStateException("Minio access key must be at least 3 characters and secret key at least 8 characters");
+        if (minioAccessKey.length() < 3 || minioSecretKey.length() < 16) {
+            throw new IllegalStateException("Minio access key must be at least 3 characters and secret key at least 16 characters");
         }
     }
 

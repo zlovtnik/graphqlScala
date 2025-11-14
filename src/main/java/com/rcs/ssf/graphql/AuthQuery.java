@@ -20,13 +20,33 @@ public class AuthQuery {
         if (isAuthenticatedUser(auth)) {
             // Fetch user from database using username
             return userService.findByUsername(auth.getName())
-                    .map(u -> new UserDto(u.getId(), u.getUsername(), u.getEmail()))
+                    .map(UserDto::from)
                     .orElse(null);
         }
         return null;
     }
 
     private static boolean isAuthenticatedUser(Authentication auth) {
-        return auth != null && auth.isAuthenticated() && auth.getName() != null && !auth.getName().isEmpty() && !"anonymousUser".equals(auth.getName());
+        if (auth == null) {
+            return false;
+        }
+        
+        // Check if authentication is marked as authenticated
+        boolean authenticated = auth.isAuthenticated();
+        if (!authenticated) {
+            return false;
+        }
+        
+        // Check if username is present and not null
+        String username = auth.getName();
+        boolean hasValidName = username != null && !username.isEmpty();
+        if (!hasValidName) {
+            return false;
+        }
+        
+        // Check if user is not the anonymous placeholder
+        boolean notAnonymous = !"anonymousUser".equals(username);
+        
+        return notAnonymous;
     }
 }

@@ -88,7 +88,7 @@ export class MainComponent implements OnInit, OnDestroy {
     // Initialize alerts based on stats
     this.stats$.pipe(takeUntil(this.destroy$)).subscribe(stats => {
       this.updateAlerts(stats);
-      this.successRate = this.getSuccessRate(stats.totalAuditLogs || 0, stats.failedLoginAttempts || 0);
+      this.successRate = this.getSuccessRate(stats.totalLoginAttempts || 0, stats.failedLoginAttempts || 0);
     });
   }
 
@@ -97,9 +97,13 @@ export class MainComponent implements OnInit, OnDestroy {
     this.destroy$.complete();
   }
 
-  logout(): void {
-    this.authService.logout();
-    this.router.navigate(['/login']);
+  async logout(): Promise<void> {
+    try {
+      await this.authService.logout();
+    } catch (error) {
+      console.warn('Logout failed:', error);
+    }
+    await this.router.navigate(['/login']);
   }
 
   navigateToUsers(): void {
@@ -174,9 +178,13 @@ export class MainComponent implements OnInit, OnDestroy {
     this.alerts = nextAlerts;
   }
 
-  getSuccessRate(totalLogs: number, failedAttempts: number): number {
-    if (totalLogs === 0) return 100;
-    return Math.round(((totalLogs - failedAttempts) / totalLogs) * 100);
+  getSuccessRate(totalAttempts: number, failedAttempts: number): number {
+    if (totalAttempts === 0) {
+      return 100;
+    }
+
+    const successfulAttempts = Math.max(totalAttempts - failedAttempts, 0);
+    return Math.round((successfulAttempts / totalAttempts) * 100);
   }
 
   installPwa(): void {

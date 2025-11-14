@@ -5,15 +5,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
 
-import javax.sql.DataSource;
-
 @Service
 public class DashboardService {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public DashboardService(@NonNull DataSource dataSource) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource);
+    public DashboardService(@NonNull JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public DashboardStatsDto getDashboardStats() {
@@ -49,6 +47,7 @@ public class DashboardService {
             Long.class
         );
         stats.setLoginAttemptsToday(loginAttemptsToday != null ? loginAttemptsToday : 0);
+        stats.setTotalLoginAttempts(stats.getLoginAttemptsToday());
 
         // Failed login attempts
         Long failedAttempts = jdbcTemplate.queryForObject(

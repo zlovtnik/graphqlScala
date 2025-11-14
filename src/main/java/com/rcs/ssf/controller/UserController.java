@@ -49,7 +49,7 @@ public class UserController {
 
     @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<User> updateUser(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest request) {
-        User updatedUser = userService.updateUser(id, request.username(), request.email(),
+        User updatedUser = userService.updateUser(id, Optional.ofNullable(request.username()), Optional.ofNullable(request.email()),
                 Optional.ofNullable(request.password()));
         return ResponseEntity.ok(updatedUser);
     }

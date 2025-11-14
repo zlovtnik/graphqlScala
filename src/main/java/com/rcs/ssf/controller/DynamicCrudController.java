@@ -8,6 +8,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/dynamic-crud")
 @PreAuthorize("isAuthenticated()")
@@ -20,7 +23,7 @@ public class DynamicCrudController {
     }
 
     @PostMapping("/execute")
-    public ResponseEntity<?> executeOperation(@Valid @RequestBody DynamicCrudRequest request) {
+    public ResponseEntity<DynamicCrudResponseDto> executeOperation(@Valid @RequestBody DynamicCrudRequest request) {
         if (request.getOperation() == DynamicCrudRequest.Operation.SELECT) {
             DynamicCrudResponseDto response = dynamicCrudService.executeSelect(request);
             return ResponseEntity.ok(response);
@@ -32,7 +35,9 @@ public class DynamicCrudController {
     }
 
     @GetMapping("/tables")
-    public ResponseEntity<String[]> getAvailableTables() {
-        return ResponseEntity.ok(dynamicCrudService.getAvailableTables());
+    public ResponseEntity<List<String>> getAvailableTables() {
+        String[] tablesArray = dynamicCrudService.getAvailableTables();
+        List<String> tablesList = Arrays.asList(tablesArray);
+        return ResponseEntity.ok(tablesList);
     }
 }

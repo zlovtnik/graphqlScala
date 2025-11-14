@@ -1,12 +1,18 @@
 package com.rcs.ssf.config;
 
+import com.rcs.ssf.JwtProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.Set;
+
 /**
  * Validates that all required environment variables are present at startup.
  * Ensures sensitive credentials are not using unsafe defaults.
+ * 
+ * Uses centralized validation logic from JwtProperties to ensure consistency
+ * with runtime JWT initialization and documented constraints.
  */
 @Component
 public class EnvironmentValidator {
@@ -22,25 +28,40 @@ public class EnvironmentValidator {
     public void validateRequiredEnvironmentVariables() {
         StringBuilder missingVars = new StringBuilder();
 
-        // Check JWT_SECRET
-        if (System.getenv("JWT_SECRET") == null || System.getenv("JWT_SECRET").isEmpty()) {
-            missingVars.append("  - JWT_SECRET: Required for signing JWT tokens (must be ≥32 characters)\n");
+        // Check JWT_SECRET using centralized validation logic
+        String jwtSecret = System.getenv("JWT_SECRET");
+        String jwtError = JwtProperties.validateSecretEntropy(jwtSecret);
+        if (jwtError != null) {
+            missingVars.append("  - JWT_SECRET: ").append(jwtError).append(" (required for signing JWT tokens)\n");
         }
 
         // Check MINIO_ACCESS_KEY
-        if (System.getenv("MINIO_ACCESS_KEY") == null || System.getenv("MINIO_ACCESS_KEY").isEmpty()) {
+        String minioAccessKey = System.getenv("MINIO_ACCESS_KEY");
+        if (minioAccessKey == null || minioAccessKey.isBlank()) {
             missingVars.append("  - MINIO_ACCESS_KEY: Required for MinIO object storage authentication\n");
         }
 
         // Check MINIO_SECRET_KEY
-        if (System.getenv("MINIO_SECRET_KEY") == null || System.getenv("MINIO_SECRET_KEY").isEmpty()) {
+        String minioSecretKey = System.getenv("MINIO_SECRET_KEY");
+        if (minioSecretKey == null || minioSecretKey.isBlank()) {
             missingVars.append("  - MINIO_SECRET_KEY: Required for MinIO object storage authentication\n");
+        }
+
+        // Reject known weak MinIO defaults in non-dev profiles
+        String activeProfiles = System.getProperty("spring.profiles.active");
+        if (activeProfiles == null || (!activeProfiles.contains("dev") && !activeProfiles.contains("local"))) {
+            Set<String> weakDefaults = Set.of("minioadmin", "minio", "admin", "root", "password", "secret");
+            if ((minioAccessKey != null && weakDefaults.contains(minioAccessKey)) ||
+                (minioSecretKey != null && weakDefaults.contains(minioSecretKey))) {
+                missingVars.append("  - MINIO credentials: Using weak default values, please change them for security in production profiles\n");
+            }
         }
 
         if (missingVars.length() > 0) {
             String errorMessage = "❌ STARTUP FAILED: Missing required environment variables:\n" + missingVars +
                     "\n📚 Required Environment Variables:\n" +
-                    "  • JWT_SECRET: Set to a strong, random string (≥32 characters, ≥10 distinct chars)\n" +
+                    "  • JWT_SECRET: Set to a strong, random string (≥32 characters, at least min(20, length/2) distinct chars)\n" +
+                    "    For example, a 32-character secret must contain at least 16 distinct characters.\n" +
                     "  • MINIO_ACCESS_KEY: MinIO access key\n" +
                     "  • MINIO_SECRET_KEY: MinIO secret key\n" +
                     "\n🔐 Production Recommendation:\n" +

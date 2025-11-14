@@ -10,6 +10,7 @@ export interface DashboardStats {
   systemHealth: string;
   loginAttemptsToday: number;
   failedLoginAttempts: number;
+  totalLoginAttempts: number;
 }
 
 @Injectable({
@@ -45,7 +46,8 @@ export class DashboardService {
       totalAuditLogs: 0,
       systemHealth: 'HEALTHY',
       loginAttemptsToday: 0,
-      failedLoginAttempts: 0
+      failedLoginAttempts: 0,
+      totalLoginAttempts: 0
     };
   }
 }

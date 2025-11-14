@@ -1,33 +1,20 @@
 package com.rcs.ssf.controller;
 
 import com.rcs.ssf.config.TestDatabaseConfig;
+import com.rcs.ssf.dynamic.DynamicCrudGateway;
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.service.UserService;
-import com.rcs.ssf.dynamic.DynamicCrudGateway;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.minio.MinioClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.FilterType;
-import org.springframework.context.annotation.Import;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
-import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -39,6 +26,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -134,5 +122,89 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.username").value("newuser"))
                 .andExpect(jsonPath("$.email").value("new@example.com"));
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void updateUser_WithNullUsername_SkipsUsernameUpdate() throws Exception {
+        UUID userId = UUID.randomUUID();
+        User existing = new User();
+        existing.setId(userId);
+        existing.setUsername("olduser");
+        existing.setEmail("old@example.com");
+        existing.setPassword("password123");
+
+        User updated = new User();
+        updated.setId(userId);
+        updated.setUsername("olduser");  // unchanged
+        updated.setEmail("new@example.com");
+        updated.setPassword("password123");
+
+        when(userService.updateUser(userId, Optional.empty(), Optional.of("new@example.com"), Optional.empty()))
+                .thenReturn(updated);
+
+        UserController.UpdateUserRequest request = new UserController.UpdateUserRequest(null, "new@example.com", null);
+
+        mockMvc.perform(put("/api/users/" + userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.username").value("olduser"))
+                .andExpect(jsonPath("$.email").value("new@example.com"));
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void updateUser_WithNullEmail_SkipsEmailUpdate() throws Exception {
+        UUID userId = UUID.randomUUID();
+        User existing = new User();
+        existing.setId(userId);
+        existing.setUsername("olduser");
+        existing.setEmail("old@example.com");
+        existing.setPassword("password123");
+
+        User updated = new User();
+        updated.setId(userId);
+        updated.setUsername("newuser");
+        updated.setEmail("old@example.com");  // unchanged
+        updated.setPassword("password123");
+
+        when(userService.updateUser(userId, Optional.of("newuser"), Optional.empty(), Optional.empty()))
+                .thenReturn(updated);
+
+        UserController.UpdateUserRequest request = new UserController.UpdateUserRequest("newuser", null, null);
+
+        mockMvc.perform(put("/api/users/" + userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.username").value("newuser"))
+                .andExpect(jsonPath("$.email").value("old@example.com"));
+    }
+
+    @Test
+    @SuppressWarnings("null")
+    void updateUser_WithAllNullFields_NoChanges() throws Exception {
+        UUID userId = UUID.randomUUID();
+        User existing = new User();
+        existing.setId(userId);
+        existing.setUsername("olduser");
+        existing.setEmail("old@example.com");
+        existing.setPassword("password123");
+
+        when(userService.updateUser(userId, Optional.empty(), Optional.empty(), Optional.empty()))
+                .thenReturn(existing);
+
+        UserController.UpdateUserRequest request = new UserController.UpdateUserRequest(null, null, null);
+
+        mockMvc.perform(put("/api/users/" + userId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.username").value("olduser"))
+                .andExpect(jsonPath("$.email").value("old@example.com"));
     }
 }

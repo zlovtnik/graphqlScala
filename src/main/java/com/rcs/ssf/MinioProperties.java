@@ -1,6 +1,7 @@
 package com.rcs.ssf;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
@@ -9,6 +10,8 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "app.minio")
 @Component
 public class MinioProperties {
+    @NotBlank(message = "app.minio.url must not be blank and MINIO_URL environment variable must be set")
+    @Pattern(regexp = "^https?://.+$", message = "app.minio.url must be a valid HTTP/HTTPS URL")
     private String url;
 
     @NotBlank(message = "app.minio.access-key must not be blank and MINIO_ACCESS_KEY environment variable must be set")

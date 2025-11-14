@@ -10,4 +10,5 @@ public class DashboardStatsDto {
     private String systemHealth;
     private long loginAttemptsToday;
     private long failedLoginAttempts;
+    private long totalLoginAttempts;
 }

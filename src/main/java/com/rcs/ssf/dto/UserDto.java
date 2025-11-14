@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Objects;
 import java.util.UUID;
 
 @Data
@@ -15,6 +16,7 @@ public class UserDto {
     private String email;
 
     public static UserDto from(com.rcs.ssf.entity.User user) {
-        return new UserDto(user.getId(), user.getUsername(), user.getEmail());
+        com.rcs.ssf.entity.User safeUser = Objects.requireNonNull(user, "user must not be null");
+        return new UserDto(safeUser.getId(), safeUser.getUsername(), safeUser.getEmail());
     }
 }

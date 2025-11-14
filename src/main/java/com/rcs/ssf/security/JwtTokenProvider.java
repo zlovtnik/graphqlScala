@@ -35,11 +35,13 @@ public class JwtTokenProvider {
         if (secretBytes.length < 32) {
             throw new IllegalStateException("JWT secret must be at least 32 bytes (256 bits) long");
         }
-        long uniqueChars = jwtSecret.chars().distinct().count();
-        long requiredUnique = Math.min(20, jwtSecret.length() / 2);
-        if (uniqueChars < requiredUnique) {
-            throw new IllegalStateException("JWT secret must have sufficient entropy (at least " + requiredUnique + " unique characters, found " + uniqueChars + ")");
+        
+        // Use centralized validation from JwtProperties to ensure consistency
+        String validationError = com.rcs.ssf.JwtProperties.validateSecretEntropy(jwtSecret);
+        if (validationError != null) {
+            throw new IllegalStateException(validationError);
         }
+        
         this.key = Keys.hmacShaKeyFor(secretBytes);
         logger.info("JWT token provider initialized successfully with {} byte secret", secretBytes.length);
     }

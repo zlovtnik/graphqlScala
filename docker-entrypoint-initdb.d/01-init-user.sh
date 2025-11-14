@@ -12,7 +12,7 @@ ESCAPED_PASSWORD=$(echo "$DB_PASSWORD" | sed "s/'/''/g")
 # Wait for Oracle to be fully ready
 echo "Waiting for Oracle database to start..."
 while [ $RETRIES -lt $MAX_RETRIES ]; do
-  if echo "SELECT 1 FROM DUAL;" | $ORACLE_HOME/bin/sqlplus -s / as sysdba >/dev/null 2>&1; then
+  if echo "SELECT 1 FROM DUAL;" | "$ORACLE_HOME/bin/sqlplus" -s / as sysdba >/dev/null 2>&1; then
     echo "Oracle is ready"
     break
   fi
@@ -31,10 +31,10 @@ sleep 2
 # Create application user and tablespace with proper error handling
 echo "=== Creating application user and tablespace ==="
 
-$ORACLE_HOME/bin/sqlplus -s / as sysdba > /tmp/init_user.log 2>&1 <<EOFUSER
+"$ORACLE_HOME/bin/sqlplus" -s / as sysdba > /tmp/init_user.log 2>&1 <<EOFUSER
 ALTER SESSION SET CONTAINER = FREEPDB1;
 
--- Create tablespace if not exists
+-- Create tablespace in default location if not exists
 DECLARE
   v_tablespace_exists NUMBER := 0;
 BEGIN
@@ -43,7 +43,7 @@ BEGIN
   WHERE tablespace_name = 'SSFSPACE';
   
   IF v_tablespace_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE TABLESPACE ssfspace DATAFILE ''/opt/oracle/oradata/FREE/FREEPDB1/ssfdata.dbf'' SIZE 100M AUTOEXTEND ON NEXT 10M';
+    EXECUTE IMMEDIATE 'CREATE TABLESPACE ssfspace DATAFILE SIZE 100M AUTOEXTEND ON';
     DBMS_OUTPUT.PUT_LINE('Tablespace ssfspace created');
   ELSE
     DBMS_OUTPUT.PUT_LINE('Tablespace ssfspace already exists');
@@ -60,7 +60,7 @@ BEGIN
   WHERE username = 'SSFUSER';
   
   IF v_user_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE USER ssfuser IDENTIFIED BY ''${ESCAPED_PASSWORD}'' DEFAULT TABLESPACE ssfspace';
+    EXECUTE IMMEDIATE 'CREATE USER ssfuser IDENTIFIED BY "ssfuser" DEFAULT TABLESPACE ssfspace';
     DBMS_OUTPUT.PUT_LINE('User ssfuser created');
   ELSE
     DBMS_OUTPUT.PUT_LINE('User ssfuser already exists');
@@ -100,7 +100,7 @@ sleep 2
 # Initialize schema and create default user if none exists
 echo "=== Initializing database schema ==="
 
-$ORACLE_HOME/bin/sqlplus -s ssfuser/"$DB_PASSWORD"@FREEPDB1 > /tmp/init_schema.log 2>&1 <<'EOFSCHEMA'
+"$ORACLE_HOME/bin/sqlplus" -s ssfuser/"$DB_PASSWORD"@FREEPDB1 > /tmp/init_schema.log 2>&1 <<'EOFSCHEMA'
 -- Create sequences
 DECLARE
   v_seq_exists NUMBER := 0;
@@ -159,7 +159,7 @@ BEGIN
       SYSTIMESTAMP
     );
     COMMIT;
-    DBMS_OUTPUT.PUT_LINE('Default admin user created: username=admin, password=Admin@123');
+    DBMS_OUTPUT.PUT_LINE('Default admin user created: username=admin');
   ELSE
     DBMS_OUTPUT.PUT_LINE('Users already exist, skipping default user creation');
   END IF;

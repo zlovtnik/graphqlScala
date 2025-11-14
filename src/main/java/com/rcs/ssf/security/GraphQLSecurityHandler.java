@@ -42,8 +42,9 @@ public class GraphQLSecurityHandler implements DataFetcherExceptionHandler {
         }
 
         if (exception instanceof AuthenticationException) {
+            logger.warn("Authentication exception encountered during GraphQL data fetch", exception);
             GraphQLError error = GraphQLError.newError()
-                    .message("Authentication Failed: " + exception.getMessage())
+                    .message("Authentication Failed")
                     .build();
             return CompletableFuture.completedFuture(
                     DataFetcherExceptionHandlerResult.newResult().error(error).build());

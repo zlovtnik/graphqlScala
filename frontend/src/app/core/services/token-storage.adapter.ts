@@ -27,6 +27,7 @@ import { environment } from '../../../environments/environment';
 })
 export class TokenStorageAdapter {
   private readonly TOKEN_STORAGE_KEY = 'auth-token';
+  private readonly AUTH_STATE_KEY = 'auth-state';
   private isDevelopment = !environment.production;
   private platformId = inject(PLATFORM_ID);
 
@@ -72,6 +73,7 @@ export class TokenStorageAdapter {
     if (this.isDevelopment) {
       localStorage.setItem(this.TOKEN_STORAGE_KEY, token);
     }
+    this.setAuthFlag(true);
     // Production: Server handles cookie storage via Set-Cookie header
   }
 
@@ -89,10 +91,7 @@ export class TokenStorageAdapter {
       return !!localStorage.getItem(this.TOKEN_STORAGE_KEY);
     }
 
-    // Production: Check if httpOnly cookie exists by attempting a request
-    // For now, assume token exists if we're past initial load
-    // A more robust approach: track authenticated state from server responses
-    return true; // Will be validated by attempting GraphQL query
+    return this.getAuthFlag();
   }
 
   /**
@@ -106,6 +105,35 @@ export class TokenStorageAdapter {
     if (this.isDevelopment) {
       localStorage.removeItem(this.TOKEN_STORAGE_KEY);
     }
+    this.setAuthFlag(false);
     // Production: Server clears httpOnly cookie via Set-Cookie with Max-Age=0
+  }
+
+  /**
+   * Explicitly mark authentication state when using httpOnly cookies.
+   * Helps distinguish between authenticated sessions and anonymous users.
+   */
+  markAuthenticated(authenticated: boolean): void {
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+    this.setAuthFlag(authenticated);
+  }
+
+  private setAuthFlag(enabled: boolean): void {
+    try {
+      sessionStorage.setItem(this.AUTH_STATE_KEY, enabled ? 'true' : 'false');
+    } catch (error) {
+      console.warn('Unable to persist authentication state flag', error);
+    }
+  }
+
+  private getAuthFlag(): boolean {
+    try {
+      return sessionStorage.getItem(this.AUTH_STATE_KEY) === 'true';
+    } catch (error) {
+      console.warn('Unable to read authentication state flag', error);
+      return false;
+    }
   }
 }

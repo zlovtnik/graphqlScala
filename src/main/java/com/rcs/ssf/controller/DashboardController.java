@@ -22,8 +22,9 @@ public class DashboardController {
     @GetMapping("/stats")
     public ResponseEntity<DashboardStatsDto> getStats() {
         DashboardStatsDto stats = dashboardService.getDashboardStats();
+        // Ensure stats is never null; return default if service returns null
         if (stats == null) {
-            return ResponseEntity.notFound().build();
+            stats = new DashboardStatsDto();
         }
         return ResponseEntity.ok(stats);
     }

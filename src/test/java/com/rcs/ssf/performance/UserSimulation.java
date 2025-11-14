@@ -3,7 +3,7 @@ package com.rcs.ssf.performance;
 import io.gatling.javaapi.core.*;
 import io.gatling.javaapi.http.*;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
 import static io.gatling.javaapi.core.CoreDsl.*;
@@ -11,20 +11,32 @@ import static io.gatling.javaapi.http.HttpDsl.*;
 
 public class UserSimulation extends Simulation {
 
+    private final String baseUrl;
+    
+    {
+        String baseUrlEnv = System.getenv("BASE_URL");
+        baseUrl = System.getProperty("base.url", baseUrlEnv != null ? baseUrlEnv : "https://localhost:8443");
+        System.out.println("Resolved baseUrl: " + baseUrl);
+    }
+
     private final HttpProtocolBuilder httpProtocol = http
-            .baseUrl("https://localhost:8443")
+            .baseUrl(baseUrl)
             .acceptHeader("application/json")
             .contentTypeHeader("application/json");
 
+    private final AtomicLong userCounter = new AtomicLong(0);
+
     private final Iterator<Map<String, Object>> feeder =
         Stream.generate(() -> {
-            int index = ThreadLocalRandom.current().nextInt(1, 10001); // Generate random index from 1 to 10000
+            long index = userCounter.incrementAndGet(); // Generate unique sequential index
             Map<String, Object> map = new HashMap<>();
             map.put("username", "user" + index);
             map.put("email", "user" + index + "@example.com");
             map.put("password", "password" + index);
             return map;
-        }).iterator();    private final ScenarioBuilder createUserScenario = scenario("Create User")
+        }).iterator();
+
+    private final ScenarioBuilder createUserScenario = scenario("Create User")
             .feed(feeder)
             .exec(http("Create User Request")
                     .post("/api/users")

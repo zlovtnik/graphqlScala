@@ -10,6 +10,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzAvatarModule } from 'ng-zorro-antd/avatar';
 import { AuthService } from './core/services/auth.service';
 import { ThemeService } from './core/services/theme.service';
+import { NotificationCenterComponent } from './shared/components/notification-center.component';
 
 @Component({
   selector: 'app-root',
@@ -24,7 +25,8 @@ import { ThemeService } from './core/services/theme.service';
     NzDropDownModule,
     NzBadgeModule,
     NzButtonModule,
-    NzAvatarModule
+    NzAvatarModule,
+    NotificationCenterComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
@@ -37,8 +39,12 @@ export class AppComponent {
   protected authService = inject(AuthService);
   protected themeService = inject(ThemeService);
 
-  logout(): void {
-    this.authService.logout();
+  async logout(): Promise<void> {
+    try {
+      await this.authService.logout();
+    } catch (error) {
+      console.warn('Logout failed:', error);
+    }
   }
 }
 

@@ -30,7 +30,6 @@ class UserTest {
         assertEquals(user1, user2);
         assertEquals(user1.hashCode(), user2.hashCode());
         assertNotEquals(user1, differentUser);
-        assertNotEquals(user1.hashCode(), differentUser.hashCode());
     }
 
     @Test

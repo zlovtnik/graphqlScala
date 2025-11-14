@@ -112,6 +112,14 @@ clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
    @grant_privileges.sql
    ```
 
+### Default Admin User
+
+When the application starts for the first time, a default admin user is created with:
+- **Username:** `admin`
+- **Password:** `Admin@123` (hashed in the database)
+
+> ⚠️ **Security Warning:** Change the default admin password immediately after first login. The default password is for initial setup only and should never be used in production.
+
 ### 1. Clone & Build
 
 ```bash
@@ -133,7 +141,7 @@ export ORACLE_DB=FREEPDB1
 export ORACLE_USER=ssfuser
 export ORACLE_PASSWORD=ssfuser
 
-export JWT_SECRET="change-me-to-a-32-plus-character-super-secret"
+export JWT_SECRET="paste-a-random-32-plus-character-secret-here"
 
 export MINIO_ACCESS_KEY=minioadmin
 export MINIO_SECRET_KEY=minioadmin
@@ -143,7 +151,7 @@ export MINIO_URL=http://localhost:9000
 export KEYSTORE_PASSWORD=changeit
 ```
 
-> 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters with ≥10 distinct characters (longer secrets improve entropy). The application enforces this at startup.
+> 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters long and include at least `min(20, length/2)` distinct characters. For example, a 32-character secret must contain 16 distinct characters. The application enforces this requirement at startup.
 
 ### Required Environment Variables
 
@@ -151,7 +159,7 @@ The following environment variables **MUST** be set before starting the applicat
 
 | Environment Variable | Purpose | Notes |
 | --- | --- | --- |
-| `JWT_SECRET` | Symmetric key for signing and validating JWT tokens | Must be ≥32 characters with ≥10 distinct characters. Longer, more random values are better. |
+| `JWT_SECRET` | Symmetric key for signing and validating JWT tokens | Must be ≥32 characters and contain at least `min(20, length/2)` distinct characters (e.g., 16 distinct characters for a 32-char secret). |
 | `MINIO_ACCESS_KEY` | Access key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
 | `MINIO_SECRET_KEY` | Secret key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
 
@@ -324,6 +332,32 @@ query {
 ./gradlew test               # Unit & integration tests
 ./gradlew jacocoTestReport   # HTML coverage (build/jacocoHtml)
 ```
+
+### Performance Testing
+
+The application includes Gatling performance tests that can be configured for different environments. Since Gatling is included as a test dependency, simulations run as standard Java applications:
+
+```bash
+# Run performance tests against local environment (default)
+./gradlew test --tests "*UserSimulation*"
+
+# Run against different base URL via system property
+./gradlew test --tests "*UserSimulation*" -Dbase.url=https://staging.example.com
+
+# Run against different base URL via environment variable
+BASE_URL=https://production.example.com ./gradlew test --tests "*UserSimulation*"
+
+# For CI environments with self-signed certificates, configure JVM truststore
+./gradlew test --tests "*UserSimulation*" -Djavax.net.ssl.trustStore=/path/to/truststore.jks -Djavax.net.ssl.trustStorePassword=password
+```
+
+**Performance Test Configuration:**
+
+- **Base URL**: Configurable via `base.url` system property or `BASE_URL` environment variable
+- **Default**: `https://localhost:8443` (for local development)
+- **SSL**: Uses JVM's default truststore; override with system properties for custom certificates
+- **Load Profile**: 5,000 users ramping over 3 minutes, then 50 users/sec for 2 minutes
+- **Assertions**: 95% of requests under 1 second, max 5 seconds, 95% success rate
 
 ### Observability
 

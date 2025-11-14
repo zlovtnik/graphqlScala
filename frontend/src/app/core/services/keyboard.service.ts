@@ -3,6 +3,8 @@ import { isPlatformBrowser } from '@angular/common';
 import { Router } from '@angular/router';
 import { Subject } from 'rxjs';
 import { ModalService } from './modal.service';
+import { NzModalService } from 'ng-zorro-antd/modal';
+import { ShortcutsModalComponent } from '../../shared/components/shortcuts-modal.component';
 
 export interface KeyboardShortcut {
   key: string;
@@ -14,14 +16,16 @@ export interface KeyboardShortcut {
 }
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class KeyboardService implements OnDestroy {
   private shortcuts: KeyboardShortcut[] = [];
   private platformId = inject(PLATFORM_ID);
   private router = inject(Router);
   private modalService = inject(ModalService);
+  private nzModalService = inject(NzModalService);
   private keydownListener?: (e: KeyboardEvent) => void;
+  private searchInputRef?: HTMLInputElement;
 
   shortcutTriggered$ = new Subject<KeyboardShortcut>();
 
@@ -30,6 +34,32 @@ export class KeyboardService implements OnDestroy {
       this.initKeyboardListener();
       this.registerDefaultShortcuts();
     }
+  }
+
+  /**
+   * Register a search input element to receive Ctrl+K focus events.
+   * The service will focus this input when Ctrl+K is pressed (if the input is not already focused).
+   *
+   * @param input The HTMLInputElement to register, or null to clear the current registration
+   * @returns A cleanup function that unregisters the search target when called
+   */
+  registerSearchTarget(input: HTMLInputElement | null): (() => void) {
+    if (input && input instanceof HTMLInputElement) {
+      this.searchInputRef = input;
+    } else {
+      this.searchInputRef = undefined;
+    }
+
+    // Return cleanup function for explicit unregistration
+    return () => this.unregisterSearchTarget();
+  }
+
+  /**
+   * Unregister the search target and clear all references.
+   * This ensures event listeners and DOM references are properly released.
+   */
+  unregisterSearchTarget(): void {
+    this.searchInputRef = undefined;
   }
 
   ngOnDestroy(): void {
@@ -44,7 +74,9 @@ export class KeyboardService implements OnDestroy {
    */
   registerShortcut(shortcut: KeyboardShortcut): void {
     const signature = this.getShortcutSignature(shortcut);
-    const existingIndex = this.shortcuts.findIndex(s => this.getShortcutSignature(s) === signature);
+    const existingIndex = this.shortcuts.findIndex(
+      (s) => this.getShortcutSignature(s) === signature
+    );
     if (existingIndex === -1) {
       this.shortcuts.push(shortcut);
     } else {
@@ -57,15 +89,33 @@ export class KeyboardService implements OnDestroy {
    * Get a normalized signature for shortcut comparison
    */
   private getShortcutSignature(shortcut: KeyboardShortcut): string {
-    return `${shortcut.key.toLowerCase()}-${!!shortcut.ctrlKey}-${!!shortcut.altKey}-${!!shortcut.shiftKey}`;
+    return `${shortcut.key.toLowerCase()}-${Boolean(
+      shortcut.ctrlKey
+    )}-${Boolean(shortcut.altKey)}-${Boolean(shortcut.shiftKey)}`;
   }
 
   /**
    * Unregister a shortcut by key combination
    */
-  unregisterShortcut(key: string, ctrlKey = false, altKey = false, shiftKey = false): void {
-    this.shortcuts = this.shortcuts.filter(s =>
-      !(s.key === key && s.ctrlKey === ctrlKey && s.altKey === altKey && s.shiftKey === shiftKey)
+  unregisterShortcut(
+    key: string,
+    ctrlKey = false,
+    altKey = false,
+    shiftKey = false
+  ): void {
+    const normalizedKey = key.toLowerCase();
+    const normalizedCtrl = Boolean(ctrlKey);
+    const normalizedAlt = Boolean(altKey);
+    const normalizedShift = Boolean(shiftKey);
+
+    this.shortcuts = this.shortcuts.filter(
+      (s) =>
+        !(
+          s.key.toLowerCase() === normalizedKey &&
+          Boolean(s.ctrlKey) === normalizedCtrl &&
+          Boolean(s.altKey) === normalizedAlt &&
+          Boolean(s.shiftKey) === normalizedShift
+        )
     );
   }
 
@@ -82,15 +132,24 @@ export class KeyboardService implements OnDestroy {
   private initKeyboardListener(): void {
     this.keydownListener = (event) => {
       // Skip if typing in input/textarea
-      if (this.isTypingInInput(event.target as HTMLElement)) {
+      if (
+        event.target instanceof HTMLElement &&
+        this.isTypingInInput(event.target)
+      ) {
         return;
       }
 
-      const shortcut = this.shortcuts.find(s =>
-        s.key.toLowerCase() === event.key.toLowerCase() &&
-        Boolean(s.ctrlKey) === (event.ctrlKey || event.metaKey) &&
-        !!s.altKey === event.altKey &&
-        !!s.shiftKey === event.shiftKey
+      const normalizedKey = event.key.toLowerCase();
+      const ctrlPressed = Boolean(event.ctrlKey || event.metaKey);
+      const altPressed = Boolean(event.altKey);
+      const shiftPressed = Boolean(event.shiftKey);
+
+      const shortcut = this.shortcuts.find(
+        (s) =>
+          s.key.toLowerCase() === normalizedKey &&
+          Boolean(s.ctrlKey) === ctrlPressed &&
+          Boolean(s.altKey) === altPressed &&
+          Boolean(s.shiftKey) === shiftPressed
       );
 
       if (shortcut) {
@@ -112,15 +171,24 @@ export class KeyboardService implements OnDestroy {
       ctrlKey: true,
       description: 'Focus search',
       action: () => {
-        let searchInput = document.querySelector('[data-shortcut="search"]') as HTMLInputElement;
-        if (!searchInput) {
-          // Fallback to placeholder lookup
-          searchInput = document.querySelector('input[placeholder*="search" i], input[placeholder*="Search" i]') as HTMLInputElement;
+        const target = this.searchInputRef;
+        if (target && typeof target.focus === 'function') {
+          target.focus();
+          return;
         }
-        if (searchInput) {
+
+        let searchInput = document.querySelector(
+          '[data-shortcut="search"]'
+        ) as HTMLInputElement;
+        if (!searchInput) {
+          searchInput = document.querySelector(
+            'input[placeholder*="search" i], input[placeholder*="Search" i]'
+          ) as HTMLInputElement;
+        }
+        if (searchInput && typeof searchInput.focus === 'function') {
           searchInput.focus();
         }
-      }
+      },
     });
 
     // Ctrl+/ : Show shortcuts help
@@ -130,7 +198,7 @@ export class KeyboardService implements OnDestroy {
       description: 'Show keyboard shortcuts',
       action: () => {
         this.showShortcutsModal();
-      }
+      },
     });
 
     // Escape: Close modals/drawers
@@ -139,7 +207,7 @@ export class KeyboardService implements OnDestroy {
       description: 'Close modals and drawers',
       action: () => {
         this.modalService.closeAll();
-      }
+      },
     });
 
     // Alt+H: Go to dashboard/home
@@ -149,7 +217,7 @@ export class KeyboardService implements OnDestroy {
       description: 'Go to dashboard',
       action: () => {
         this.navigateIfRouteExists(['/']);
-      }
+      },
     });
 
     // Alt+U: Go to users
@@ -159,7 +227,7 @@ export class KeyboardService implements OnDestroy {
       description: 'Go to users',
       action: () => {
         this.navigateIfRouteExists(['/users']);
-      }
+      },
     });
 
     // Alt+D: Go to dynamic CRUD
@@ -169,29 +237,40 @@ export class KeyboardService implements OnDestroy {
       description: 'Go to dynamic CRUD',
       action: () => {
         this.navigateIfRouteExists(['/dynamic-crud']);
-      }
+      },
     });
   }
 
   /**
    * Check if user is typing in an input element
    */
-  private isTypingInInput(target: HTMLElement): boolean {
+  private isTypingInInput(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
     const tagName = target.tagName.toLowerCase();
     const contentEditable = target.contentEditable === 'true';
-    const isInput = tagName === 'input' || tagName === 'textarea' || tagName === 'select';
+    const isInput =
+      tagName === 'input' || tagName === 'textarea' || tagName === 'select';
     return isInput || contentEditable;
   }
 
   /**
    * Navigate to route if it exists
    */
-  private navigateIfRouteExists(route: string[]): void {
-    // Simple check: try to navigate and catch if it fails
+  private async navigateIfRouteExists(route: string[]): Promise<void> {
     try {
-      this.router.navigate(route);
+      const success = await this.router.navigate(route);
+      if (!success) {
+        console.warn(
+          `Navigation blocked or route missing for path: ${route.join('/')}`
+        );
+      }
     } catch (error) {
-      console.warn(`Route ${route.join('/')} not found, skipping navigation`);
+      console.warn(
+        `Route ${route.join('/')} not found, skipping navigation`,
+        error
+      );
     }
   }
 
@@ -199,7 +278,12 @@ export class KeyboardService implements OnDestroy {
    * Show shortcuts modal (placeholder)
    */
   private showShortcutsModal(): void {
-    // TODO: Implement shortcuts modal
-    console.log('Keyboard shortcuts:', this.getShortcuts());
+    this.nzModalService.create({
+      nzTitle: 'Keyboard Shortcuts',
+      nzContent: ShortcutsModalComponent,
+      nzData: this.getShortcuts(),
+      nzFooter: null,
+      nzWidth: 600,
+    });
   }
 }

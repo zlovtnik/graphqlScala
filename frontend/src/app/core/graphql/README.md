@@ -6,6 +6,7 @@ This directory contains all GraphQL operations (queries and mutations) used by t
 
 - **login.ts** - Login mutation for user authentication
 - **register.ts** - Register mutation for creating new user accounts
+- **refreshToken.ts** - Mutation (`REFRESH_TOKEN_MUTATION`) that refreshes authentication tokens
 - **getCurrentUser.ts** - Query to fetch the current authenticated user
 - **index.ts** - Barrel export for all operations
 
@@ -21,28 +22,13 @@ import {
 } from '../graphql';
 ```
 
-## GraphQL Operation Files
+## Authoring Operations
 
-### login.graphql
+Edit the `.ts` files that contain `gql` template literals in `src/app/core/graphql/**/*.ts`. These files are the source of truth for the application's queries and mutations and are what Angular imports at runtime.
 
-Mutation for user login with username and password credentials.
+### Documentation `.graphql` Files
 
-- Input: `username: String!`, `password: String!`
-- Output: `token`, `user { id, username, email }`
-
-### register.graphql
-
-Mutation for user registration with account details.
-
-- Input: `username: String!`, `email: String!`, `password: String!`
-- Output: `token`, `user { id, username, email }`
-
-### getCurrentUser.graphql
-
-Query to fetch the current authenticated user information.
-
-- Input: None (uses authentication context)
-- Output: `currentUser { id, username, email }`
+The `.graphql` files in this directory are retained for documentation and future graphql-codegen adoption. They mirror the TypeScript operations but are not consumed directly by the client today. When code generation is enabled, update `codegen.yml` to include the `.graphql` files and note that generated output will land in `src/app/core/graphql/generated.ts`.
 
 ## Code Generation (Future)
 

@@ -10,6 +10,9 @@ export class ModalService {
    * Register a close handler for modals/drawers
    */
   registerCloseHandler(handler: () => void): void {
+    if (this.closeHandlers.includes(handler)) {
+      return;
+    }
     this.closeHandlers.push(handler);
   }
 

@@ -15,6 +15,10 @@
 @@tables/audit_sessions.sql
 @@tables/audit_error_log.sql
 
+-- Indexes (run as app user)
+@@indexes/users_indexes.sql
+@@indexes/audit_dynamic_crud_indexes.sql
+
 -- Packages (run as app user)
 @@packages/dynamic_crud_pkg_spec.sql
 @@packages/dynamic_crud_pkg_body.sql

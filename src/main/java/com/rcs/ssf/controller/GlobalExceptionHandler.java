@@ -3,7 +3,6 @@ package com.rcs.ssf.controller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
-import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -36,10 +35,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, List<String>>> handleValidationException(MethodArgumentNotValidException ex) {
         LOGGER.warn("Validation failed", ex);
+        var locale = LocaleContextHolder.getLocale();
         List<String> errors = ex.getBindingResult().getAllErrors().stream()
-                .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .filter(Objects::nonNull)
-                .toList();
+            .map(error -> messageSource.getMessage(Objects.requireNonNull(error), locale))
+            .filter(Objects::nonNull)
+            .map(String::trim)
+            .filter(message -> !message.isBlank())
+            .toList();
         return ResponseEntity.badRequest().body(Map.of("errors", errors));
     }
 }

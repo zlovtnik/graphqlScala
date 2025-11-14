@@ -1,4 +1,4 @@
-import { Injectable, PLATFORM_ID, inject } from '@angular/core';
+import { Injectable, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { BehaviorSubject, Observable } from 'rxjs';
 
@@ -7,11 +7,13 @@ export type ThemeType = 'blue' | 'purple' | 'emerald' | 'amber' | 'system';
 @Injectable({
   providedIn: 'root'
 })
-export class ThemeService {
+export class ThemeService implements OnDestroy {
   private readonly THEME_STORAGE_KEY = 'app-theme';
   private currentTheme$ = new BehaviorSubject<ThemeType>(this.getStoredTheme());
   private platformId = inject(PLATFORM_ID);
   private mediaQuery: MediaQueryList | null = null;
+  private onSystemThemeChange?: (e: MediaQueryListEvent) => void;
+  private readonly DEFAULT_THEME: Exclude<ThemeType, 'system'> = 'blue';
 
   constructor() {
     // Apply theme only in browser environment
@@ -62,7 +64,15 @@ export class ThemeService {
     }
 
     this.mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    this.mediaQuery.addEventListener('change', this.handleSystemThemeChange.bind(this));
+    this.onSystemThemeChange = this.handleSystemThemeChange.bind(this);
+
+    // Use feature detection for listener registration (EventTarget API vs legacy addListener)
+    if (this.mediaQuery.addEventListener) {
+      this.mediaQuery.addEventListener('change', this.onSystemThemeChange);
+    } else if (this.mediaQuery.addListener) {
+      // Fallback for older browsers
+      this.mediaQuery.addListener(this.onSystemThemeChange as any);
+    }
 
     // Apply system theme if current theme is 'system'
     if (this.currentTheme$.value === 'system') {
@@ -73,7 +83,7 @@ export class ThemeService {
   /**
    * Handle system theme change
    */
-  private handleSystemThemeChange(e: MediaQueryListEvent): void {
+  private handleSystemThemeChange(_event: MediaQueryListEvent): void {
     if (this.currentTheme$.value === 'system') {
       this.applyTheme('system');
     }
@@ -84,13 +94,13 @@ export class ThemeService {
    */
   private getStoredTheme(): ThemeType {
     if (!isPlatformBrowser(this.platformId)) {
-      return 'blue'; // default theme for SSR
+      return this.DEFAULT_THEME; // default theme for SSR
     }
     const stored = localStorage.getItem(this.THEME_STORAGE_KEY);
     if (stored && this.getAvailableThemes().includes(stored as ThemeType)) {
       return stored as ThemeType;
     }
-    return 'blue'; // default theme
+    return this.DEFAULT_THEME; // default theme
   }
 
   /**
@@ -103,19 +113,40 @@ export class ThemeService {
     }
 
     const root = document.documentElement;
-    let actualTheme: string;
-
-    if (theme === 'system') {
-      actualTheme = 'blue'; // TODO: implement dark themes
-    } else {
-      actualTheme = theme;
-    }
+    const actualTheme = this.resolveThemeVariant(theme);
 
     if (actualTheme === 'blue') {
       // Blue is the default theme; remove attribute to use :root styles
       root.removeAttribute('data-theme');
     } else {
       root.setAttribute('data-theme', actualTheme);
+    }
+  }
+
+  /**
+   * Resolve system theme based on OS preference.
+   */
+  private resolveThemeVariant(theme: ThemeType): string {
+    if (theme !== 'system') {
+      return theme;
+    }
+
+    const prefersDark = this.mediaQuery?.matches ?? false;
+    return prefersDark ? 'dark' : this.DEFAULT_THEME;
+  }
+
+  /**
+   * Cleanup on service destruction - remove media query listener to prevent memory leaks
+   */
+  ngOnDestroy(): void {
+    if (this.mediaQuery && this.onSystemThemeChange) {
+      // Use feature detection for listener removal (EventTarget API vs legacy removeListener)
+      if (this.mediaQuery.removeEventListener) {
+        this.mediaQuery.removeEventListener('change', this.onSystemThemeChange);
+      } else if (this.mediaQuery.removeListener) {
+        // Fallback for older browsers
+        this.mediaQuery.removeListener(this.onSystemThemeChange as any);
+      }
     }
   }
 }

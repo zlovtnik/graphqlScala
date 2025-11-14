@@ -46,108 +46,114 @@ public class DynamicCrudGateway {
             Array columnNamesArray = null;
             Array columnValuesArray = null;
             Array filterArray = null;
-            Object auditStruct = null;
-            try (CallableStatement cs = connection.prepareCall("{ call dynamic_crud_pkg.execute_operation(?, ?, ?, ?, ?, ?, ?, ?, ?) }") ) {
-                int index = 1;
-                cs.setString(index++, request.table());
-                cs.setString(index++, request.operation().toPlsqlLiteral());
+            try (CallableStatement cs = connection.prepareCall("{ call dynamic_crud_pkg.execute_operation(?, ?, ?, ?, ?, ?, ?, ?, ?) }")) {
+                try {
+                    int index = 1;
+                    cs.setString(index++, request.table());
+                    cs.setString(index++, request.operation().toPlsqlLiteral());
 
-                columnNamesArray = toColumnNamesArray(connection, request);
-                columnValuesArray = toColumnValuesArray(connection, request);
-                filterArray = toFiltersArray(connection, request);
-                auditStruct = toAuditStruct(connection, request);
+                    columnNamesArray = toColumnNamesArray(connection, request);
+                    columnValuesArray = toColumnValuesArray(connection, request);
+                    filterArray = toFiltersArray(connection, request);
+                    Object auditStruct = toAuditStruct(connection, request);
 
-                if (columnNamesArray != null) {
-                    cs.setArray(index++, columnNamesArray);
-                } else {
-                    cs.setNull(index++, Types.ARRAY, TYPE_COLUMN_NAMES);
+                    if (columnNamesArray != null) {
+                        cs.setArray(index++, columnNamesArray);
+                    } else {
+                        cs.setNull(index++, Types.ARRAY, TYPE_COLUMN_NAMES);
+                    }
+
+                    if (columnValuesArray != null) {
+                        cs.setArray(index++, columnValuesArray);
+                    } else {
+                        cs.setNull(index++, Types.ARRAY, TYPE_COLUMN_VALUES);
+                    }
+
+                    if (filterArray != null) {
+                        cs.setArray(index++, filterArray);
+                    } else {
+                        cs.setNull(index++, Types.ARRAY, TYPE_FILTERS);
+                    }
+
+                    if (auditStruct != null) {
+                        cs.setObject(index++, auditStruct);
+                    } else {
+                        cs.setNull(index++, Types.STRUCT, TYPE_AUDIT);
+                    }
+
+                    int outMessageIndex = index++;
+                    int outGeneratedIdIndex = index++;
+                    int outAffectedIndex = index;
+                    
+                    cs.registerOutParameter(outMessageIndex, Types.VARCHAR);
+                    cs.registerOutParameter(outGeneratedIdIndex, Types.VARCHAR);
+                    cs.registerOutParameter(outAffectedIndex, Types.INTEGER);
+
+                    cs.execute();
+
+                    String message = cs.getString(outMessageIndex);
+                    String generatedId = cs.getString(outGeneratedIdIndex);
+                    int affected = cs.getInt(outAffectedIndex);
+
+                    return new DynamicCrudResponse(affected, message, generatedId);
+                } finally {
+                    freeArray(columnNamesArray);
+                    freeArray(columnValuesArray);
+                    freeArray(filterArray);
                 }
-
-                if (columnValuesArray != null) {
-                    cs.setArray(index++, columnValuesArray);
-                } else {
-                    cs.setNull(index++, Types.ARRAY, TYPE_COLUMN_VALUES);
-                }
-
-                if (filterArray != null) {
-                    cs.setArray(index++, filterArray);
-                } else {
-                    cs.setNull(index++, Types.ARRAY, TYPE_FILTERS);
-                }
-
-                if (auditStruct != null) {
-                    cs.setObject(index++, auditStruct);
-                } else {
-                    cs.setNull(index++, Types.STRUCT, TYPE_AUDIT);
-                }
-
-                cs.registerOutParameter(index++, Types.VARCHAR);
-                cs.registerOutParameter(index++, Types.VARCHAR);
-                cs.registerOutParameter(index, Types.INTEGER);
-
-                cs.execute();
-
-                String message = cs.getString(index - 2);
-                String generatedId = cs.getString(index - 1);
-                int affected = cs.getInt(index);
-
-                return new DynamicCrudResponse(affected, message, generatedId);
-            } finally {
-                freeArray(columnNamesArray);
-                freeArray(columnValuesArray);
-                freeArray(filterArray);
             }
         });
     }
 
     private DynamicCrudResponse executeBulk(DynamicCrudRequest request) {
         return jdbcTemplate.execute((Connection connection) -> {
-            List<Array> dependentArrays = new ArrayList<>();
             Array rowsArray = null;
             Array filterArray = null;
-            Object auditStruct = null;
-            try (CallableStatement cs = connection.prepareCall("{ call dynamic_crud_pkg.execute_bulk(?, ?, ?, ?, ?, ?, ?) }") ) {
-                int index = 1;
-                cs.setString(index++, request.table());
-                cs.setString(index++, request.operation().toPlsqlLiteral());
+            List<Array> dependentArrays = new ArrayList<>();
+            try (CallableStatement cs = connection.prepareCall("{ call dynamic_crud_pkg.execute_bulk(?, ?, ?, ?, ?, ?, ?) }")) {
+                try {
+                    int index = 1;
+                    cs.setString(index++, request.table());
+                    cs.setString(index++, request.operation().toPlsqlLiteral());
 
-                rowsArray = toRowOperationsArray(connection, request, dependentArrays);
-                filterArray = toFiltersArray(connection, request);
-                auditStruct = toAuditStruct(connection, request);
+                    rowsArray = toRowOperationsArray(connection, request, dependentArrays);
+                    filterArray = toFiltersArray(connection, request);
+                    Object auditStruct = toAuditStruct(connection, request);
 
-                if (rowsArray != null) {
-                    cs.setArray(index++, rowsArray);
-                } else {
-                    cs.setNull(index++, Types.ARRAY, TYPE_ROW_OP);
+                    if (rowsArray != null) {
+                        cs.setArray(index++, rowsArray);
+                    } else {
+                        cs.setNull(index++, Types.ARRAY, TYPE_ROW_OP);
+                    }
+
+                    if (filterArray != null) {
+                        cs.setArray(index++, filterArray);
+                    } else {
+                        cs.setNull(index++, Types.ARRAY, TYPE_FILTERS);
+                    }
+
+                    if (auditStruct != null) {
+                        cs.setObject(index++, auditStruct);
+                    } else {
+                        cs.setNull(index++, Types.STRUCT, TYPE_AUDIT);
+                    }
+
+                    cs.registerOutParameter(index++, Types.VARCHAR);
+                    cs.registerOutParameter(index, Types.INTEGER);
+
+                    cs.execute();
+
+                    String message = cs.getString(index - 1);
+                    int affected = cs.getInt(index);
+
+                    return new DynamicCrudResponse(affected, message, null);
+                } finally {
+                    freeArray(rowsArray);
+                    for (Array dependent : dependentArrays) {
+                        freeArray(dependent);
+                    }
+                    freeArray(filterArray);
                 }
-
-                if (filterArray != null) {
-                    cs.setArray(index++, filterArray);
-                } else {
-                    cs.setNull(index++, Types.ARRAY, TYPE_FILTERS);
-                }
-
-                if (auditStruct != null) {
-                    cs.setObject(index++, auditStruct);
-                } else {
-                    cs.setNull(index++, Types.STRUCT, TYPE_AUDIT);
-                }
-
-                cs.registerOutParameter(index++, Types.VARCHAR);
-                cs.registerOutParameter(index, Types.INTEGER);
-
-                cs.execute();
-
-                String message = cs.getString(index - 1);
-                int affected = cs.getInt(index);
-
-                return new DynamicCrudResponse(affected, message, null);
-            } finally {
-                freeArray(rowsArray);
-                for (Array dependent : dependentArrays) {
-                    freeArray(dependent);
-                }
-                freeArray(filterArray);
             }
         });
     }
@@ -216,6 +222,12 @@ public class DynamicCrudGateway {
         return request.optionalAuditContext()
                 .map(ctx -> {
                     try {
+                        // Check if connection can be unwrapped to OracleConnection before attempting
+                        if (!connection.isWrapperFor(OracleConnection.class)) {
+                            // Not an Oracle connection (e.g., H2 for testing) - return null
+                            return null;
+                        }
+                        
                         OracleConnection oracleConnection = connection.unwrap(OracleConnection.class);
                         Object[] attributes = new Object[]{
                                 ctx.actor(),

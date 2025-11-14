@@ -10,6 +10,7 @@ echo "=== Verifying Database Initialization ==="
 ORACLE_USER=${ORACLE_USER:-ssfuser}
 ORACLE_PASSWORD=${ORACLE_PASSWORD:-ssfuser}
 ORACLE_DB=${ORACLE_DB:-FREEPDB1}
+ORACLE_USER_UPPER=$(printf '%s' "$ORACLE_USER" | tr '[:lower:]' '[:upper:]')
 
 # Check if container is running
 if ! docker ps --filter "name=oracle-free" --filter "status=running" -q | grep -q .; then
@@ -26,7 +27,7 @@ echo "Checking if user '$ORACLE_USER' exists..."
 USER_EXISTS=$(docker exec oracle-free sqlplus -s / as sysdba <<EOF 2>/dev/null
 SET HEADING OFF FEEDBACK OFF PAGESIZE 0 LINESIZE 1000
 ALTER SESSION SET CONTAINER = $ORACLE_DB;
-SELECT COUNT(*) FROM dba_users WHERE username = '${ORACLE_USER^^}';
+SELECT COUNT(*) FROM dba_users WHERE username = '${ORACLE_USER_UPPER}';
 EXIT;
 EOF
 )

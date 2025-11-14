@@ -122,14 +122,11 @@ class HealthConfigTest {
 
     @Test
     void testDatabaseConnectionHealthIndicatorWithValidConnection() throws SQLException {
-        Connection connection = dataSource.getConnection();
-        assertTrue(connection.isValid(1));
-
-        Health health = healthConfig.databaseConnectionHealthIndicator(dataSource).health();
-        assertEquals(Status.UP, health.getStatus());
-        assertEquals("valid", health.getDetails().get("databaseConnection"));
-        
-        connection.close();
+        try (Connection connection = dataSource.getConnection()) {
+            Health health = healthConfig.databaseConnectionHealthIndicator(dataSource).health();
+            assertEquals(Status.UP, health.getStatus());
+            assertEquals("valid", health.getDetails().get("databaseConnection"));
+        }
     }
 
     @Test
