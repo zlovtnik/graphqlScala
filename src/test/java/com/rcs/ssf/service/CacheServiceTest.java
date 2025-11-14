@@ -15,10 +15,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class CacheServiceTest {
 
     private CacheService cacheService;
+    private CacheConfiguration cacheConfiguration;
 
     @BeforeEach
     void setUp() {
-        cacheService = new CacheService(new CacheConfiguration());
+        cacheConfiguration = new CacheConfiguration();
+        cacheService = new CacheService(cacheConfiguration);
     }
 
     @Test
@@ -115,8 +117,15 @@ class CacheServiceTest {
     @Test
     @DisplayName("Should detect memory pressure accurately")
     void testMemoryPressureDetection() {
+        cacheService.invalidateAll(CacheService.QUERY_RESULT_CACHE);
+
+        long thresholdEntries = getQueryCacheThreshold();
+        long maxSize = getQueryCacheMaxSize();
+        assertTrue(maxSize > thresholdEntries, "Threshold must be below configured max size");
+
+        long entriesBelowPressure = Math.max(0, thresholdEntries - 1);
         // Fill cache with data
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < entriesBelowPressure; i++) {
             cacheService.put("key_" + i, "value_" + i, CacheService.QUERY_RESULT_CACHE);
         }
         
@@ -176,9 +185,16 @@ class CacheServiceTest {
     @Test
     @DisplayName("Should detect high memory pressure when cache is near full")
     void testHighMemoryPressureDetection() {
+        cacheService.invalidateAll(CacheService.QUERY_RESULT_CACHE);
+
+        long thresholdEntries = getQueryCacheThreshold();
+        long maxSize = getQueryCacheMaxSize();
+        assertTrue(maxSize > thresholdEntries, "Threshold must be below configured max size");
+
         // Fill query result cache close to its max (1000 entries as per default config)
         // We'll add ~850 entries to exceed 80% threshold (0.8 * 1000 = 800)
-        for (int i = 0; i < 850; i++) {
+        long entriesAbovePressure = thresholdEntries + 1;
+        for (int i = 0; i < entriesAbovePressure; i++) {
             cacheService.put("pressure_key_" + i, "value_" + i, CacheService.QUERY_RESULT_CACHE);
         }
         
@@ -286,4 +302,12 @@ class CacheServiceTest {
         }
     }
 
+
+    private long getQueryCacheMaxSize() {
+        return cacheConfiguration.getQueryResultCache().getMaxSize();
+    }
+
+    private long getQueryCacheThreshold() {
+        return (long) (getQueryCacheMaxSize() * cacheConfiguration.getMemoryPressureThreshold());
+    }
 }

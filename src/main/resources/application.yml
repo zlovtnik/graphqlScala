@@ -76,6 +76,20 @@ batch:
   initial-retry-delay-ms: 100        # Initial retry delay in milliseconds
   memory-threshold-percent: 80       # Trigger batch size reduction at 80% heap usage
 
+oracle:
+  array:
+    min-chunk-size: 500              # Lower bound chunk size under extreme memory pressure
+    default-chunk-size: 2000         # Default associative array chunk size
+    max-chunk-size: 10000            # Max chunk size when heap headroom allows
+    eden-pause-threshold-percent: 80 # Pause producer when Eden occupancy exceeds this percent
+    pause-duration-ms: 250           # Back-pressure duration when throttling array producers
+
+query:
+  streaming:
+    fetch-size: 500                  # Default fetch size for cursor-based streaming
+    max-fetch-size: 10000            # Upper bound fetch size when memory headroom allows
+    idle-timeout-seconds: 30         # Cursor idle timeout to prevent orphaned streams
+
 app:
   jwt:
     secret: ${JWT_SECRET}
@@ -85,8 +99,10 @@ app:
     url: http://localhost:9000
     access-key: ${MINIO_ACCESS_KEY}
     secret-key: ${MINIO_SECRET_KEY}
+
+ssf:
   cache:
-    default-max-age: 3600             # Default Cache-Control max-age in seconds (1 hour)
+    default-max-age: 3600            # Default Cache-Control max-age in seconds (1 hour)
 
 
 management:

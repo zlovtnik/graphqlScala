@@ -34,19 +34,19 @@ import java.util.stream.Collectors;
 public class BatchOperationsHandler {
 
     @Value("${batch.size:200}")
-    private int batchSize;
+    private int batchSize = 200;
 
     @Value("${batch.max-retries:3}")
-    private int maxRetries;
+    private int maxRetries = 3;
 
     @Value("${batch.initial-retry-delay-ms:100}")
-    private long initialRetryDelayMs;
+    private long initialRetryDelayMs = 100L;
 
     @Value("${batch.memory-threshold-percent:80}")
-    private int memoryThresholdPercent;
+    private int memoryThresholdPercent = 80;
 
     @Value("${batch.threshold:50}")
-    private int batchThreshold;
+    private int batchThreshold = 50;
 
     /**
      * Validate configuration values at startup.
@@ -109,6 +109,7 @@ public class BatchOperationsHandler {
     public <T> BatchResult executeBatch(List<T> items, Consumer<List<T>> operation, String operationName) {
         Objects.requireNonNull(items, "Items cannot be null");
         Objects.requireNonNull(operation, "Operation cannot be null");
+        Objects.requireNonNull(operationName, "Operation name cannot be null");
 
         // Optimize: use individual operations if count < batchThreshold
         if (items.size() < batchThreshold) {
@@ -118,8 +119,9 @@ public class BatchOperationsHandler {
 
         // Check memory pressure
         if (isMemoryPressureHigh()) {
-            log.warn("High memory pressure detected, reducing batch size from {} to {}", batchSize, batchSize / 2);
-            return executeBatchWithReducedSize(items, operation, operationName, batchSize / 2);
+            int reducedSize = Math.max(1, batchSize / 2);
+            log.warn("High memory pressure detected, reducing batch size from {} to {}", batchSize, reducedSize);
+            return executeBatchWithReducedSize(items, operation, operationName, reducedSize);
         }
 
         return executeBatchInternal(items, operation, operationName, batchSize, 0);
@@ -146,55 +148,63 @@ public class BatchOperationsHandler {
     private <T> BatchResult executeBatchInternal(List<T> items, Consumer<List<T>> operation, 
                                                   String operationName, int size, int attemptNumber) {
         long startTimeMs = System.currentTimeMillis();
-        
-        // Create initial batches
-        List<List<T>> batches = createBatches(items);
-        List<List<T>> failedBatches = new ArrayList<>();
-        int processedItems = 0;
-        
-        // Process all batches, collecting those that fail
-        for (List<T> batch : batches) {
-            try {
-                executeSingleBatchWithRetry(batch, operation, operationName, 0);
-                processedItems += batch.size();
-            } catch (Exception e) {
-                failedBatches.add(batch);
-                log.debug("Batch failed (will retry): {} items - {}", batch.size(), e.getMessage());
+        List<T> currentItems = new ArrayList<>(items);
+        int retriesUsed = attemptNumber;
+        int totalProcessedItems = 0;
+
+        while (true) {
+            List<List<T>> batches = createBatches(currentItems, size);
+            List<List<T>> failedBatches = new ArrayList<>();
+            int processedThisAttempt = 0;
+
+            for (List<T> batch : batches) {
+                try {
+                    executeSingleBatchWithRetry(batch, operation, operationName, 0);
+                    processedThisAttempt += batch.size();
+                } catch (Exception e) {
+                    failedBatches.add(batch);
+                    log.debug("Batch failed (will retry): {} items - {}", batch.size(), e.getMessage());
+                }
             }
-        }
-        
-        // If there are failed batches and retries remaining, retry only failed batches
-        if (!failedBatches.isEmpty() && attemptNumber < maxRetries) {
-            long delayMs = initialRetryDelayMs * (long) Math.pow(2, attemptNumber);
+
+            totalProcessedItems += processedThisAttempt;
+
+            if (failedBatches.isEmpty()) {
+                long durationMs = System.currentTimeMillis() - startTimeMs;
+                double throughput = (totalProcessedItems * 1000.0) / Math.max(durationMs, 1);
+                log.info("Batch operation '{}' completed: processed={}, failed={}, throughput={:.2f} items/sec, duration={}ms",
+                    operationName, totalProcessedItems, 0, throughput, durationMs);
+                return new BatchResult(true, totalProcessedItems, 0, durationMs);
+            }
+
+            int failedItems = failedBatches.stream().mapToInt(List::size).sum();
+            if (retriesUsed >= maxRetries) {
+                long durationMs = System.currentTimeMillis() - startTimeMs;
+                double throughput = (totalProcessedItems * 1000.0) / Math.max(durationMs, 1);
+                log.info("Batch operation '{}' completed with partial success: processed={}, failed={}, throughput={:.2f} items/sec, duration={}ms",
+                    operationName, totalProcessedItems, failedItems, throughput, durationMs);
+                return new BatchResult(false, totalProcessedItems, failedItems, durationMs);
+            }
+
+            long delayMs = initialRetryDelayMs * (long) Math.pow(2, retriesUsed);
             log.warn("Batch operation '{}' has {} failed batches (attempt {}/{}), retrying after {}ms",
-                operationName, failedBatches.size(), attemptNumber + 1, maxRetries, delayMs);
-            
+                operationName, failedBatches.size(), retriesUsed + 1, maxRetries, delayMs);
+
             try {
                 Thread.sleep(delayMs);
             } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
                 log.error("Batch retry interrupted for operation '{}'", operationName);
                 // Continue with partial success - don't fail the entire operation
+                long durationMs = System.currentTimeMillis() - startTimeMs;
+                return new BatchResult(false, totalProcessedItems, failedItems, durationMs);
             }
-            
-            // Flatten failed batches back into a list for retry
-            List<T> failedItems = failedBatches.stream()
+
+            currentItems = failedBatches.stream()
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
-            
-            return executeBatchInternal(failedItems, operation, operationName, size, attemptNumber + 1);
+            retriesUsed++;
         }
-        
-        // Calculate final metrics
-        int failedItems = failedBatches.stream().mapToInt(List::size).sum();
-        long durationMs = System.currentTimeMillis() - startTimeMs;
-        double throughput = (processedItems * 1000.0) / Math.max(durationMs, 1);
-        boolean success = failedBatches.isEmpty();
-
-        log.info("Batch operation '{}' completed: processed={}, failed={}, throughput={:.2f} items/sec, duration={}ms",
-            operationName, processedItems, failedItems, throughput, durationMs);
-
-        return new BatchResult(success, processedItems, failedItems, durationMs);
     }
 
     /**
@@ -259,7 +269,7 @@ public class BatchOperationsHandler {
         }
 
         long durationMs = System.currentTimeMillis() - startTimeMs;
-        double throughput = (processedItems * 1000.0) / durationMs;
+        double throughput = durationMs <= 0 ? processedItems * 1000.0 : (processedItems * 1000.0) / durationMs;
 
         log.info("Individual operations '{}' completed: processed={}, failed={}, throughput={:.2f} items/sec",
             operationName, processedItems, failedItems, throughput);
@@ -307,13 +317,18 @@ public class BatchOperationsHandler {
 
     /**
      * Split items into batches for processing using index-based approach (O(n) complexity).
+     *
+     * @param items items to split
+     * @param size desired batch size (values <= 0 are clamped to 1)
+     * @return list of batches honoring the provided size
      */
-    public <T> List<List<T>> createBatches(List<T> items) {
-        int numBatches = (items.size() + batchSize - 1) / batchSize;
+    public <T> List<List<T>> createBatches(List<T> items, int size) {
+        int effectiveSize = Math.max(1, size);
+        int numBatches = (items.size() + effectiveSize - 1) / effectiveSize;
         return java.util.stream.IntStream.range(0, numBatches)
             .mapToObj(i -> new ArrayList<>(items.subList(
-                i * batchSize,
-                Math.min((i + 1) * batchSize, items.size()))))
+                i * effectiveSize,
+                Math.min((i + 1) * effectiveSize, items.size()))))
             .collect(Collectors.toList());
     }
 

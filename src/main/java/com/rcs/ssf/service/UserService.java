@@ -6,7 +6,9 @@ import com.rcs.ssf.dynamic.DynamicCrudGateway;
 import com.rcs.ssf.dynamic.DynamicCrudOperation;
 import com.rcs.ssf.dynamic.DynamicCrudRequest;
 import com.rcs.ssf.dynamic.DynamicCrudResponse;
+import com.rcs.ssf.dynamic.PlsqlInstrumentationSupport;
 import com.rcs.ssf.entity.User;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.lang.NonNull;
@@ -32,6 +34,7 @@ public class UserService {
     private final JdbcTemplate jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
     private final DynamicCrudGateway dynamicCrudGateway;
+    private final PlsqlInstrumentationSupport instrumentationSupport;
 
     private static final RowMapper<User> USER_ROW_MAPPER = new RowMapper<User>() {
         @Override
@@ -44,44 +47,52 @@ public class UserService {
         }
     };
 
-    public UserService(@NonNull DataSource dataSource, PasswordEncoder passwordEncoder, DynamicCrudGateway dynamicCrudGateway) {
+    public UserService(@NonNull DataSource dataSource,
+                       PasswordEncoder passwordEncoder,
+                       DynamicCrudGateway dynamicCrudGateway,
+                       @NonNull PlsqlInstrumentationSupport instrumentationSupport) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.passwordEncoder = passwordEncoder;
         this.dynamicCrudGateway = dynamicCrudGateway;
+        this.instrumentationSupport = instrumentationSupport;
     }
 
     public Optional<User> findByUsername(String username) {
-        return jdbcTemplate.execute((Connection con) -> {
-            try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_username(?) }")) {
-                cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
-                cs.setString(2, username);
-                cs.execute();
-                try (ResultSet rs = (ResultSet) cs.getObject(1)) {
-                    User user = null;
-                    if (rs.next()) {
-                        user = USER_ROW_MAPPER.mapRow(rs, 1);
+        return jdbcTemplate.execute((ConnectionCallback<Optional<User>>) (Connection con) ->
+            instrumentationSupport.withAction(con, "user_pkg", "get_user_by_username", () -> {
+                try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_username(?) }")) {
+                    cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
+                    cs.setString(2, username);
+                    cs.execute();
+                    try (ResultSet rs = (ResultSet) cs.getObject(1)) {
+                        User user = null;
+                        if (rs.next()) {
+                            user = USER_ROW_MAPPER.mapRow(rs, 1);
+                        }
+                        return Optional.ofNullable(user);
                     }
-                    return Optional.ofNullable(user);
                 }
-            }
-        });
+            })
+        );
     }
 
     public Optional<User> findByEmail(String email) {
-        return jdbcTemplate.execute((Connection con) -> {
-            try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_email(?) }")) {
-                cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
-                cs.setString(2, email);
-                cs.execute();
-                try (ResultSet rs = (ResultSet) cs.getObject(1)) {
-                    User user = null;
-                    if (rs.next()) {
-                        user = USER_ROW_MAPPER.mapRow(rs, 1);
+        return jdbcTemplate.execute((ConnectionCallback<Optional<User>>) (Connection con) ->
+            instrumentationSupport.withAction(con, "user_pkg", "get_user_by_email", () -> {
+                try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_email(?) }")) {
+                    cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
+                    cs.setString(2, email);
+                    cs.execute();
+                    try (ResultSet rs = (ResultSet) cs.getObject(1)) {
+                        User user = null;
+                        if (rs.next()) {
+                            user = USER_ROW_MAPPER.mapRow(rs, 1);
+                        }
+                        return Optional.ofNullable(user);
                     }
-                    return Optional.ofNullable(user);
                 }
-            }
-        });
+            })
+        );
     }
 
     public User createUser(User user) {
@@ -175,20 +186,22 @@ public class UserService {
     }
 
     public Optional<User> findById(UUID id) {
-        return jdbcTemplate.execute((Connection con) -> {
-            try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_id(?) }")) {
-                cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
-                cs.setString(2, id.toString());
-                cs.execute();
-                try (ResultSet rs = (ResultSet) cs.getObject(1)) {
-                    User user = null;
-                    if (rs.next()) {
-                        user = USER_ROW_MAPPER.mapRow(rs, 1);
+        return jdbcTemplate.execute((ConnectionCallback<Optional<User>>) (Connection con) ->
+            instrumentationSupport.withAction(con, "user_pkg", "get_user_by_id", () -> {
+                try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_id(?) }")) {
+                    cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
+                    cs.setString(2, id.toString());
+                    cs.execute();
+                    try (ResultSet rs = (ResultSet) cs.getObject(1)) {
+                        User user = null;
+                        if (rs.next()) {
+                            user = USER_ROW_MAPPER.mapRow(rs, 1);
+                        }
+                        return Optional.ofNullable(user);
                     }
-                    return Optional.ofNullable(user);
                 }
-            }
-        });
+            })
+        );
     }
 
     private void validateNewUser(User user) {
@@ -221,16 +234,18 @@ public class UserService {
     }
 
     private void ensureUsernameAvailable(String username, UUID currentUserId) {
-        Boolean exists = jdbcTemplate.execute((Connection con) -> {
-            try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.username_exists(?) }")) {
-                cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
-                cs.setString(2, username);
-                cs.execute();
-                boolean result = cs.getBoolean(1);
-                if (cs.wasNull()) result = false;
-                return result;
-            }
-        });
+        Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) (Connection con) ->
+            instrumentationSupport.withAction(con, "user_pkg", "username_exists", () -> {
+                try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.username_exists(?) }")) {
+                    cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
+                    cs.setString(2, username);
+                    cs.execute();
+                    boolean result = cs.getBoolean(1);
+                    if (cs.wasNull()) result = false;
+                    return result;
+                }
+            })
+        );
         if (Boolean.TRUE.equals(exists)) {
             // Check if it's the current user
             if (currentUserId != null) {
@@ -245,16 +260,18 @@ public class UserService {
     }
 
     private void ensureEmailAvailable(String email, UUID currentUserId) {
-        Boolean exists = jdbcTemplate.execute((Connection con) -> {
-            try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.email_exists(?) }")) {
-                cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
-                cs.setString(2, email);
-                cs.execute();
-                boolean result = cs.getBoolean(1);
-                if (cs.wasNull()) result = false;
-                return result;
-            }
-        });
+        Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) (Connection con) ->
+            instrumentationSupport.withAction(con, "user_pkg", "email_exists", () -> {
+                try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.email_exists(?) }")) {
+                    cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
+                    cs.setString(2, email);
+                    cs.execute();
+                    boolean result = cs.getBoolean(1);
+                    if (cs.wasNull()) result = false;
+                    return result;
+                }
+            })
+        );
         if (Boolean.TRUE.equals(exists)) {
             // Check if it's the current user
             if (currentUserId != null) {

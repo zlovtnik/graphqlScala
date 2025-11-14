@@ -83,6 +83,7 @@ public class CacheService {
     public <T> T getOrCompute(String cacheKey, Function<String, T> computeFunction, String cacheName) {
         Objects.requireNonNull(cacheKey, "Cache key cannot be null");
         Objects.requireNonNull(computeFunction, "Compute function cannot be null");
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
 
         Cache<String, Object> cache = getCacheByName(cacheName);
         
@@ -111,6 +112,7 @@ public class CacheService {
         Objects.requireNonNull(cacheKey, "Cache key cannot be null");
         Objects.requireNonNull(computeFunction, "Compute function cannot be null");
         Objects.requireNonNull(expectedType, "Expected type cannot be null");
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
 
         Cache<String, Object> cache = getCacheByName(cacheName);
         
@@ -146,6 +148,7 @@ public class CacheService {
      */
     @SuppressWarnings("unchecked")
     public <T> T getIfPresent(String cacheKey, String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
         Cache<String, Object> cache = getCacheByName(cacheName);
         return (T) cache.getIfPresent(cacheKey);
     }
@@ -165,6 +168,7 @@ public class CacheService {
      */
     public <T> T getIfPresentTypeSafe(String cacheKey, String cacheName, Class<T> expectedType) {
         Objects.requireNonNull(expectedType, "Expected type cannot be null");
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
         
         Cache<String, Object> cache = getCacheByName(cacheName);
         Object cachedValue = cache.getIfPresent(cacheKey);
@@ -174,10 +178,9 @@ public class CacheService {
         }
 
         if (!expectedType.isInstance(cachedValue)) {
-            throw new ClassCastException(String.format(
-                "Cached value for key '%s' is of type %s, but expected type %s",
-                cacheKey, cachedValue.getClass().getName(), expectedType.getName()
-            ));
+            log.warn("Type mismatch for cache key '{}' in cache '{}': stored={}, expected={}",
+                cacheKey, cacheName, cachedValue.getClass().getName(), expectedType.getName());
+            return null;
         }
 
         return expectedType.cast(cachedValue);
@@ -190,6 +193,7 @@ public class CacheService {
     public void put(String cacheKey, Object value, String cacheName) {
         Objects.requireNonNull(cacheKey, "Cache key cannot be null");
         Objects.requireNonNull(value, "Value cannot be null");
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
 
         Cache<String, Object> cache = getCacheByName(cacheName);
         cache.put(cacheKey, value);
@@ -200,6 +204,7 @@ public class CacheService {
      * Invalidate a specific cache key.
      */
     public void invalidate(String cacheKey, String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
         Cache<String, Object> cache = getCacheByName(cacheName);
         cache.invalidate(cacheKey);
         log.info("Invalidated cache key: {} from cache: {}", cacheKey, cacheName);
@@ -209,6 +214,7 @@ public class CacheService {
      * Invalidate all entries in a cache (on-write strategy).
      */
     public void invalidateAll(String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
         Cache<String, Object> cache = getCacheByName(cacheName);
         cache.invalidateAll();
         log.info("Invalidated all entries in cache: {}", cacheName);
@@ -219,6 +225,8 @@ public class CacheService {
      * Should be called during application startup.
      */
     public void warmUpCache(String cacheKey, Object value, String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
+        Objects.requireNonNull(value, "Value cannot be null");
         Cache<String, Object> cache = getCacheByName(cacheName);
         cache.put(cacheKey, value);
         log.info("Warmed up cache key: {} in cache: {}", cacheKey, cacheName);
@@ -228,6 +236,7 @@ public class CacheService {
      * Get cache size for monitoring memory usage.
      */
     public long getCacheSize(String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
         Cache<String, Object> cache = getCacheByName(cacheName);
         return cache.estimatedSize();
     }
@@ -241,9 +250,10 @@ public class CacheService {
     * and cache.config.memory-pressure-threshold).</p>
      * 
      * @param cacheName the name of the cache to check (e.g., {@link #QUERY_RESULT_CACHE}, {@link #SESSION_CACHE})
-     * @return true if cache size exceeds 80% of configured maximum; false otherwise
+     * @return true if cache size exceeds the configured memory-pressure threshold fraction; false otherwise
      */
     public boolean isMemoryPressureHigh(String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
         long size = getCacheSize(cacheName);
         long maxSize = getConfiguredMaxSize(cacheName);
         double thresholdFraction = cacheConfiguration.getMemoryPressureThreshold();
