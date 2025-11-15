@@ -31,8 +31,8 @@ services:
     image: minio/minio:latest
     container_name: minio-server
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-o-cara-esta-pedindo-uma-chave-de-acesso}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-o-cara-esta-pedindo-uma-chave-secreta}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -47,6 +47,23 @@ services:
       timeout: 20s
       retries: 3
 
+  # Redis Cache
+  redis:
+    image: redis:7.4-alpine
+    container_name: redis-cache
+    command: ["redis-server", "--save", "900 1", "--loglevel", "warning"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ssf-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Spring Boot Application
   app:
     build:
@@ -58,17 +75,21 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       ORACLE_HOST: oracle
       ORACLE_PORT: 1521
       ORACLE_DB: FREEPDB1
       ORACLE_USER: ${ORACLE_USER:-ssfuser}
-      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-ssfuser}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-ssfpassword}
       ORACLE_ADMIN_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-o-cara-esta-pedindo-uma-chave-de-acesso}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-o-cara-esta-pedindo-uma-chave-secreta}
       JWT_SECRET: ${JWT_SECRET:-0123456789abcdefghijklmnopqrstuv0123456789abcdefghijklmnopqrstuv}
       KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD:-changeit}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "8443:8443"
     volumes:
@@ -85,6 +106,7 @@ services:
 volumes:
   oracle_data:
   minio_data:
+  redis_data:
 
 networks:
   ssf-network:
