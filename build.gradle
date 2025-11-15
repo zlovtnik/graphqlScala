@@ -18,6 +18,14 @@ repositories {
 	mavenCentral()
 }
 
+sourceSets {
+	main {
+		resources {
+			srcDir 'sql'
+		}
+	}
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-graphql'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -29,6 +37,21 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	
+	// Reactive Data Access
+	implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+	implementation 'io.r2dbc:r2dbc-oracle:1.1.4'
+	implementation 'io.r2dbc:r2dbc-pool:1.0.1.RELEASE'
+	implementation 'io.projectreactor.netty:reactor-netty:1.1.15'
+	
+	// Resilience & Observability
+	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-retry:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-timelimiter:2.1.0'
+	implementation 'io.github.resilience4j:resilience4j-micrometer:2.1.0'
+	implementation 'io.micrometer:micrometer-registry-prometheus:1.12.0'
 	
 	// Oracle Database Driver
 	implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'

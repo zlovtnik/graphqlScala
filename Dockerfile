@@ -7,6 +7,7 @@ COPY gradlew gradlew
 COPY gradle gradle
 COPY build.gradle settings.gradle ./
 COPY src src
+COPY sql sql
 
 RUN chmod +x gradlew \
     && ./gradlew clean bootJar --no-daemon -x test

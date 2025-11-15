@@ -268,34 +268,114 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ### **Application Performance Optimizations**
 
 - [ ] **GraphQL Query Optimization**
-  - Implement persisted queries for common operations
-  - Add automatic persisted queries (APQ)
-  - Implement query complexity analysis and limits
-  - Add query execution plan caching
+  - **Persisted Queries Implementation**:
+    - Create registry for 50+ common queries mapped to hash IDs; store in Redis with versioning strategy (`v1`, `v2` for evolution).
+    - Implement `PersistedQueryRegistry` service under `com.rcs.ssf.graphql.persistence` with database schema (`V225__persisted_queries.sql`) for audit trail.
+    - Add APQ (Automatic Persisted Queries) fallback with configurable `apollo-server` client support; measure client adoption rate via Prometheus counter (`graphql.persisted_queries.hit_ratio`).
+    - Document persisted query format in `docs/graphql/persisted-queries.md` with client integration examples (Apollo, Relay).
+  - **Query Complexity Analysis**:
+    - Integrate `graphql-java-extended-scalars` + custom complexity visitor; assign default complexity per type (scalar: 1, object: 10, list: 50); validate query complexity on every request.
+    - Reject queries exceeding threshold (configurable, default 5000); return error with actual complexity and reduction recommendations in response.
+    - Log rejected queries to `AUDIT_GRAPHQL_COMPLEXITY` table; create Grafana alert if rejection rate exceeds 5/min (indicates client abuse or legitimate scaling issue).
+    - Add instrumentation endpoint (`GET /actuator/graphql/complexity-stats`) exposing P50/P95/P99 query complexity distribution and rejection counts.
+  - **Query Execution Plan Caching**:
+    - Cache parsed GraphQL plans (AST + execution path) in Caffeine (max 10k entries, 1-hour TTL); bypass parser for 95%+ hit rate on repeated queries.
+    - Benchmark parser performance: capture baseline (current mean parse time), measure speedup post-caching; target 100x improvement on cache hits.
+    - Add cache statistics to Prometheus (`graphql.execution_plan.cache.hits`, `.misses`, `.evictions`); monitor eviction rate (alert if >10%/min).
+    - Store plan cache configuration in `application.yml` with environment-specific tuning (dev: small cache, prod: large cache).
+  - **Success Criteria**: P50 query execution time reduced by 30%; cache hit rate >85%; rejection rate for overly complex queries <1%
 
 - [ ] **Response Compression & Optimization**
-  - Enable GZIP compression for all responses
-  - Implement Brotli compression for modern clients
-  - Add response size monitoring and optimization
-  - Configure compression levels for performance
+  - **GZIP Compression Setup**:
+    - Enable Spring Boot built-in compression (`spring.compression.enabled: true`, `min-response-size: 1024` bytes); configure compression level (default 6, range 1–9).
+    - Add custom `CompressionFilter` under `com.rcs.ssf.http.filter` to handle edge cases (streaming responses, large result sets).
+    - Measure compression ratio per content type (GraphQL JSON, audit CSV, static assets); track in Prometheus gauge (`http.response.compression_ratio`).
+    - Document compression tuning in runbook `docs/runbooks/response-compression.md` (CPU vs bandwidth tradeoff).
+  - **Brotli Compression for Modern Clients**:
+    - Integrate `brotli4j` Maven dependency; add conditional Brotli encoder registration in `HttpEncodingAutoConfiguration`.
+    - Detect client support via `Accept-Encoding` header; prioritize Brotli (7x better than GZIP for text) for modern browsers (Chrome, Firefox, Safari 11+).
+    - Benchmark compression CPU overhead: establish baseline CPU usage and alert if Brotli encoding causes >10% CPU spike during load testing.
+    - Create A/B test scenario in Gatling (`gatling/src/gatling/scala/CompressionSimulation.scala`) comparing GZIP vs Brotli throughput and latency.
+  - **Response Size Optimization**:
+    - Profile response payloads: use `spring-boot-actuator` + custom metrics to emit response size histograms (`http.response.size.bytes` P50/P95/P99).
+    - Implement field masking in GraphQL schema: add `@Partial` directive to omit unnecessary nested objects (e.g., `user.audit_logs` on list endpoints); reduce median response size by 40%.
+    - Add automatic response truncation for large collections: paginate by default (page size 50), reject requests for >10k items without explicit chunking.
+    - Document best practices in `docs/graphql/response-optimization.md` (field selection, pagination, projection).
+  - **Success Criteria**: 60% median response size reduction; compression CPU <8% of total; Brotli adoption >70% of modern clients
 
 - [ ] **Reactive Programming Migration**
-  - Convert blocking operations to reactive streams
-  - Implement WebFlux for non-blocking I/O
-  - Add reactive database operations
-  - Optimize thread pool usage
+  - **Spring WebFlux Pilot Program**:
+    - Pilot WebFlux on 2–3 low-risk, read-heavy endpoints (e.g., `GET /audit-logs/summary`) using `@GetExchange` reactive annotations.
+    - Create baseline latency + thread utilization metrics for blocking endpoints; re-measure post-migration (target: 50% reduction in thread pool contention).
+    - Implement `ReactiveDataSourceConfiguration` using `oracle.r2dbc.OracleR2DBCConnectionFactory` (R2DBC driver for Oracle 12.2+).
+    - Document migration pattern in `docs/reactive/migration-guide.md` with pitfalls (blocking I/O in reactive pipeline, subscription leaks).
+  - **Reactive Database Operations**:
+    - Convert high-volume audit insert operations from blocking `jdbcTemplate.batchUpdate()` to R2DBC `r2dbc.execute()` with backpressure handling.
+    - Implement `ReactiveAuditService` under `com.rcs.ssf.service.reactive` using Project Reactor's `Flux` / `Mono` for non-blocking database access.
+    - Add subscription timeout (default 30s) and retry logic with exponential backoff (max 3 retries, base 100ms).
+    - Benchmark memory usage (reactive uses less heap for concurrent streams); measure GC pause reduction (target: <50ms P95 pause time).
+  - **Thread Pool Optimization**:
+    - Profile thread usage via JFR (Java Flight Recorder) during load test; capture thread allocation patterns, context switches, and blocking points.
+    - Tune Netty event loop pool size: set to `cpu_cores * 2` for CPU-bound, `cpu_cores * 4–8` for I/O-bound workloads; validate via thread histogram (`jdk.ThreadPark` events).
+    - Configure Reactor scheduler: set `reactor.netty.ioWorkerCount`, `reactor.netty.ioSelectCount` for optimal I/O throughput; measure latency P99 <200ms on reactive endpoints.
+    - Document thread pool tuning in `src/main/resources/application-prod.yml` with environment-specific configs (dev: 4 threads, prod: 16–32 threads).
+  - **Success Criteria**: 50% reduction in thread pool contention on reactive endpoints; GC pause time P95 <50ms; latency P99 <200ms on reactive GET endpoints
 
 - [ ] **Resilience & Circuit Breakers**
-  - Implement Resilience4j circuit breakers
-  - Add retry mechanisms with exponential backoff
-  - Configure bulkhead patterns for resource isolation
-  - Add fallback strategies for degraded operations
+  - **Resilience4j Circuit Breaker Setup**:
+    - Integrate Resilience4j Maven dependency; define circuit breakers for 5 critical services (Oracle DB, Redis, MinIO, external auth, audit service).
+    - Configure per-breaker thresholds: `failureRateThreshold: 50%`, `slowCallRateThreshold: 100%`, `slowCallDurationThreshold: 2s`, `minimumNumberOfCalls: 10` (enter OPEN after 5 consecutive failures).
+    - Wire breakers into GraphQL resolvers via `@CircuitBreaker` annotation; log state transitions (CLOSED → OPEN → HALF_OPEN) to `AUDIT_CIRCUIT_BREAKER_EVENTS` table for post-incident analysis.
+    - Expose circuit breaker state via Prometheus metrics (`resilience4j_circuitbreaker_state`, `resilience4j_circuitbreaker_calls_total`); create Grafana dashboards per breaker.
+  - **Retry Mechanisms with Exponential Backoff**:
+    - Implement `@Retry` annotation with strategy: `maxAttempts: 3`, `waitDuration: 100ms`, `intervalFunction: exponential(multiplier: 2, randomizationFactor: 0.5)`.
+    - Add jitter to prevent thundering herd (retry storms); validate via Gatling scenario `RetryStormSimulation.scala` with 1000 concurrent clients triggering retries.
+    - Log all retry attempts with context (attempt #, error reason, next retry time) to structured logs (JSON format for ELK parsing).
+    - Document retry policies per service in `docs/resilience/retry-strategy.md` (which operations are idempotent, which are not).
+  - **Bulkhead Pattern for Resource Isolation**:
+    - Define bulkheads for 3 resource pools: `audit-operations` (25 threads), `user-operations` (15 threads), `graphql-queries` (50 threads).
+    - Configure via `@Bulkhead(name = "audit-operations", type = THREADPOOL)` with `maxThreadPoolSize`, `coreThreadPoolSize`, `queueCapacity` tuned per service.
+    - Monitor bulkhead saturation: emit Prometheus gauges (`resilience4j_bulkhead_max_allowed_concurrent_calls`, `.current_concurrent_calls`); alert if utilization >80%.
+    - Add queue rejection telemetry; log rejected requests with reason (bulkhead full, timeout) for analysis and tuning.
+  - **Fallback Strategies**:
+    - Implement `@Fallback` methods for degraded mode: e.g., audit service down → return cached/empty audit trail with `DEGRADED_MODE: true` flag in response.
+    - Create fallback chain: primary endpoint → cached response → default empty response; document fallback SLA per endpoint (e.g., audit queries may be 5+ minutes stale).
+    - Test fallback activation via chaos engineering scenario: kill dependency service, verify fallback invocation, measure response time degradation (<500ms increase acceptable).
+    - Create runbook `docs/runbooks/degraded-mode.md` documenting fallback activation, duration, and escalation steps.
+  - **Success Criteria**: Circuit breaker prevents cascading failures; retry success rate >95%; bulkhead prevents thread pool starvation; fallback responses served <500ms
 
 - [ ] **HTTP Caching & Optimization**
-  - Implement HTTP caching headers (Cache-Control, ETags)
-  - Add conditional requests support
-  - Configure CDN integration preparation
-  - Optimize static resource delivery
+  - **Cache-Control Headers Implementation**:
+    - Add `CacheControlHeaderFilter` under `com.rcs.ssf.http.filter` generating per-endpoint headers: immutable assets (`Cache-Control: public, max-age=31536000, immutable`), audit queries (`Cache-Control: private, max-age=300`), real-time endpoints (`Cache-Control: no-cache, no-store`).
+    - Annotate resolvers with custom `@Cacheable` metadata: `@GraphqlCacheable(maxAge = 300, isPublic = false, vary = ["Authorization"])` to auto-generate correct headers.
+    - Validate headers via integration test `CacheControlHeaderTest` using Spring Mock MVC; assert correct `Cache-Control`, `Vary`, `ETag` headers on 20+ critical endpoints.
+    - Document caching strategy per entity type in `docs/caching/http-cache-strategy.md` (user data: 5min, audit: 10min, static: 1yr).
+  - **ETag & Conditional Request Support**:
+    - Generate ETags from response hash (SHA-256 of serialized JSON); wire into `ResponseEntityExceptionHandler` to return `304 Not Modified` if `If-None-Match` matches.
+    - Add conditional request logic: on `If-Modified-Since` / `If-None-Match`, compute ETag and compare with client header; short-circuit database query if match found.
+    - Benchmark ETag generation overhead: target <1% CPU increase; cache ETags in Redis with 5-min TTL to avoid repeated computation.
+    - Add Prometheus metric `http.conditional_requests.hits` to measure 304 response rate; target >15% cache hit rate on repeated queries.
+  - **CDN Integration Preparation**:
+    - Configure CDN-friendly cache headers: set `Cache-Control: public` for unauthenticated endpoints, add `Surrogate-Key` headers for fine-grained cache invalidation.
+    - Implement cache invalidation webhooks: on audit log write, emit `PURGE /api/v1/audit-logs` to CDN; document in `docs/cdn/cache-invalidation.md`.
+    - Create CDN routing rules config under `infra/cdn/routing-rules.yaml`: origin, cache TTL, header manipulation, compression settings.
+    - Add CDN performance metrics dashboard: track origin bandwidth, CDN bandwidth (savings %), cache hit ratio; alert if hit ratio <70%.
+  - **Static Resource Delivery Optimization**:
+    - Fingerprint frontend assets (add content hash to filename: `app.abc123def.js`); serve with far-future `Cache-Control` headers (1 year).
+    - Configure nginx `gzip_static on` to pre-compress assets during build; add Brotli pre-compression for `.js`, `.css`, `.json` files.
+    - Implement SubResource Integrity (SRI) hashes for CDN-sourced libraries; document in `frontend/tsconfig.json` build configuration.
+    - Measure frontend bundle size post-optimization; track via CI metric `frontend.bundle.size.bytes`; alert if >500KB (uncompressed).
+  - **Success Criteria**: 30% reduction in origin bandwidth; 304 Not Modified rate >15%; CDN cache hit ratio >85%; frontend bundle <500KB (gzipped)
+
+- [ ] **Advanced Query Plan Analysis & Execution Tracing**
+  - **Query Plan Caching & Inspection**:
+    - Capture GraphQL query execution plans (resolver chain, data loader batching, database queries) on every request; store sampled plans (1 in 100) in time-series database (InfluxDB or Prometheus).
+    - Implement custom Spring Data instrumentation to log each JDBC statement with execution time, row count, and connection acquisition time; correlate with GraphQL plan.
+    - Create Grafana dashboard showing top 10 slowest queries, resolver execution breakdown (p50/p95/p99 per resolver), and data loader efficiency (N+1 query detection).
+    - Build anomaly detection: alert if query plan changes significantly (>5% execution time variance unexplained) post-deployment.
+  - **Success Criteria**: Automated detection of query regressions; <3s p95 execution time on all queries
+
+---
 
 ---
 

@@ -87,7 +87,8 @@ clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
 - Java 21 (configured via Gradle toolchains)
 - Gradle 8+
 - Oracle Database reachable at `ORACLE_HOST:ORACLE_PORT`
-- (Optional) Docker for MinIO local testing
+- Redis 7+ reachable at `REDIS_HOST:REDIS_PORT`
+- (Optional) Docker for MinIO/Redis local testing
 
 ### Database Setup
 
@@ -253,6 +254,11 @@ docker run -d --name minio \
   -e MINIO_ROOT_USER=minioadmin \
   -e MINIO_ROOT_PASSWORD=minioadmin \
   quay.io/minio/minio server /data --console-address :9001
+
+# Redis Cache
+docker run -d --name redis-cache \
+  -p 6379:6379 \
+  redis:7.4-alpine
 ```
 
 ## Configuration
@@ -265,6 +271,8 @@ Spring Boot properties can be set via `application.yml`, profile-specific files,
 | `server.ssl.*` | Keystore path, password, alias | No | Bundled PKCS12 keystore |
 | `spring.datasource.url` | Oracle JDBC URL | No | `jdbc:oracle:thin:@//${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_DB}` |
 | `spring.datasource.username` / `password` | Database credentials | No | `ssfuser` / `ssfuser` |
+| `spring.redis.host` | Redis server hostname | No | `localhost` |
+| `spring.redis.port` | Redis server port | No | `6379` |
 | `app.jwt.secret` | Symmetric signing key for JWT | **YES** | **None** (must be set via `JWT_SECRET` environment variable) |
 | `jwt.expiration` | Token lifetime (ms) | No | `86400000` (1 day) |
 | `app.minio.url` | MinIO endpoint | No | `http://localhost:9000` |
@@ -283,6 +291,10 @@ The `security.password.bcrypt.strength` property controls the computational cost
 When increasing strength in production, load-test authentication endpoints to ensure acceptable response times. The default of 12 provides strong security for most deployments.
 
 **Breaking Change:** `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` no longer have unsafe default values. All three must be explicitly set via environment variables or the application will fail at startup with a clear error message.
+
+### Local development secrets
+
+For non-production work, source secrets from an ignored file instead of hardcoding them in `application.yml`. One simple approach is to create a `.env.local` (listed in `.gitignore`) containing only development credentials, then run `set -a && source .env.local && set +a` before `./gradlew bootRun`. This keeps local experimentation convenient without ever committing secrets. Production deployments should continue to rely on a secrets manager or orchestration platform to inject `JWT_SECRET` and other sensitive values at runtime.
 
 Profile-specific overrides live under `src/main/resources/application-*.yml`.
 
@@ -365,6 +377,23 @@ BASE_URL=https://production.example.com ./gradlew test --tests "*UserSimulation*
 - Custom Actuator indicator `you` surfaces AI readiness (`{"ai":"I am up and running!"}`)
 - Enable additional Actuator endpoints by adjusting `management.endpoints.web.exposure.include`
 
+### Partition Maintenance Job
+
+The rolling partition script (`scripts/partition-maintenance.sh`) now refuses to embed credentials on the command line. Instead, it reads the Oracle password from a local file with `600` permissions. By default the script looks for `.secrets/oracle-password` at the repo root, or you can point to another location via `ORACLE_PASSWORD_FILE`.
+
+```bash
+mkdir -p .secrets
+printf 'super-secret-password' > .secrets/oracle-password
+chmod 600 .secrets/oracle-password
+
+# optional: override location
+export ORACLE_PASSWORD_FILE=$PWD/.secrets/oracle-password
+
+./scripts/partition-maintenance.sh
+```
+
+Because SQL*Plus now receives the password via stdin, it no longer appears in process listings or shell history. Metrics continue to land in `metrics/partition-maintenance.prom` by default and can be overridden with `PARTITION_METRICS_FILE`.
+
 ### Building an OCI Image
 
 ```bash
@@ -378,6 +407,7 @@ BASE_URL=https://production.example.com ./gradlew test --tests "*UserSimulation*
 | **`IllegalStateException: Missing required environment variables`** | Set `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` environment variables before starting the app. See [Required Environment Variables](#required-environment-variables) section above. |
 | **`IllegalStateException: JWT secret must be provided`** | Set `JWT_SECRET` with ≥32 characters before starting the app |
 | **`ORA-01017` authentication errors** | Verify `ORACLE_USER`/`ORACLE_PASSWORD`; if running locally ensure Oracle XE container is healthy |
+| **`RedisConnectionFailureException: Unable to connect to Redis`** | Start Redis locally (`docker run redis:7.4-alpine` or `brew services start redis`) or set `REDIS_HOST/PORT` so the app can reach an existing instance. |
 | **GraphiQL reports `Authentication required`** | Supply a valid JWT token in the `Authorization` header. As a last resort for local development only, you may temporarily disable enforcement in `SecurityConfig`; never commit, push, or enable this bypass outside your machine. Prefer safer alternatives such as generating a valid JWT, using a temporary environment-only feature flag, or mocking auth locally, and audit commits plus CI/CD configs before merge/deploy. |
 | **MinIO health check is DOWN** | Confirm MinIO container is reachable and credentials match `minio.*` properties |
 

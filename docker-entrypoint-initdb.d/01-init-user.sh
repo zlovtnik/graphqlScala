@@ -6,8 +6,20 @@ DB_PASSWORD=${DB_USER_PASSWORD:-ssfuser}
 RETRIES=0
 MAX_RETRIES=60
 
-# Sanitize password to prevent SQL injection
-ESCAPED_PASSWORD=$(echo "$DB_PASSWORD" | sed "s/'/''/g")
+# Reject DB passwords containing double quotes
+if [[ "$DB_PASSWORD" == *'"'* ]]; then
+  echo "ERROR: Database password cannot contain double quote characters"
+  exit 1
+fi
+
+# Reject DB passwords containing single quotes
+if [[ "$DB_PASSWORD" == *"'"* ]]; then
+  echo "ERROR: Database password cannot contain single quote characters"
+  exit 1
+fi
+
+# Password is used as-is; validation above ensures no problematic characters
+ESCAPED_PASSWORD=${DB_PASSWORD}
 
 # Wait for Oracle to be fully ready
 echo "Waiting for Oracle database to start..."
@@ -60,11 +72,14 @@ BEGIN
   WHERE username = 'SSFUSER';
   
   IF v_user_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE USER ssfuser IDENTIFIED BY "ssfuser" DEFAULT TABLESPACE ssfspace';
+    EXECUTE IMMEDIATE 'CREATE USER ssfuser IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
     DBMS_OUTPUT.PUT_LINE('User ssfuser created');
   ELSE
     DBMS_OUTPUT.PUT_LINE('User ssfuser already exists');
   END IF;
+
+  EXECUTE IMMEDIATE 'ALTER USER ssfuser IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34);
+  DBMS_OUTPUT.PUT_LINE('User ssfuser password synchronized with DB_USER_PASSWORD');
 END;
 /
 
@@ -75,7 +90,7 @@ BEGIN
   EXECUTE IMMEDIATE 'GRANT CREATE TABLE TO ssfuser';
   EXECUTE IMMEDIATE 'GRANT CREATE SEQUENCE TO ssfuser';
   EXECUTE IMMEDIATE 'GRANT CREATE INDEX TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT UNLIMITED TABLESPACE TO ssfuser';
+  EXECUTE IMMEDIATE 'ALTER USER ssfuser QUOTA UNLIMITED ON ssfspace';
   DBMS_OUTPUT.PUT_LINE('Privileges granted to ssfuser');
 EXCEPTION
   WHEN OTHERS THEN

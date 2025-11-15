@@ -57,17 +57,30 @@ class UserTest {
     }
 
     @Test
-    void testAllArgsConstructor() {
-        UUID id = UUID.randomUUID();
+    void testCustomConstructorAssignsFieldsExceptId() {
         String username = "testuser";
         String email = "test@example.com";
         String password = "password123";
 
-        User user = new User(id, username, password, email);
+        User user = new User(username, password, email);
 
-        assertEquals(id, user.getId());
+        assertNull(user.getId());
         assertEquals(username, user.getUsername());
         assertEquals(email, user.getEmail());
         assertEquals(password, user.getPassword());
+    }
+
+    @Test
+    void testCustomConstructorRejectsNullArguments() {
+        assertThrows(IllegalArgumentException.class, () -> new User(null, "pw", "email@example.com"));
+        assertThrows(IllegalArgumentException.class, () -> new User("user", null, "email@example.com"));
+        assertThrows(IllegalArgumentException.class, () -> new User("user", "pw", null));
+    }
+
+    @Test
+    void testCustomConstructorRejectsBlankArguments() {
+        assertThrows(IllegalArgumentException.class, () -> new User("", "pw", "email@example.com"));
+        assertThrows(IllegalArgumentException.class, () -> new User("user", "", "email@example.com"));
+        assertThrows(IllegalArgumentException.class, () -> new User("user", "pw", ""));
     }
 }
