@@ -1,0 +1,179 @@
+# CDN Routing Rules for GraphQL Optimization
+#
+# This configuration defines how requests are routed through the CDN,
+# cache TTLs, and compression settings for optimal performance.
+#
+# Production CDN providers: Cloudflare, Akamai, AWS CloudFront, Azure CDN
+# Development: Simulate via nginx with caching headers
+
+cdn:
+  enabled: true
+  provider: "cloudflare"  # Options: cloudflare, akamai, cloudfront, azure, nginx
+
+  # Origin server configuration
+  origin:
+    host: "api.example.com"
+    port: 8443
+    protocol: "https"
+    path: "/graphql"
+    healthcheck_path: "/actuator/health"
+    healthcheck_interval: "30s"
+
+  # Cache rules by endpoint pattern
+  cache_rules:
+    # GraphQL introspection queries - high cache TTL
+    - pattern: "/graphql"
+      methods: ["POST"]
+      cache_on: true
+      ttl: "3600s"  # 1 hour
+      conditions:
+        - query_contains: "__schema"
+        - query_contains: "__type"
+      headers:
+        cache_control: "public, max-age=3600, s-maxage=7200"
+        vary: "Accept-Encoding"
+
+    # Public queries - moderate cache TTL
+    - pattern: "/graphql"
+      methods: ["POST"]
+      cache_on: true
+      ttl: "300s"  # 5 minutes
+      conditions:
+        - query_type: "query"
+        - not: "query_contains:@authenticated"
+      headers:
+        cache_control: "public, max-age=300, s-maxage=600"
+        vary: "Accept-Encoding"
+
+    # Authenticated queries - short TTL or no cache
+    - pattern: "/graphql"
+      methods: ["POST"]
+      cache_on: false
+      conditions:
+        - query_contains: "@authenticated"
+      headers:
+        cache_control: "private, no-store"
+
+    # Mutations - never cache
+    - pattern: "/graphql"
+      methods: ["POST"]
+      cache_on: false
+      conditions:
+        - query_type: "mutation"
+      headers:
+        cache_control: "no-store, no-cache, must-revalidate"
+
+    # Subscriptions - streaming, no cache
+    - pattern: "/graphql/subscriptions"
+      methods: ["POST", "WS"]
+      cache_on: false
+      headers:
+        cache_control: "no-cache"
+
+  # Compression configuration
+  compression:
+    enabled: true
+    algorithms: ["br", "gzip"]  # Brotli preferred, GZIP fallback
+    min_size: "1024"  # Compress responses >1KB
+    content_types:
+      - "application/json"
+      - "application/graphql-response+json"
+      - "text/html"
+      - "text/css"
+      - "application/javascript"
+    
+  # CORS and security headers
+  security_headers:
+    strict_transport_security: "max-age=31536000; includeSubDomains"
+    content_security_policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    x_content_type_options: "nosniff"
+    x_frame_options: "DENY"
+    x_xss_protection: "1; mode=block"
+    referrer_policy: "strict-origin-when-cross-origin"
+
+  # Rate limiting at CDN edge
+  rate_limiting:
+    enabled: true
+    requests_per_second: 10000
+    burst_size: 1000
+    rules:
+      - pattern: "/graphql"
+        limit: "10000 req/s per IP"
+        window: "60s"
+
+  # Geographic routing (geo-steering)
+  geo_routing:
+    enabled: false
+    rules:
+      - region: "us-east"
+        origin: "api-us-east.example.com"
+      - region: "eu-west"
+        origin: "api-eu-west.example.com"
+      - region: "ap-southeast"
+        origin: "api-ap.example.com"
+
+  # Monitoring and metrics
+  monitoring:
+    log_requests: true
+    log_level: "info"
+    metrics:
+      - cache_hit_ratio
+      - response_time_p50
+      - response_time_p95
+      - response_time_p99
+      - bandwidth_saved
+      - compression_ratio
+    
+    # Alerts
+    alerts:
+      - metric: "cache_hit_ratio"
+        condition: "< 40%"
+        action: "notify-ops"
+      - metric: "response_time_p99"
+        condition: "> 5000ms"
+        action: "notify-ops"
+      - metric: "origin_error_rate"
+        condition: "> 1%"
+        action: "page-on-call"
+
+  # Purge/invalidation rules
+  purge:
+    # Invalidate cache when mutations occur
+    patterns:
+      - "/graphql/*"
+    
+    # Full purge schedule (low traffic times)
+    full_purge_schedule: "0 2 * * *"  # Daily at 2 AM UTC
+    
+    # Soft purge (return stale while validating)
+    soft_purge_enabled: true
+    soft_purge_ttl: "30s"
+
+  # CloudFront-specific settings (if provider: cloudfront)
+  cloudfront:
+    distribution_id: "${AWS_CLOUDFRONT_DISTRIBUTION_ID}"
+    behaviors:
+      - path_pattern: "/graphql*"
+        compress: true
+        viewer_protocol_policy: "redirect-to-https"
+        cache_policy_id: "custom-graphql-policy"
+        origin_request_policy_id: "GraphQL-API"
+
+  # Cloudflare-specific settings (if provider: cloudflare)
+  cloudflare:
+    zone_id: "${CLOUDFLARE_ZONE_ID}"
+    api_token: "${CLOUDFLARE_API_TOKEN}"
+    rules:
+      - action: "cache"
+        expression: '(http.host eq "api.example.com" and http.request.uri.path contains "graphql")'
+        cache_ttl: 300
+      - action: "compress"
+        expression: '(http.host eq "api.example.com")'
+        compression_level: 6
+
+  # Expected performance improvements
+  expected_metrics:
+    cache_hit_ratio: "40-60%"  # Well-designed GraphQL APIs
+    bandwidth_reduction: "50-70%"  # With compression + caching
+    latency_p99_improvement: "20-40%"  # For cache hits
+    origin_load_reduction: "45-65%"  # Fewer origin requests
