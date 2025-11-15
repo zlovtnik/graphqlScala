@@ -1,22 +1,38 @@
 # SSF GraphQL Copilot Instructions
-- **Architecture**: Spring Boot 3.5 GraphQL gateway (`src/main/java/com/rcs/ssf`) fronting Oracle stored procs plus MinIO and Redis. HTTP flows enter Jetty @ 8443, pass `JwtAuthenticationFilter` → `SecurityFilterChain` (`SecurityConfig`) → GraphQL instrumentation enforcing JWT and field-level auth.
-- **Modules**: Backend lives under `src/main/java/com/rcs/ssf/**`, SQL assets in `sql/` (packaged via Gradle resource override), Flyway migrations under `db/migration/`, Angular client in `frontend/` using Apollo.
-- **GraphQL layer**: Schema resides in `src/main/resources/graphql/schema.graphqls`. Resolvers are split by concern (`graphql/AuthMutation`, `graphql/UserQuery`, etc.) and must delegate to `service` classes + Spring Data repositories. Additions require schema update + resolver + unit/integration test in `src/test/java`.
-- **DTOs & validation**: REST and GraphQL payloads flow through `dto/` classes annotated with Jakarta validation; surface business rules there instead of controllers to keep GraphQL resolvers thin.
-- **Security**: All new endpoints must respect JWT-first posture. HTTP access rules are centralized in `SecurityConfig`; GraphQL requests go through `GraphQLAuthorizationInstrumentation` and `GraphQLSecurityHandler`. Never bypass by exposing unauthenticated controller paths.
-- **Environment validation**: Startup fails unless `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` satisfy `EnvironmentValidator` + `JwtProperties.validateSecretEntropy`. Keep secrets in env vars or `.env` (ignored) and document any new required vars in `README.md` + `HELP.md`.
-- **Services & data**: Business logic belongs in `service/` (e.g., `UserService`, `AuditService`). Persistence uses Spring Data JPA against Oracle tables defined in `sql/tables/**` with supporting packages under `sql/packages/**`. Favor stored procedure calls exposed via repositories/dynamic CRUD helpers.
-- **Repositories & transactions**: `repository/` beans wrap stored procedures plus auditing; reuse existing transaction boundaries and annotate new methods with `@Transactional` where cross-entity updates must stay atomic.
-- **Caching strategy**: Default cache is Caffeine (`CacheConfig`) with Redis as secondary. Reuse existing cache names; prefer `@Cacheable` backed by Caffeine for hot reads and `PersistedQueryRegistry` + Redis for GraphQL APQ. When touching persisted queries, keep hash IDs stable and record metrics via Micrometer.
-- **Resilience & metrics**: Use `Resilience4jConfig` beans (`database`, `redis`, `minio`, `auth-service`, `audit-service`) for circuit breakers/retries instead of ad-hoc logic. Export any new metrics via Micrometer so Grafana dashboards stay accurate.
-- **Health & observability**: Custom contributors live in `HealthConfig`, pool metrics in `PoolMonitoringConfig`, and MinIO wiring in `MinioConfig`. Extend these rather than rolling bespoke health checks.
-- **Database ops**: Schema bootstrap is driven by `sql/master.sql`; Flyway migrations follow `V###__description.sql` naming (`db/migration/`). Partition automation and maintenance scripts live under `scripts/` and `infra/cronjobs`; keep PL/SQL changes in the matching folder and update `master.sql` ordering.
-- **Partition maintenance**: `scripts/partition-maintenance.sh` reads the Oracle password from `.secrets/oracle-password` (chmod 600). If adjusting cron targets, also edit `infra/cronjobs/partition-maintenance/` manifests.
-- **Frontend**: Angular 18 app under `frontend/` uses Apollo client with operations in `src/app/core/graphql`. Update `.ts` gql documents plus generated types (`npm run codegen`) when backend schema changes. Dev server assumes backend on `http://localhost:8080/graphql` (override via env files).
-- **Builds & tests**: `./gradlew clean build` runs unit tests + JaCoCo (min coverage 75%). `./gradlew test` auto-finalizes with `jacocoTestReport` (HTML in `build/jacocoHtml/index.html`). Use JUnit 5, Mockito, `spring-graphql-test`, and H2/Testcontainers for DB-facing tests. Angular side uses `npm test` and `npm run build`.
-- **GraphQL testing**: Prefer `@GraphQlTest` slices for resolver coverage and `WebGraphQlTester` for persisted query flows; mock downstream services rather than hitting Oracle unless an integration test explicitly spins up Testcontainers.
-- **Runtime**: `./gradlew bootRun` serves HTTPS on 8443 using `src/main/resources/keystore.p12`. Redis 7+, Oracle, and MinIO must be reachable; `docker-compose.yml` plus README snippets show container commands.
-- **Deployment**: `./gradlew bootBuildImage --imageName=ssf-graphql:latest` builds OCI images. Keep Dockerfile and `docker-compose.yml` in sync when adding new env vars or ports.
-- **Contribution checklist**: Touching auth, persistence, or migrations requires updating docs (`README.md`, `sql/README.md`, or `frontend/README.md`) and adding tests. GraphQL or API changes should include sample queries/mutations in docs plus coverage for both success and failure paths.
-- **Static assets & proxies**: If you change TLS, ports, or static hosting, adjust `nginx.conf`, `Dockerfile`, and `frontend/ngsw-config.json` together so the Angular PWA stays aligned with the backend.
-- **CI hooks**: GitHub Actions expect Gradle wrappers + npm ci steps to pass; never delete `gradlew`/`gradlew.bat`, and keep `static-analysis.datadog.yml` up to date if you add new modules so Datadog scans remain green.
+
+## Architecture & Flow
+- Spring Boot 3.5 GraphQL gateway lives under `src/main/java/com/rcs/ssf`, fronts Oracle stored procs, MinIO, and Redis, and serves Jetty TLS on 8443.
+- Requests ride `JwtAuthenticationFilter` → `SecurityConfig` filter chain → `GraphQLAuthorizationInstrumentation` enforcing JWT plus field-level auth.
+
+## Code Organization
+- GraphQL schema is `src/main/resources/graphql/schema.graphqls`; resolvers stay thin and delegate to `service/**` + `repository/**` for business rules.
+- SQL assets ship from `sql/**` while Flyway migrations live in `db/migration` using `V###__description.sql`; keep `sql/master.sql` ordering in sync.
+- Angular 18 client in `frontend/` (Apollo in `src/app/core/graphql`) must be updated alongside schema changes and regenerated via `npm run codegen`.
+
+## Data & Services
+- DTOs in `dto/**` own Jakarta validation so controllers/resolvers only orchestrate.
+- Stored procedure access is wrapped through repository beans plus dynamic CRUD helpers from `sql/packages/**`; use `@Transactional` conservatively for multi-entity writes.
+- Partition automation scripts (`scripts/partition-maintenance.sh`, `infra/cronjobs/**`) assume Oracle creds in `.secrets/oracle-password` with chmod 600.
+
+## Security & Environment
+- Never add unauthenticated HTTP paths; update `SecurityConfig` + instrumentation when touching auth.
+- Startup validates `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` via `EnvironmentValidator` and `JwtProperties.validateSecretEntropy`; document any new env var in `README.md` + `HELP.md`.
+
+## Caching, Resilience, Observability
+- Default cache stack: Caffeine via `CacheConfig` with Redis secondary; reuse existing cache names and keep persisted query hashes stable for APQ stored in Redis.
+- Circuit breakers/retries configured in `Resilience4jConfig` (`database`, `redis`, `minio`, `auth-service`, `audit-service`); export new metrics through Micrometer so Grafana dashboards stay aligned.
+- Health contributors live in `HealthConfig`, pool monitoring under `PoolMonitoringConfig`, MinIO wiring inside `MinioConfig`; extend these instead of rolling bespoke checks.
+
+## Build, Test, Runtime
+- `./gradlew clean build` enforces JaCoCo ≥75%; `./gradlew test` auto-runs `jacocoTestReport` with HTML under `build/jacocoHtml`.
+- Use JUnit 5 + Mockito + `spring-graphql-test`; prefer `@GraphQlTest` and `WebGraphQlTester` slices, spinning up Testcontainers only when Oracle behavior is required.
+- Runtime via `./gradlew bootRun` expects Redis 7+, Oracle, MinIO (see `docker-compose.yml` for local stack); HTTPS cert is `src/main/resources/keystore.p12`.
+- Container image builds use `./gradlew bootBuildImage --imageName=ssf-graphql:latest`; keep Dockerfile, `docker-compose.yml`, and env var docs in sync.
+
+## Frontend & Docs
+- Backend schema changes require matching Angular updates plus doc snippets in `frontend/README.md`; keep dev server pointing at `http://localhost:8080/graphql` unless updating env files.
+- Any change to auth, persistence, or migrations mandates doc updates (`README.md`, `HELP.md`, `sql/README.md`) and both happy-path and failure-path tests.
+- TLS/port changes must be reflected across `nginx.conf`, Dockerfile, and `frontend/ngsw-config.json` so the PWA continues to load cached assets.
+
+## CI Expectations
+- GitHub Actions rely on Gradle wrapper + npm CI; never delete `gradlew`/`gradlew.bat` and update `static-analysis.datadog.yml` when adding modules to keep scans green.
