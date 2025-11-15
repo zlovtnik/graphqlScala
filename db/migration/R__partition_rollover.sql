@@ -1,7 +1,7 @@
 -- Repeatable Flyway migration driving rolling partition maintenance.
 -- Responsibilities:
 --   * Create partitions 90 days in advance following P_YYYY_MM naming.
---   * Move partitions older than 12 months to an archive tablespace with archival compression.
+--   * Move partitions older than 12 months to an archive tablespace (without Advanced Compression on XE).
 --   * Drop partitions older than 24 months to enforce retention policy.
 SET SERVEROUTPUT ON
 DECLARE
@@ -32,7 +32,10 @@ DECLARE
 
     PROCEDURE ensure_future_partitions(p_table VARCHAR2) IS
     BEGIN
-        FOR offset IN 0 .. c_future_months LOOP
+        IF c_future_months <= 0 THEN
+            RETURN;
+        END IF;
+        FOR offset IN 0 .. c_future_months - 1 LOOP
             DECLARE
                 v_month DATE := ADD_MONTHS(TRUNC(SYSDATE, 'MM'), offset);
                 v_part  VARCHAR2(30) := partition_name(v_month);
@@ -56,9 +59,10 @@ DECLARE
     PROCEDURE archive_partition(p_table VARCHAR2, p_partition VARCHAR2) IS
     BEGIN
         BEGIN
+            -- Oracle XE does not support Advanced Compression, so avoid COMPRESS clauses.
             EXECUTE IMMEDIATE 'ALTER TABLE ' || p_table || ' MOVE PARTITION ' || p_partition ||
-                              ' TABLESPACE ' || c_archive_tablespace || ' COMPRESS FOR ARCHIVE HIGH UPDATE INDEXES';
-            DBMS_OUTPUT.PUT_LINE(p_table || ': archived partition ' || p_partition);
+                              ' TABLESPACE ' || c_archive_tablespace || ' UPDATE INDEXES';
+            DBMS_OUTPUT.PUT_LINE(p_table || ': archived partition ' || p_partition || ' (moved without compression)');
         EXCEPTION
             WHEN OTHERS THEN
                 DBMS_OUTPUT.PUT_LINE(p_table || ': failed to archive partition ' || p_partition || ' -> ' || SQLERRM);

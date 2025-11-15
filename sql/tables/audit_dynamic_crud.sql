@@ -1,4 +1,6 @@
--- Partitioned + compressed definition for audit_dynamic_crud table
+-- The XE build that powers local development does not expose partitioning or
+-- advanced compression. Keep the table definition simple so bootstrap can run
+-- everywhere while higher editions can layer features via regular migrations.
 CREATE TABLE audit_dynamic_crud (
     id NUMBER PRIMARY KEY,
     table_name VARCHAR2(128) NOT NULL,
@@ -12,10 +14,4 @@ CREATE TABLE audit_dynamic_crud (
     message VARCHAR2(4000),
     error_code VARCHAR2(50),
     created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL
-)
-ROW STORE COMPRESS ADVANCED
-PARTITION BY RANGE (created_at)
-(
-    PARTITION P_1970_01 VALUES LESS THAN (TO_DATE('1970-02-01','YYYY-MM-DD')),
-    PARTITION P_9999_12 VALUES LESS THAN (TO_DATE('9999-12-31','YYYY-MM-DD'))
 );

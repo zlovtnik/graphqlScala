@@ -5,7 +5,7 @@ spring:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
     driver-class-name: oracle.jdbc.OracleDriver
     username: ${ORACLE_USER:ssfuser}
-    password: ${ORACLE_PASSWORD:ssfuser}
+    password: ${ORACLE_PASSWORD:ssfpassword}
     hikari:
       connection-timeout: 30000
       maximum-pool-size: 20
@@ -27,6 +27,7 @@ spring:
     database-platform: org.hibernate.dialect.OracleDialect
     hibernate:
       ddl-auto: validate
+    defer-datasource-initialization: false
     properties:
       hibernate:
         format_sql: true
@@ -92,13 +93,13 @@ query:
 
 app:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET:}
   security:
     enable-default-user-role: false  # Least-privilege: no implicit roles unless explicitly enabled
   minio:
     url: http://localhost:9000
-    access-key: ${MINIO_ACCESS_KEY}
-    secret-key: ${MINIO_SECRET_KEY}
+    access-key: ${MINIO_ACCESS_KEY:minio-access-key}
+    secret-key: ${MINIO_SECRET_KEY:minio-secret-key}
 
 ssf:
   cache:
@@ -113,3 +114,8 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+
+schema:
+  bootstrap:
+    enabled: true
+    continue-on-error: true

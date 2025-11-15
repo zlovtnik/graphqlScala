@@ -24,24 +24,24 @@ DECLARE
 	END ensure_index;
 BEGIN
 	ensure_index('idx_audit_dynamic_crud_table_name',
-					 'CREATE INDEX idx_audit_dynamic_crud_table_name ON audit_dynamic_crud(table_name) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_table_name ON audit_dynamic_crud(table_name)');
 
 	ensure_index('idx_audit_dynamic_crud_operation',
-					 'CREATE INDEX idx_audit_dynamic_crud_operation ON audit_dynamic_crud(operation) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_operation ON audit_dynamic_crud(operation)');
 
 	ensure_index('idx_audit_dynamic_crud_created_at',
-					 'CREATE INDEX idx_audit_dynamic_crud_created_at ON audit_dynamic_crud(created_at) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_created_at ON audit_dynamic_crud(created_at)');
 
 	ensure_index('idx_audit_dynamic_crud_actor',
-					 'CREATE INDEX idx_audit_dynamic_crud_actor ON audit_dynamic_crud(actor) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_actor ON audit_dynamic_crud(actor)');
 
 	ensure_index('idx_audit_dynamic_crud_table_created',
-					 'CREATE INDEX idx_audit_dynamic_crud_table_created ON audit_dynamic_crud(table_name, created_at) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_table_created ON audit_dynamic_crud(table_name, created_at)');
 
 	ensure_index('idx_audit_dynamic_crud_op_created',
-					 'CREATE INDEX idx_audit_dynamic_crud_op_created ON audit_dynamic_crud(operation, created_at) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_op_created ON audit_dynamic_crud(operation, created_at)');
 
 	ensure_index('idx_audit_dynamic_crud_status_created',
-					 'CREATE INDEX idx_audit_dynamic_crud_status_created ON audit_dynamic_crud(status, created_at) LOCAL COMPRESS ADVANCED LOW');
+				 'CREATE INDEX idx_audit_dynamic_crud_status_created ON audit_dynamic_crud(status, created_at)');
 END;
 /
