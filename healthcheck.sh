@@ -8,6 +8,7 @@
 export ORACLE_HOME=${ORACLE_HOME:-/opt/oracle/product/26ai/dbhomeFree}
 export ORACLE_SID=${ORACLE_SID:-FREE}
 export PATH=$ORACLE_HOME/bin:$PATH
+PARTITION_METRICS_FILE=${PARTITION_METRICS_FILE:-/app/metrics/partition-maintenance.prom}
 
 # Check if database is up and accepting connections
 sqlplus -s / as sysdba << EOF
@@ -30,10 +31,15 @@ sqlplus -s / as sysdba << EOF
 EOF
 
 # Check exit code
-if [ $? -eq 0 ]; then
-    echo "Oracle Database is healthy"
-    exit 0
+STATUS=$?
+
+if [ $STATUS -eq 0 ]; then
+  echo "Oracle Database is healthy"
+  if [ -n "${PARTITION_METRICS_FILE:-}" ] && [ -f "${PARTITION_METRICS_FILE}" ]; then
+    cat "${PARTITION_METRICS_FILE}"
+  fi
+  exit 0
 else
     echo "Oracle Database is not ready"
-    exit 1
+  exit 1
 fi

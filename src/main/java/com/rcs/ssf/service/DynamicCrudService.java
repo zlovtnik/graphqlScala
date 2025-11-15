@@ -3,8 +3,11 @@ package com.rcs.ssf.service;
 import com.rcs.ssf.dto.DynamicCrudRequest;
 import com.rcs.ssf.dto.DynamicCrudResponseDto;
 import com.rcs.ssf.dynamic.*;
+import com.rcs.ssf.dynamic.streaming.QueryStreamOptions;
+import com.rcs.ssf.dynamic.streaming.QueryStreamingService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.lang.NonNull;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -16,12 +19,14 @@ import javax.sql.DataSource;
 import java.sql.ResultSetMetaData;
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class DynamicCrudService {
 
     private final JdbcTemplate jdbcTemplate;
     private final DynamicCrudGateway dynamicCrudGateway;
+    private final QueryStreamingService queryStreamingService;
     private final String requiredRole;
 
     private static final Set<String> ALLOWED_TABLES = Set.of(
@@ -32,13 +37,17 @@ public class DynamicCrudService {
         "PASSWORD", "PASSWORD_HASH", "SECRET", "SECRET_KEY", "ACCESS_KEY", "API_KEY", "TOKEN", "REFRESH_TOKEN"
     );
 
+    private static final int STREAM_FETCH_SIZE = 250;
+
     public DynamicCrudService(
         @NonNull DataSource dataSource,
         DynamicCrudGateway dynamicCrudGateway,
+        QueryStreamingService queryStreamingService,
         @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole
     ) {
         this.jdbcTemplate = new JdbcTemplate(dataSource);
         this.dynamicCrudGateway = dynamicCrudGateway;
+        this.queryStreamingService = queryStreamingService;
         this.requiredRole = requiredRole;
     }
 
@@ -96,22 +105,31 @@ public class DynamicCrudService {
 
         Set<String> visibleColumns = columnLookup.keySet();
 
-        List<Map<String, Object>> rows = jdbcTemplate.query(
-            sql.toString(),
-            (rs, rowNum) -> {
-                Map<String, Object> row = new HashMap<>();
-                ResultSetMetaData meta = rs.getMetaData();
-                for (int i = 1; i <= meta.getColumnCount(); i++) {
-                    String columnName = meta.getColumnName(i);
-                    if (!visibleColumns.contains(columnName.toUpperCase(Locale.ROOT))) {
-                        continue;
-                    }
-                    row.put(columnName, rs.getObject(i));
+        RowMapper<Map<String, Object>> rowMapper = (rs, rowNum) -> {
+            Map<String, Object> row = new HashMap<>();
+            ResultSetMetaData meta = rs.getMetaData();
+            for (int i = 1; i <= meta.getColumnCount(); i++) {
+                String columnName = meta.getColumnName(i);
+                if (!visibleColumns.contains(columnName.toUpperCase(Locale.ROOT))) {
+                    continue;
                 }
-                return row;
-            },
-            queryParams.toArray()
-        );
+                row.put(columnName, rs.getObject(i));
+            }
+            return row;
+        };
+
+        List<Map<String, Object>> rows;
+        QueryStreamOptions streamOptions = request.getLimit() != null
+            ? new QueryStreamOptions("dynamic-crud-" + request.getTableName(), STREAM_FETCH_SIZE)
+            : null;
+
+        try (Stream<Map<String, Object>> stream = queryStreamingService.stream(
+                sql.toString(),
+                queryParams,
+                rowMapper,
+                streamOptions)) {
+            rows = stream.collect(Collectors.toList());
+        }
 
         String countSql = "SELECT COUNT(*) FROM " + request.getTableName();
         if (!whereClauses.isEmpty()) {

@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ssf-partition-maintenance
+  labels:
+    app: ssf
+    component: partition-rollover
+spec:
+  schedule: "15 2 * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: partition-rollover
+              image: ghcr.io/rcs/ssf-app:latest
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/bash
+                - -c
+                - "/app/scripts/partition-maintenance.sh"
+              env:
+                - name: ORACLE_HOST
+                  valueFrom:
+                    secretKeyRef:
+                      name: ssf-oracle
+                      key: host
+                - name: ORACLE_PORT
+                  valueFrom:
+                    secretKeyRef:
+                      name: ssf-oracle
+                      key: port
+                - name: ORACLE_DB
+                  value: FREEPDB1
+                - name: ORACLE_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: ssf-oracle
+                      key: username
+                - name: ORACLE_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: ssf-oracle
+                      key: password
+                - name: PARTITION_METRICS_FILE
+                  value: /var/metrics/partition-maintenance.prom
+              volumeMounts:
+                - name: metrics
+                  mountPath: /var/metrics
+          volumes:
+            - name: metrics
+              emptyDir: {}

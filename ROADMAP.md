@@ -183,67 +183,90 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 
 ### **Priority 2: Stored Procedure Optimization** 🟡
 - [ ] **Profile PL/SQL Package Performance**
-  - Use Oracle AWR and ASH reports for bottleneck identification
-  - Optimize cursor usage and array processing
-  - Implement query result caching in PL/SQL
-  - Add performance monitoring to stored procedures
+  - **AWR/ASH workflow**: Schedule weekly AWR/ASH snapshot reviews for `dynamic_crud_pkg`, `user_pkg`, and any ad-hoc packages touched by GraphQL resolvers; document the top SQL_IDs and wait events with recommended fixes in Confluence before each sprint demo.
+  - **Cursor + array audit**: Enable `DBMS_PROFILER` on critical packages for one full load test run, flag implicit cursor usage >5% of total execution time, and rewrite to explicit BULK COLLECT/FORALL where it removes context switches.
+  - **PL/SQL result cache**: Baseline hit/miss ratio using `V$RESULT_CACHE_STATISTICS`, then add `RESULT_CACHE RELIES_ON (...)` clauses for deterministic functions; target >80% cache hit rate for read-heavy packages.
+  - **Runtime instrumentation**: Add `DBMS_APPLICATION_INFO.set_action` plus custom `DBMS_MONITOR.SERV_MOD_ACT_STAT_ENABLE` hooks so Prometheus exporters can emit per-package latency, executions, and error counts.
 
 - [ ] **Implement Oracle Optimizer Hints**
-  - Add appropriate hints for complex queries
-  - Use parallel query hints for large data operations
-  - Implement index hinting for specific query patterns
-  - Add query rewrite hints for better execution plans
+  - **Hint catalog**: Create a living catalog that maps each high-cost statement to approved hints (e.g., `/*+ GATHER_PLAN_STATISTICS */`, `LEADING`, `USE_NL`), and store it alongside the package specs to keep code reviews consistent.
+  - **Parallel operations**: For ETL-style procedures processing >1M rows, test `/*+ PARALLEL(table 4) */` during Gatling load runs and ensure CPU headroom stays below 70% before enabling in production.
+  - **Index awareness**: Coordinate with the indexing roadmap to align `INDEX(table index_name)` hints with the newest composite indexes; add guardrails that automatically disable hints when `DBA_INDEX_USAGE` shows <5% utilization.
+  - **Query rewrite + plan baselines**: Leverage `/*+ RESULT_CACHE */`, `MATERIALIZE`, and SQL Plan Management baselines; capture explain plans pre/post deployment to guarantee regressions are caught in CI.
 
 - [ ] **Optimize Array Processing**
-  - Review OracleArrayUtils for performance bottlenecks
-  - Implement direct JDBC array operations where beneficial
-  - Add array size limits and chunking for large operations
-  - Optimize memory usage in array processing
+  - **OracleArrayUtils profiling**: Run Java Flight Recorder + Mission Control on batch-heavy endpoints to capture allocation hotspots inside `OracleArrayUtils`; convert any reflection-based copying to direct `System.arraycopy` or driver-native APIs.
+  - **Direct JDBC array ops**: Where stored procedures accept associative arrays, switch to `oracle.jdbc.OraclePreparedStatement#setARRAY` / `setPlsqlIndexTable` so the driver skips intermediate object creation.
+  - **Chunking policy**: Introduce adaptive chunk sizes (default 2,000 rows, max 10,000) driven by heap pressure metrics; log chunk decisions for later tuning.
+  - **Memory guardrails**: Emit Micrometer gauges for array buffer utilization and pause the producer when Eden occupancy exceeds 80% to avoid GC spikes.
 
 - [ ] **Implement Query Result Streaming**
-  - Add streaming responses for large datasets
-  - Implement cursor-based pagination
-  - Add result set streaming for export operations
-  - Optimize memory usage for large queries
+  - **Server-side cursors**: Enable `setFetchSize(500)` and `ResultSet.TYPE_FORWARD_ONLY` on long-running queries, wiring them into Spring GraphQL data fetchers via `StreamSupport` so consumers can subscribe without loading everything into memory.
+  - **Cursor-based pagination**: Standardize on opaque `pageState` tokens (table PK + `ROWID`) returned from stored procedures; add contract tests that validate monotonic ordering and deterministic replays.
+  - **Export pipelines**: Build a reusable exporter that pipes JDBC `ResultSet` rows into `SseEmitter`/`ZipOutputStream` so CSV/JSON exports stream incrementally, keeping memory usage flat.
+  - **Back-pressure + monitoring**: Surface per-stream throughput, client disconnects, and cursor lifetime metrics; auto-close any cursor idle for >30s.
 
 - [ ] **Database Connection Pool Monitoring**
-  - Add metrics for pool utilization and wait times
-  - Implement connection leak detection and alerts
-  - Add pool performance dashboards
-  - Configure pool size auto-scaling
+  - **Metrics + tracing**: Expand the Micrometer registry with gauges for active/idle pool size, wait duration histograms, and connection age; propagate pool context via `TracingDataSource` so slow stored procedures can be tied to specific pool events.
+  - **Leak detection**: Set `leakDetectionThreshold=60000`, emit structured logs with stack traces, and push them into Loki/ELK; add PagerDuty alerts when more than three leaks fire within 15 minutes.
+  - **Dashboards**: Publish Grafana dashboards showing utilization, queue depth, average borrow time, and 95th percentile acquisition latency; tag panels by environment (dev/stage/prod).
+  - **Auto-scaling policy**: Feed pool metrics into the Platform HPA (or custom controller) that scales the Spring Boot pods between 2 and 6 replicas; tie max pool size to `CPU >70%` and `wait time >2s` rules so the pool grows predictably.
 
 ### **Priority 3: Advanced Oracle Features** 🟢
 - [ ] **Enable Oracle Advanced Compression**
-  - Implement table compression for audit logs
-  - Add index compression for better performance
-  - Configure compression for historical data
-  - Monitor compression ratios and performance impact
+  - **Audit table DDL**: Rebuild `AUDIT_*` tables online with `ROW STORE COMPRESS ADVANCED`, snapshot row counts pre/post, and keep rollback scripts under `sql/tables/rollback/`.
+  - **Index compaction**: Convert high-cardinality indexes to `COMPRESS ADVANCED LOW`, capture `DBA_INDEX_USAGE` before/after, and alert if logical reads increase >5%.
+  - **Historical tiers**: Move partitions older than 12 months into `COMPRESS FOR ARCHIVE HIGH` tablespaces; document retention windows per compliance requirement.
+  - **Compression observability**: Add nightly job that logs compression ratios, CPU overhead, and IO savings into Grafana; define rollback trigger if CPU >70% during peak.
 
 - [ ] **Implement Oracle In-Memory Column Store**
-  - Configure IM column store for analytics queries
-  - Optimize audit data queries with in-memory processing
-  - Add in-memory population strategies
-  - Monitor memory usage and performance gains
+  - **Sizing + pool carve-out**: Reserve 10–15% of SGA for `INMEMORY_SIZE`, document approval from DBA lead, and script auto-tuning based on AWR hit ratios.
+  - **Heat maps + population**: Tag top audit fact tables and materialized views with `INMEMORY PRIORITY HIGH DISTRIBUTE AUTO`; enable heat map to confirm access frequency.
+  - **Query rewrites**: Update critical analytics packages to use vector transformation hints (`/*+ VECTOR_TRANSFORM */`) and verify plan changes via SQL Monitor.
+  - **Runtime monitoring**: Export IM column store statistics (population status, evictions, IMCU compression) to Prometheus; fail deployment if eviction rate exceeds 2%/hr.
 
 - [ ] **Database Partitioning Strategy**
-  - Partition audit tables by date ranges
-  - Implement partition pruning for query optimization
-  - Add automated partition maintenance
-  - Configure partition-wise joins
+  - **Range partition design**: Partition `AUDIT_*` tables by `created_at` monthly, align local indexes, and codify naming convention (`P_YYYY_MM`).
+    - Update `sql/tables/audit_*.sql` templates plus new Flyway script `db/migration/V220__audit_monthly_partitions.sql` so prod + lower envs share the same canonical DDL.
+    - Add companion index script (`V221__audit_partition_indexes.sql`) to keep local indexes aligned with each partition and assert the naming rule in a Flyway callback.
+  - **Pruning validation**: Add regression tests that capture `EXPLAIN PLAN` output to confirm `PARTITION RANGE ITERATOR` usage for top 5 queries.
+    - Create SQL harness under `sql/tests/partitioning/` to snapshot `EXPLAIN PLAN FOR <query>`; pipe results into `src/test/java/com/rcs/ssf/db/PartitionPlanTest.java` using Testcontainers + Oracle XE.
+    - Fail the test suite if the plan omits `PARTITION RANGE ITERATOR` or touches >2 partitions so CI protects against regressions.
+  - **Automated maintenance**: Build Flyway tasks that create next-quarter partitions, merge old ones into archive storage, and purge >24 month partitions.
+    - Implement `db/migration/R__partition_rollover.sql` (Repeatable) that reads partition metadata via PL/SQL and auto-creates `P_<YYYY_MM>` partitions 90 days ahead.
+    - Add `scripts/partition-maintenance.sh` invoked by `cronjob.yaml` to merge and purge partitions, emitting metrics to Grafana via `healthcheck.sh` hook.
+  - **Partition-wise joins**: Refactor ETL procedures to leverage `PARTITION-WISE HASH` joins; document optimizer hints and monitor elapsed time deltas.
+    - Touch `sql/packages/dynamic_crud_pkg_body.sql` and `sql/packages/user_pkg_body.sql` to add `/*+ PARTITION(WISE HASH) */` hints plus chunked processing.
+    - Capture elapsed time deltas inside `oracle_profiler` tables and surface them via a new Grafana panel so tuning wins stay visible.
 
 - [ ] **Oracle RAC Optimization**
-  - Configure connection affinity for RAC nodes
-  - Implement load balancing across RAC instances
-  - Add RAC-specific performance monitoring
-  - Optimize for RAC interconnect performance
+  - **Connection affinity**: Configure UCP/ONS with `RuntimeLoadBalancingFeature` and `ONSConfiguration` so Spring DataSource pins write workloads to local instances.
+    - Extend `src/main/resources/application-prod.yml` with UCP stanza (ONS hosts, FAN enabled) and wire custom `RacAwareDataSourceConfig` bean under `com.rcs.ssf.config`.
+    - Document rollout steps in `docs/rac-playbook.md`, including credential rotation and fallback plan.
+  - **Load balancing**: Enable server-side load balancing with SCAN listeners; run Gatling failover drills and measure reconnection <3s.
+    - Update `docker-compose.yml` dev topology to simulate multi-node RAC via SCAN VIP aliases for early testing.
+    - Add Gatling scenario `gatling/src/gatling/scala/RacFailoverSimulation.scala` that forces node failure (via `sql/ops/kill_session.sql`) and asserts <3s reconnect.
+  - **RAC telemetry**: Ship GV$ views (e.g., `GV$GES_BLOCKING_ENQUEUE`) into Grafana; define alerts for high interconnect latency (>5 ms) or block waits.
+    - Publish new Micrometer `Gauge` exporters under `com.rcs.ssf.metrics.RacTelemetryCollector` plus Prometheus scrape config `monitoring/prometheus.yml` snippet.
+    - Create Grafana dashboard JSON (`monitoring/grafana/rac.json`) with latency + block wait panels and alert rules stored in `monitoring/grafana/rac-alerts.json`.
+  - **Interconnect tuning**: Validate jumbo frames + QoS on the interconnect VLAN, document `oradebug ipc` baselines, and re-run after each network change.
+    - Automate `oradebug ipc` capture via Ansible playbook `infra/ansible/rac-interconnect.yml`; archive results in `infra/runbooks/rac-interconnect.md`.
+    - Add CI gate that requires latest baseline (<=30 days old) before promoting networking changes.
 
 - [ ] **Database Change Notification**
-  - Implement Oracle DCN for cache invalidation
-  - Add real-time cache updates for data changes
-  - Configure notification filtering and performance
-  - Integrate with application caching layer
+  - **DCN plumbing**: Use `oracle.jdbc.dcn.DatabaseChangeRegistration` with secure callbacks, store subscription metadata per resolver, and auto-renew before TTL expiration.
+    - Introduce `com.rcs.ssf.dcn.DcnRegistrar` service with unit tests in `src/test/java/com/rcs/ssf/dcn/DcnRegistrarTest.java`; persist metadata to `AUDIT_DCN_SUBSCRIPTIONS` via Flyway script `V230__audit_dcn_metadata.sql`.
+    - Secure callbacks by mounting credentials in `k8s/overlays/prod/dcn-secret.yaml` and validating TLS mutual auth.
+  - **Cache invalidation**: Wire Micronaut/Spring cache evictions to DCN payloads, ensuring row-level filters so only touched entities flush.
+    - Extend `CacheInvalidationListener` to parse row payloads and evict `Caffeine` + Redis entries by composite key; add contract tests in `CacheInvalidationListenerTest` using mocked payloads.
+  - **Filtering + QoS**: Apply query-level selectors (columns + where clause) and set QoS to `QUERY` to avoid flooding clients; load-test 1k notifications/minute.
+    - Encode selectors in `sql/dcn/dcn_selectors.sql` and validate QoS via integration scenario `gatling/src/gatling/scala/DcnQoSSimulation.scala` (target 1k msg/min sustained).
+  - **Observability + retries**: Emit metrics for missed notifications, re-subscribe on ORA-29970, and create runbooks for rotating DCN credentials.
+    - Add Micrometer counters (`dcn.notified`, `dcn.retries`) plus structured logs for ORA codes.
+    - Document manual retry + credential rotation steps in `docs/runbooks/dcn.md` and ensure PagerDuty alerts trigger when retries exceed 3/min.
 
 ### **Application Performance Optimizations**
+
 - [ ] **GraphQL Query Optimization**
   - Implement persisted queries for common operations
   - Add automatic persisted queries (APQ)
@@ -279,6 +302,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ## 🔧 Essential Features to Add
 
 ### **Security & Compliance**
+
 - [ ] **Multi-Factor Authentication (MFA)**
   - TOTP (Time-based One-Time Password) implementation
   - SMS-based authentication backup
@@ -304,6 +328,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
   - Dynamic permission assignment
 
 ### **Developer Experience**
+
 - [ ] **API Documentation & Testing**
   - OpenAPI/Swagger specification generation
   - Interactive API documentation
@@ -329,6 +354,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
   - Development-specific configuration profiles
 
 ### **Production Readiness**
+
 - [ ] **Database Migrations & Versioning**
   - Flyway integration for schema migrations
   - Migration testing and rollback capabilities
@@ -358,6 +384,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ## 📊 Performance Monitoring & Analytics
 
 ### **Application Performance Monitoring**
+
 - [ ] **APM Implementation**
   - Real-time performance metrics collection
   - Application bottleneck identification
@@ -365,6 +392,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
   - Custom performance dashboards
 
 ### **Database Performance Monitoring**
+
 - [ ] **Oracle Performance Dashboard**
   - AWR report integration and visualization
   - Real-time wait event monitoring
@@ -372,6 +400,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
   - Database resource utilization
 
 ### **Log Aggregation & Analysis**
+
 - [ ] **Centralized Logging**
   - ELK stack (Elasticsearch, Logstash, Kibana) setup
   - Structured logging implementation
@@ -379,6 +408,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
   - Log retention and archiving
 
 ### **Alerting & Incident Response**
+
 - [ ] **Monitoring & Alerting System**
   - Performance degradation alerts
   - Error rate and availability monitoring
@@ -456,12 +486,14 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ---
 
 **Phase 1 Critical Path Dependencies**:
+
 1. **Observability (Week 1–2)** → Enables all baseline measurements and regression detection
 2. **UX Completion (Week 2–3)** → Runs in parallel with observability; unblocked by it
 3. **Caching + Pool Tuning (Week 3–4)** → Depends on baselines from Phase 1.1
 4. **Testing & Sign-Off (Week 4)** → Integrates Phase 1.2–1.3 output
 
 **Risks & Mitigations** (Phase 1):
+
 - **Risk**: Redis provisioning delayed → **Mitigation**: Use in-memory Caffeine-only fallback for Week 1–2
 - **Risk**: DBA availability unavailable → **Mitigation**: Contract interim DBA for Weeks 1–3
 - **Risk**: Mobile design not finalized → **Mitigation**: Use desktop-first MVP for Sprint 1.2; mobile polish in Phase 2
@@ -470,6 +502,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ---
 
 ### **Phase 2: Enhancement (Weeks 5–8)**
+
 1. Advanced UX features (search, WebSocket subscriptions, responsive design polish)
 2. Database deep optimizations (partitioning, compression, PL/SQL tuning)
 3. Advanced observability (ELK stack, distributed tracing, custom dashboards)
@@ -483,6 +516,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ---
 
 ### **Phase 3: Production Hardening (Weeks 9–12)**
+
 1. Production hardening and testing (chaos engineering, failover drills)
 2. Advanced Oracle features implementation (RAC optimization, in-memory column store)
 3. Security hardening (MFA, data encryption, compliance audit)
@@ -496,6 +530,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 ---
 
 ### **Phase 4: Scale (Weeks 13–16)**
+
 1. Horizontal scaling capabilities (Kubernetes auto-scaling, CDN integration)
 2. Advanced caching patterns (cache warming, intelligent invalidation)
 3. Enterprise features (MFA, advanced RBAC, compliance reporting)

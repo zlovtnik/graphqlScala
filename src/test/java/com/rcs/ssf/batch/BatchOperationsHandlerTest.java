@@ -7,6 +7,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,13 +20,15 @@ class BatchOperationsHandlerTest {
     @BeforeEach
     void setUp() {
         batchHandler = new BatchOperationsHandler();
+        BatchOperationsHandler handler = Objects.requireNonNull(batchHandler);
         
         // Set batch size to 50 for testing
-        ReflectionTestUtils.setField(batchHandler, "batchSize", 50);
-        ReflectionTestUtils.setField(batchHandler, "maxRetries", 3);
-        ReflectionTestUtils.setField(batchHandler, "initialRetryDelayMs", 10L);
+        ReflectionTestUtils.setField(handler, "batchSize", 50);
+        ReflectionTestUtils.setField(handler, "maxRetries", 3);
+        ReflectionTestUtils.setField(handler, "initialRetryDelayMs", 10L);
+        ReflectionTestUtils.setField(handler, "batchThreshold", 50);
         // Set very high memory threshold (99%) so tests don't trigger memory pressure warnings
-        ReflectionTestUtils.setField(batchHandler, "memoryThresholdPercent", 99);
+        ReflectionTestUtils.setField(handler, "memoryThresholdPercent", 99);
     }
 
     @Test
@@ -102,7 +105,8 @@ class BatchOperationsHandlerTest {
         for (int i = 0; i < 25; i++) {
             items.add(i);
         }
-        
+        ReflectionTestUtils.setField(Objects.requireNonNull(batchHandler), "batchThreshold", 1);
+
         AtomicInteger attemptCount = new AtomicInteger(0);
         
         BatchOperationsHandler.BatchResult result = batchHandler.executeBatch(
@@ -128,16 +132,19 @@ class BatchOperationsHandlerTest {
         for (int i = 0; i < 50; i++) {
             items.add(i);
         }
-        
-        assertThrows(BatchOperationException.class, () -> 
-            batchHandler.executeBatch(
-                items,
-                batch -> {
-                    throw new RuntimeException("Permanent failure");
-                },
-                "failing_operation"
-            )
+        ReflectionTestUtils.setField(Objects.requireNonNull(batchHandler), "batchThreshold", 1);
+
+        BatchOperationsHandler.BatchResult result = batchHandler.executeBatch(
+            items,
+            batch -> {
+                throw new RuntimeException("Permanent failure");
+            },
+            "failing_operation"
         );
+
+        assertFalse(result.success());
+        assertEquals(0, result.processedItems());
+        assertEquals(items.size(), result.failedItems());
     }
 
     @Test
@@ -148,9 +155,10 @@ class BatchOperationsHandlerTest {
             items.add(i);
         }
         
-        ReflectionTestUtils.setField(batchHandler, "batchSize", 50);
+        BatchOperationsHandler handler = Objects.requireNonNull(batchHandler);
+        ReflectionTestUtils.setField(handler, "batchSize", 50);
         
-        List<List<Integer>> batches = batchHandler.createBatches(items);
+        List<List<Integer>> batches = handler.createBatches(items, 50);
         
         assertEquals(4, batches.size()); // 175 / 50 = 3 full batches + 1 partial
         assertEquals(50, batches.get(0).size());
