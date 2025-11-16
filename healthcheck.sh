@@ -19,7 +19,7 @@ sqlplus -s / as sysdba << EOF
    DECLARE
      v_count NUMBER;
    BEGIN
-     SELECT COUNT(*) INTO v_count FROM all_users WHERE username = 'SSFUSER';
+     SELECT COUNT(*) INTO v_count FROM all_users WHERE username = 'APP_USER';
      IF v_count > 0 THEN
        DBMS_OUTPUT.PUT_LINE('PDB is ready');
      ELSE

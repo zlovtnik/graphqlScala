@@ -1,8 +1,12 @@
 package com.rcs.ssf.config;
 
+import com.rcs.ssf.security.CspHeaderFilter;
+import com.rcs.ssf.security.GraphQLRequestLoggingFilter;
 import com.rcs.ssf.security.JwtAuthenticationFilter;
+import com.rcs.ssf.security.JwtTokenProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -11,7 +15,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 
 /**
  * Spring Security Configuration for JWT-based authentication.
@@ -39,12 +43,27 @@ public class SecurityConfig {
 
     private final UserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public SecurityConfig(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder, JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider) {
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.jwtTokenProvider = jwtTokenProvider;
+    }
+
+    @Bean
+    public CspHeaderFilter cspHeaderFilter() {
+        return new CspHeaderFilter();
+    }
+
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter() {
+        return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService);
+    }
+
+    @Bean
+    public GraphQLRequestLoggingFilter graphQLRequestLoggingFilter() {
+        return new GraphQLRequestLoggingFilter();
     }
 
     @Bean
@@ -57,35 +76,50 @@ public class SecurityConfig {
     }
 
     /**
-     * Configures HTTP security with JWT authentication.
+     * Configures HTTP security with JWT authentication and CSP headers.
      *
-     * The JwtAuthenticationFilter is registered here to run before Spring Security's
-     * default UsernamePasswordAuthenticationFilter, allowing JWT tokens to be extracted
-     * and validated before the standard authentication flow.
+    * Filter order (from first to last):
+    * 1. GraphQLRequestLoggingFilter (highest precedence) - logs GraphQL requests early
+    * 2. CspHeaderFilter - Generates nonce and sets strict CSP headers
+    * 3. Spring Security SecurityContextHolderFilter - central context population
+    * 4. JwtAuthenticationFilter - Extracts and validates JWT tokens
+     *
+    * The GraphQLRequestLoggingFilter and CspHeaderFilter are added before the
+    * Spring Security filter chain (SecurityContextHolderFilter) so that request
+    * logging and the response nonce are available early in the request lifecycle.
+    * The JwtAuthenticationFilter runs after the SecurityContextHolderFilter and
+    * populates the SecurityContext for downstream filter processing.
      *
      * @param http HttpSecurity configuration
      * @return configured SecurityFilterChain
      * @throws Exception if configuration fails
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, CspHeaderFilter cspHeaderFilter, JwtAuthenticationFilter jwtAuthenticationFilter, GraphQLRequestLoggingFilter graphQLRequestLoggingFilter) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
                         // Public endpoints for authentication
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Allow user creation for bootstrap
+                        .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
                         // GraphQL IDE is public (authentication enforced by GraphQLAuthorizationInstrumentation)
                         .requestMatchers("/graphiql/**").permitAll()
-                        // GraphQL endpoint requires authentication before instrumentation enforces field-level checks
-                        .requestMatchers("/graphql").authenticated()
+                        // GraphQL endpoint - permit all requests; authentication enforced by GraphQLAuthorizationInstrumentation
+                        // This allows public mutations (login, logout, createUser) while denying authenticated-only operations
+                        .requestMatchers("/graphql").permitAll()
                         // Health and metrics
                         .requestMatchers("/actuator/**").permitAll()
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
                 )
+                // GraphQL request logging filter (highest precedence)
+                .addFilterBefore(graphQLRequestLoggingFilter, SecurityContextHolderFilter.class)
+                // CSP filter runs first (generates nonce for every response)
+                .addFilterBefore(cspHeaderFilter, SecurityContextHolderFilter.class)
                 // JWT filter extracts token and populates SecurityContext
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterAfter(jwtAuthenticationFilter, SecurityContextHolderFilter.class);
 
         return http.build();
     }

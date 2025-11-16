@@ -35,16 +35,22 @@ public class AuthMutation {
     @Autowired
     private AuditService auditService;
 
+    @Autowired(required = false)
+    private HttpServletRequest httpServletRequest;
+
     @MutationMapping
-    public AuthResponse login(@Argument String username, @Argument String password, HttpServletRequest request) {
+    public AuthResponse login(@Argument String username, @Argument String password) {
         if (!StringUtils.hasText(username)) {
             throw new IllegalArgumentException("Username must not be blank");
         }
         if (!StringUtils.hasText(password)) {
             throw new IllegalArgumentException("Password must not be blank");
         }
-        String ipAddress = getClientIpAddress(request);
-        String userAgent = request.getHeader("User-Agent");
+        
+        // Use autowired HttpServletRequest (safe for synchronous HTTP mutations)
+        String ipAddress = (httpServletRequest != null) ? getClientIpAddress(httpServletRequest) : "unknown";
+        String userAgent = (httpServletRequest != null) ? httpServletRequest.getHeader("User-Agent") : "unknown";
+        
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password)
@@ -102,3 +108,4 @@ public class AuthMutation {
         throw new IllegalStateException("Unexpected authentication principal type: " + principal.getClass().getName());
     }
 }
+

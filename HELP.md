@@ -35,8 +35,8 @@ Copy/paste environment template:
 export ORACLE_HOST=localhost
 export ORACLE_PORT=1521
 export ORACLE_DB=FREEPDB1
-export ORACLE_USER=ssfuser
-export ORACLE_PASSWORD=ssfuser
+export ORACLE_USER=APP_USER
+export ORACLE_PASSWORD=APP_USER
 
 export MINIO_URL=http://localhost:9000
 export MINIO_ACCESS_KEY=minioadmin

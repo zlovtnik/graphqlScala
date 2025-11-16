@@ -1,21 +1,29 @@
 package com.rcs.ssf.service.reactive;
 
 import io.micrometer.core.instrument.MeterRegistry;
-import io.r2dbc.oracle.OracleConnectionConfiguration;
-import io.r2dbc.oracle.OracleConnectionFactory;
 import io.r2dbc.pool.ConnectionPool;
 import io.r2dbc.pool.ConnectionPoolConfiguration;
+import io.r2dbc.spi.ConnectionFactories;
+import io.r2dbc.spi.ConnectionFactory;
+import io.r2dbc.spi.ConnectionFactoryOptions;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
-import org.springframework.r2dbc.core.R2dbcEntityTemplate;
 import reactor.netty.resources.ConnectionProvider;
-import reactor.util.context.Context;
 
 import java.time.Duration;
+
+import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
+import static io.r2dbc.spi.ConnectionFactoryOptions.DRIVER;
+import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
+import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
+import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
+import static io.r2dbc.spi.ConnectionFactoryOptions.SSL;
+import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 
 /**
  * Reactive data access configuration using R2DBC.
@@ -36,6 +44,7 @@ import java.time.Duration;
  */
 @Configuration
 @EnableR2dbcRepositories(basePackages = "com.rcs.ssf")
+@EnableConfigurationProperties(ReactiveDataSourceConfiguration.R2dbcProperties.class)
 @Slf4j
 public class ReactiveDataSourceConfiguration {
 
@@ -46,43 +55,68 @@ public class ReactiveDataSourceConfiguration {
         return ConnectionProvider.builder("graphql-r2dbc")
                 .maxIdleTime(Duration.ofMinutes(30))
                 .maxLifeTime(Duration.ofHours(1))
-                .maxCreateConnectionTime(Duration.ofSeconds(5))
-                .maxAcquireTime(Duration.ofSeconds(10))
                 .build();
     }
 
     @Bean
-    public OracleConnectionFactory oracleConnectionFactory(
-            R2dbcProperties r2dbcProperties,
-            ConnectionProvider connectionProvider,
-            MeterRegistry meterRegistry) {
+    public ConnectionFactory r2dbcConnectionFactory(
+        R2dbcProperties r2dbcProperties,
+        MeterRegistry meterRegistry) {
+    
+        log.info("Creating R2DBC connection factory");
         
-        log.info("Creating Oracle R2DBC connection factory");
+        // Validate required R2DBC properties
+        validateR2dbcProperties(r2dbcProperties);
         
-        // Create base connection configuration
-        OracleConnectionConfiguration.Builder builder = OracleConnectionConfiguration.builder()
-                .host(r2dbcProperties.getHost())
-                .port(r2dbcProperties.getPort())
-                .database(r2dbcProperties.getDatabase())
-                .username(r2dbcProperties.getUsername())
-                .password(r2dbcProperties.getPassword())
-                .tcpKeepAlives(true)
-                .tcpNoDelay(true);
+        // Get SSL setting from properties (defaults to false if not specified)
+        boolean useSsl = Boolean.TRUE.equals(r2dbcProperties.getSsl());
+        
+        ConnectionFactoryOptions options = ConnectionFactoryOptions.builder()
+            .option(DRIVER, "oracle")
+            .option(HOST, r2dbcProperties.getHost())
+            .option(PORT, r2dbcProperties.getPort())
+            .option(DATABASE, r2dbcProperties.getDatabase())
+            .option(USER, r2dbcProperties.getUsername())
+            .option(PASSWORD, r2dbcProperties.getPassword())
+            .option(SSL, useSsl)
+            .build();
 
-        OracleConnectionConfiguration config = builder.build();
-        
-        // Create factory with monitoring
-        OracleConnectionFactory factory = new OracleConnectionFactory(config);
-        
-        meterRegistry.gaugeCollectionSize("r2dbc.connection.factory.created",
-                java.util.Collections.emptyList(), factory.getClass().getName());
-        
+        ConnectionFactory factory = ConnectionFactories.get(options);
+        meterRegistry.counter("r2dbc.connection.factory.initialized").increment();
+        log.debug("R2DBC ConnectionFactory created with SSL={}", useSsl);
         return factory;
+    }
+    
+    /**
+     * Validate that all required R2DBC properties are present and non-empty.
+     * 
+     * @param props R2DBC properties to validate
+     * @throws IllegalArgumentException if any required property is missing or empty
+     */
+    private void validateR2dbcProperties(R2dbcProperties props) {
+        if (props == null) {
+            throw new IllegalArgumentException("R2dbcProperties cannot be null");
+        }
+        if (props.getHost() == null || props.getHost().isBlank()) {
+            throw new IllegalArgumentException("R2DBC host is required and cannot be empty");
+        }
+        if (props.getPort() == null || props.getPort() <= 0 || props.getPort() > 65535) {
+            throw new IllegalArgumentException("R2DBC port must be set and be in valid range (1-65535)");
+        }
+        if (props.getDatabase() == null || props.getDatabase().isBlank()) {
+            throw new IllegalArgumentException("R2DBC database is required and cannot be empty");
+        }
+        if (props.getUsername() == null || props.getUsername().isBlank()) {
+            throw new IllegalArgumentException("R2DBC username is required and cannot be empty");
+        }
+        if (props.getPassword() == null || props.getPassword().isBlank()) {
+            throw new IllegalArgumentException("R2DBC password is required and cannot be empty");
+        }
     }
 
     @Bean
     public ConnectionPool connectionPool(
-            OracleConnectionFactory oracleConnectionFactory,
+            ConnectionFactory r2dbcConnectionFactory,
             R2dbcProperties r2dbcProperties,
             MeterRegistry meterRegistry) {
         
@@ -93,11 +127,10 @@ public class ReactiveDataSourceConfiguration {
                 r2dbcProperties.getPool().getQueueDepth(),
                 r2dbcProperties.getPool().getIdleTimeout());
         
-        ConnectionPoolConfiguration poolConfig = ConnectionPoolConfiguration.builder(oracleConnectionFactory)
+        ConnectionPoolConfiguration poolConfig = ConnectionPoolConfiguration.builder(r2dbcConnectionFactory)
                 .initialSize(r2dbcProperties.getPool().getMinIdle())
                 .maxIdleTime(Duration.parse(r2dbcProperties.getPool().getIdleTimeout()))
                 .maxAcquireTime(Duration.ofSeconds(10))
-                .maxCreateConnectionTime(Duration.ofSeconds(5))
                 .maxLifeTime(Duration.ofHours(1))
                 .maxSize(r2dbcProperties.getPool().getMaxSize())
                 // For queue handling: reject excess requests to enable backpressure
@@ -107,9 +140,9 @@ public class ReactiveDataSourceConfiguration {
         
         // Export pool metrics
         pool.getMetrics().ifPresent(metrics -> {
-            meterRegistry.gauge("r2dbc.pool.acquired", metrics::acquiredSize);
-            meterRegistry.gauge("r2dbc.pool.idle", metrics::idleSize);
-            meterRegistry.gauge("r2dbc.pool.pending", metrics::pendingAcquireSize);
+            meterRegistry.gauge("r2dbc.pool.acquired", metrics, m -> m.acquiredSize());
+            meterRegistry.gauge("r2dbc.pool.idle", metrics, m -> m.idleSize());
+            meterRegistry.gauge("r2dbc.pool.pending", metrics, m -> m.pendingAcquireSize());
         });
         
         return pool;
@@ -131,6 +164,7 @@ public class ReactiveDataSourceConfiguration {
         private String database = "XEPDB1";
         private String username = "app_user";
         private String password;
+        private Boolean ssl = false;
         private Pool pool = new Pool();
 
         public static class Pool {
@@ -166,6 +200,9 @@ public class ReactiveDataSourceConfiguration {
 
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
+        
+        public Boolean getSsl() { return ssl; }
+        public void setSsl(Boolean ssl) { this.ssl = ssl; }
 
         public Pool getPool() { return pool; }
         public void setPool(Pool pool) { this.pool = pool; }

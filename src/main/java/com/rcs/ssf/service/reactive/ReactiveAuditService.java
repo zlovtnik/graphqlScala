@@ -4,12 +4,16 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeoutException;
@@ -39,43 +43,57 @@ public class ReactiveAuditService {
     private final R2dbcEntityTemplate template;
     private final MeterRegistry meterRegistry;
 
+    /**
+     * GraphQL query complexity threshold for alerting/rejection.
+     * Configurable via application properties: graphql.complexity.threshold
+     * Default: 5000 (queries exceeding this score are marked as EXCEEDED in audit logs)
+     */
+    @Value("${graphql.complexity.threshold:5000}")
+    private int complexityThreshold;
+
     private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(5);
     private static final int MAX_RETRIES = 3;
 
-    /**
-     * Log GraphQL query complexity analysis result (non-blocking).
-     * 
-     * @param query The GraphQL query
-     * @param complexity The calculated complexity score
-     * @return Mono that completes when audit record is inserted
-     */
     public Mono<Void> logGraphQLComplexity(String query, int complexity) {
         Timer.Sample sample = Timer.start(meterRegistry);
         
-        return Mono.defer(() -> {
-            // Simulate INSERT into audit_graphql_complexity table
-            log.debug("Recording complexity score {} for query", complexity);
-            
-            return Mono.empty()
-                    .timeout(OPERATION_TIMEOUT, Mono.error(
-                            new TimeoutException("Audit insert timeout after " + OPERATION_TIMEOUT)))
-                    .onErrorResume(throwable -> {
-                        log.warn("Failed to log complexity: {}", throwable.getMessage());
-                        meterRegistry.counter("audit.graphql_complexity.errors_total").increment();
-                        return Mono.empty(); // Continue despite failure
-                    });
-        })
-        .retryWhen(Retry.backoff(MAX_RETRIES, Duration.ofMillis(100))
-                .filter(throwable -> !(throwable instanceof TimeoutException))
-                .doBeforeRetry(signal -> 
-                    log.info("Retrying complexity audit (attempt {}/{})", 
-                            signal.totalRetries() + 1, MAX_RETRIES)))
-        .doFinally(signalType -> {
-            sample.stop(Timer.builder("audit.graphql_complexity.duration_ms")
-                    .publishPercentiles(0.5, 0.95, 0.99)
-                    .register(meterRegistry));
-            meterRegistry.counter("audit.graphql_complexity_total").increment();
-        });
+        String queryHash = generateHash(query);
+        String status = complexity > complexityThreshold ? "EXCEEDED" : "OK";
+        
+        log.debug("Recording complexity score {} for query hash {} (threshold: {})", complexity, queryHash, complexityThreshold);
+        
+        return template.getDatabaseClient()
+                .sql("INSERT INTO audit_graphql_complexity (query_hash, complexity, threshold, status, timestamp) VALUES (?, ?, ?, ?, ?)")
+                .bind(0, queryHash)
+                .bind(1, complexity)
+                .bind(2, complexityThreshold)
+                .bind(3, status)
+                .bind(4, LocalDateTime.now())
+                .fetch()
+                .rowsUpdated()
+                .then()
+                .timeout(OPERATION_TIMEOUT)
+                .onErrorResume(TimeoutException.class, throwable -> {
+                    log.warn("Audit insert timeout: {}", throwable.getMessage());
+                    meterRegistry.counter("audit.graphql_complexity.errors_total").increment();
+                    return Mono.empty();
+                })
+                .onErrorResume(throwable -> {
+                    log.warn("Failed to log complexity: {}", throwable.getMessage());
+                    meterRegistry.counter("audit.graphql_complexity.errors_total").increment();
+                    return Mono.empty(); // Continue despite failure
+                })
+                .retryWhen(Retry.backoff(MAX_RETRIES, Duration.ofMillis(100))
+                        .filter(throwable -> !(throwable instanceof TimeoutException))
+                        .doBeforeRetry(signal -> 
+                            log.info("Retrying complexity audit (attempt {}/{})", 
+                                    signal.totalRetries() + 1, MAX_RETRIES)))
+                .doFinally(signalType -> {
+                    sample.stop(Timer.builder("audit.graphql_complexity.duration_ms")
+                            .publishPercentiles(0.5, 0.95, 0.99)
+                            .register(meterRegistry));
+                    meterRegistry.counter("audit.graphql_complexity_total").increment();
+                });
     }
 
     /**
@@ -91,7 +109,7 @@ public class ReactiveAuditService {
         return Mono.defer(() -> {
             log.debug("Recording circuit breaker {} transition to {}", serviceName, newState);
             
-            return Mono.empty()
+            return Mono.<Void>empty()
                     .timeout(OPERATION_TIMEOUT, Mono.error(
                             new TimeoutException("Circuit breaker audit timeout")))
                     .onErrorResume(throwable -> {
@@ -127,10 +145,10 @@ public class ReactiveAuditService {
         double compressionRatio = originalSize > 0 ? (double) compressedSize / originalSize : 1.0;
         
         return Mono.defer(() -> {
-            log.debug("Recording {} compression: {} bytes -> {} bytes (ratio: {:.2f})", 
-                    algorithm, originalSize, compressedSize, compressionRatio);
+            log.debug("Recording {} compression: {} bytes -> {} bytes (ratio: {})", 
+                    algorithm, originalSize, compressedSize, String.format("%.2f", compressionRatio));
             
-            return Mono.empty()
+            return Mono.<Void>empty()
                     .timeout(OPERATION_TIMEOUT, Mono.error(
                             new TimeoutException("Compression audit timeout")))
                     .onErrorResume(throwable -> {
@@ -147,7 +165,7 @@ public class ReactiveAuditService {
                     .register(meterRegistry));
             
             meterRegistry.counter("audit.http_compression_total", "algorithm", algorithm).increment();
-            meterRegistry.gauge("audit.http_compression.ratio", compressionRatio);
+            meterRegistry.summary("audit.http_compression.ratio").record(compressionRatio);
         });
     }
 
@@ -170,7 +188,7 @@ public class ReactiveAuditService {
         return Mono.defer(() -> {
             log.debug("Recording execution plan for query (took {} ms)", executionTimeMs);
             
-            return Mono.empty()
+            return Mono.<Void>empty()
                     .timeout(OPERATION_TIMEOUT, Mono.error(
                             new TimeoutException("Execution plan audit timeout")))
                     .onErrorResume(throwable -> {
@@ -191,6 +209,8 @@ public class ReactiveAuditService {
     /**
      * Batch audit events with backpressure handling.
      * 
+     * Emits audit.dropped_events_total metric when events are dropped due to backpressure or errors.
+     * 
      * @param events Flux of audit events
      * @return Mono that completes when all batches are processed
      */
@@ -199,25 +219,55 @@ public class ReactiveAuditService {
                 .buffer(100) // Batch in groups of 100
                 .flatMap(batch -> {
                     log.debug("Processing batch of {} audit events", batch.size());
-                    return Mono.fromRunnable(() -> batch.forEach(event -> {
-                        switch (event.getEventType()) {
-                            case "COMPLEXITY" -> logGraphQLComplexity(event.getQuery(), event.getScore()).subscribe();
-                            case "CIRCUIT_BREAKER" -> logCircuitBreakerEvent(event.getService(), event.getState()).subscribe();
-                            case "COMPRESSION" -> logCompressionEvent(event.getAlgorithm(), event.getOriginalSize(), event.getCompressedSize()).subscribe();
-                        }
-                    }));
+                    return Flux.fromIterable(batch)
+                            .flatMap(event -> {
+                                Mono<Void> mono;
+                                switch (event.getEventType()) {
+                                    case "COMPLEXITY" -> mono = logGraphQLComplexity(event.getQuery(), event.getScore());
+                                    case "CIRCUIT_BREAKER" -> mono = logCircuitBreakerEvent(event.getService(), event.getState());
+                                    case "COMPRESSION" -> mono = logCompressionEvent(event.getAlgorithm(), event.getOriginalSize(), event.getCompressedSize());
+                                    default -> mono = Mono.empty();
+                                }
+                                return mono;
+                            })
+                            .then();
                 })
                 .then()
                 .onErrorResume(throwable -> {
                     log.error("Batch audit failed: {}", throwable.getMessage());
                     meterRegistry.counter("audit.batch.errors_total").increment();
+                    meterRegistry.counter("audit.dropped_events_total").increment();
                     return Mono.empty();
                 });
     }
 
     /**
-     * Audit event data structure for batch operations.
+     * Generate SHA-256 hash of GraphQL query for deduplication.
+     * 
+     * @param query The GraphQL query string
+     * @return Hex-encoded SHA-256 hash
+     * @throws IllegalStateException if SHA-256 algorithm is not available (JVM configuration issue)
      */
+    private String generateHash(String query) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(query.getBytes(StandardCharsets.UTF_8));
+            return bytesToHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("SHA-256 algorithm not available in this JVM - this indicates a fatal JVM configuration issue", e);
+            throw new IllegalStateException("SHA-256 MessageDigest algorithm is required but not available in this JVM", e);
+        }
+    }
+
+    private String bytesToHex(byte[] hash) {
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
     public static class AuditEvent {
         private String eventType; // COMPLEXITY, CIRCUIT_BREAKER, COMPRESSION
         private String query;

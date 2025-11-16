@@ -85,11 +85,33 @@ cdn:
   # CORS and security headers
   security_headers:
     strict_transport_security: "max-age=31536000; includeSubDomains"
-    content_security_policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-    x_content_type_options: "nosniff"
-    x_frame_options: "DENY"
-    x_xss_protection: "1; mode=block"
-    referrer_policy: "strict-origin-when-cross-origin"
+    # Content Security Policy (CSP): Strict policy without 'unsafe-inline'
+    # Nonces are generated server-side (CspHeaderFilter) for each request
+    # All inline scripts and styles MUST use matching nonce attribute
+    # CSP directives:
+    #   - default-src 'self': Only allow same-origin resources
+    #   - script-src 'self' 'nonce-*': Only same-origin + nonce-protected inline scripts
+    #   - style-src 'self' 'nonce-*': Only same-origin + nonce-protected inline styles
+    #   - img-src: Allow same-origin and data: URIs
+    #   - font-src: Allow same-origin and Google Fonts
+    #   - connect-src: Allow XHR/fetch to same-origin and HTTPS endpoints
+    #   - frame-ancestors: Prevent clickjacking
+    #   - base-uri: Restrict <base> tag
+    #   - form-action: Restrict form submissions
+    content_security_policy: |
+      default-src 'self';
+      script-src 'self' 'nonce-${CSP_NONCE}' https://cdn.jsdelivr.net;
+      style-src 'self' 'nonce-${CSP_NONCE}' https://fonts.googleapis.com;
+      img-src 'self' data: https://trusted-cdn.example.com;
+      font-src 'self' https://fonts.gstatic.com;
+      connect-src 'self' https://api.example.com wss://realtime.example.com;
+      frame-ancestors 'none';
+      base-uri 'self';
+      form-action 'self';
+    # Security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
+    # Referrer-Policy, Permissions-Policy) are managed by the application (CspHeaderFilter)
+    # to keep a single source-of-truth for security headers. If you prefer to set them
+    # at the CDN edge, add them here, but ensure they match the application configuration.
 
   # Rate limiting at CDN edge
   rate_limiting:

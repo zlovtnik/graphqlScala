@@ -25,39 +25,7 @@ import {
     NzIconModule,
     NzListModule,
   ],
-  styles: [
-    `
-      .notification-menu {
-        max-width: 320px;
-        padding: 0 12px;
-      }
-
-      .notification-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 8px 0;
-        font-weight: 600;
-      }
-
-      .notification-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
-      }
-
-      .notification-empty {
-        padding: 16px 0;
-        text-align: center;
-        color: rgba(0, 0, 0, 0.45);
-      }
-
-      .notification-content {
-        display: block;
-      }
-    `,
-  ],
+  styleUrl: './notification-center.component.css',
   template: `
     <div nz-dropdown [nzDropdownMenu]="menu" nzTrigger="click" nzPlacement="bottomRight" aria-label="Notification center dropdown">
       <button nz-button nzType="text" nzShape="circle" class="notification-trigger" aria-label="Open notifications">

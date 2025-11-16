@@ -154,6 +154,23 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         RETURN v_count > 0;
     END email_exists;
 
+    PROCEDURE log_login_error(
+        p_username IN VARCHAR2,
+        p_success IN NUMBER,
+        p_error_code IN NUMBER,
+        p_error_msg IN VARCHAR2,
+        p_procedure_name IN VARCHAR2 DEFAULT 'log_login_attempt'
+    ) IS
+        PRAGMA AUTONOMOUS_TRANSACTION;
+        v_context VARCHAR2(4000);
+    BEGIN
+        v_context := 'Logging login attempt for user: ' || p_username || ', success: ' || TO_CHAR(p_success);
+        -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
+        INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
+        VALUES (audit_seq.NEXTVAL, p_error_code, p_error_msg, v_context, p_procedure_name);
+        COMMIT;
+    END log_login_error;
+
     PROCEDURE log_login_attempt(
         p_username IN VARCHAR2,
         p_success IN NUMBER,
@@ -173,13 +190,8 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
                 NULL;  -- Swallow missing audit table error to avoid failing login process
             ELSE
                 -- Log unexpected errors and re-raise
-                DECLARE
-                    PRAGMA AUTONOMOUS_TRANSACTION;
                 BEGIN
-                    INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
-                    VALUES (audit_seq.NEXTVAL, TO_CHAR(SQLCODE), SUBSTR(SQLERRM, 1, 4000),
-                            'Logging login attempt for user: ' || p_username || ', success: ' || p_success, 'log_login_attempt');
-                    COMMIT;
+                    log_login_error(p_username, p_success, SQLCODE, SUBSTR(SQLERRM, 1, 4000));
                 EXCEPTION
                     WHEN OTHERS THEN
                         NULL;  -- Guard logging itself to prevent propagation
@@ -187,6 +199,23 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
                 RAISE;  -- Re-raise the original exception
             END IF;
     END log_login_attempt;
+
+    PROCEDURE log_session_error(
+        p_user_id IN VARCHAR2,
+        p_token_hash IN VARCHAR2,
+        p_error_code IN NUMBER,
+        p_error_msg IN VARCHAR2,
+        p_procedure_name IN VARCHAR2 DEFAULT 'log_session_start'
+    ) IS
+        PRAGMA AUTONOMOUS_TRANSACTION;
+        v_context VARCHAR2(4000);
+    BEGIN
+        v_context := 'Logging session start for user: ' || p_user_id || ', token_hash: ' || p_token_hash;
+        -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
+        INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
+        VALUES (audit_seq.NEXTVAL, p_error_code, p_error_msg, v_context, p_procedure_name);
+        COMMIT;
+    END log_session_error;
 
     PROCEDURE log_session_start(
         p_user_id IN VARCHAR2,
@@ -201,13 +230,8 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
     EXCEPTION
         WHEN OTHERS THEN
             -- Log unexpected errors to audit_error_log while preserving session flow
-            DECLARE
-                PRAGMA AUTONOMOUS_TRANSACTION;
             BEGIN
-                INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
-                VALUES (audit_seq.NEXTVAL, TO_CHAR(SQLCODE), SUBSTR(SQLERRM, 1, 4000),
-                        'Logging session start for user: ' || p_user_id || ', token_hash: ' || p_token_hash, 'log_session_start');
-                COMMIT;
+                log_session_error(p_user_id, p_token_hash, SQLCODE, SUBSTR(SQLERRM, 1, 4000));
             EXCEPTION
                 WHEN OTHERS THEN
                     NULL;  -- Guard logging itself to prevent propagation

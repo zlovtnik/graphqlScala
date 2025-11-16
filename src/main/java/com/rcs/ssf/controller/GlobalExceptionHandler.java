@@ -27,8 +27,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgumentException(IllegalArgumentException ex) {
         LOGGER.warn("Illegal argument received", ex);
-        String messageKey = "error.invalid.argument";
-        String clientMessage = messageSource.getMessage(messageKey, null, DEFAULT_MESSAGE, LocaleContextHolder.getLocale());
+        String exceptionMessage = ex.getMessage();
+        String clientMessage = DEFAULT_MESSAGE;
+        var locale = LocaleContextHolder.getLocale();
+
+        // Map known validation error codes to message keys
+        if (exceptionMessage != null) {
+            clientMessage = messageSource.getMessage(exceptionMessage, null, DEFAULT_MESSAGE, locale);
+        }
+
         return ResponseEntity.badRequest().body(Map.of("error", clientMessage));
     }
 

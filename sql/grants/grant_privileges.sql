@@ -1,14 +1,15 @@
 -- Grant necessary privileges to the application user
 -- Run this as SYS or DBA user before executing the schema
 
--- Replace 'app_user' with your actual Oracle username
-GRANT CREATE TABLE TO app_user;
-GRANT CREATE PROCEDURE TO app_user;
-GRANT CREATE SEQUENCE TO app_user;
-GRANT CREATE TRIGGER TO app_user;
-GRANT EXECUTE ON DBMS_CRYPTO TO app_user;
-GRANT UNLIMITED TABLESPACE TO app_user;
+-- Replace 'APP_USER' with your actual Oracle username if different
+GRANT CREATE TABLE TO APP_USER;
+GRANT CREATE PROCEDURE TO APP_USER;
+GRANT CREATE SEQUENCE TO APP_USER;
+GRANT CREATE TRIGGER TO APP_USER;
+GRANT CREATE TYPE TO APP_USER;
+GRANT EXECUTE ON DBMS_CRYPTO TO APP_USER;
+GRANT UNLIMITED TABLESPACE TO APP_USER;
 
 -- If you need to drop and recreate, also grant DROP ANY TABLE, etc., but be careful
--- GRANT DROP ANY TABLE TO app_user;
--- GRANT ALTER ANY TABLE TO app_user;
+-- GRANT DROP ANY TABLE TO APP_USER;
+-- GRANT ALTER ANY TABLE TO APP_USER;

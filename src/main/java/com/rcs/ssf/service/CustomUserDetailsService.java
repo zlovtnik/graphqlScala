@@ -27,7 +27,10 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        // Block the reactive call since UserDetailsService is a blocking interface
+        // R2dbcRepository methods return Mono<T>, so we block to get the actual User
         User user = userRepository.findByUsername(username)
+                .blockOptional()
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
         
         // Fetch user's roles and convert to GrantedAuthority instances

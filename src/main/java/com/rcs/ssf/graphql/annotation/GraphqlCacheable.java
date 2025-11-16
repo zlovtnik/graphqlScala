@@ -69,10 +69,9 @@ public @interface GraphqlCacheable {
      * 
      * 0 = Use default TTL from cache configuration
      * -1 = No expiration
-     * >0 = Specific TTL in seconds
+     * >0 = Override cache configuration with this TTL
      * 
-     * Note: TTL is applied at cache configuration level, not here.
-     * This is documentation only.
+     * This attribute is functional and will be processed by the caching aspect.
      */
     long ttlSeconds() default 0;
 }

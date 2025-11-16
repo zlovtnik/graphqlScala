@@ -7,10 +7,22 @@ set -e
 
 echo "=== Verifying Database Initialization ==="
 
-ORACLE_USER=${ORACLE_USER:-ssfuser}
-ORACLE_PASSWORD=${ORACLE_PASSWORD:-ssfuser}
+ORACLE_USER=${ORACLE_USER:-app_user}
+ORACLE_PASSWORD=${ORACLE_PASSWORD:-}
 ORACLE_DB=${ORACLE_DB:-FREEPDB1}
 ORACLE_USER_UPPER=$(printf '%s' "$ORACLE_USER" | tr '[:lower:]' '[:upper:]')
+
+if [[ -z "$ORACLE_PASSWORD" ]]; then
+    echo "ERROR: ORACLE_PASSWORD must be provided via environment or .env file"
+    echo "       (production deployments must supply a strong password distinct from ORACLE_USER)"
+    exit 1
+fi
+
+if [[ "$ORACLE_PASSWORD" == "$ORACLE_USER" ]]; then
+    echo "ERROR: ORACLE_PASSWORD must not match ORACLE_USER"
+    echo "       Please export a secure password, e.g. 'export ORACLE_PASSWORD=...'."
+    exit 1
+fi
 
 # Check if container is running
 if ! docker ps --filter "name=oracle-free" --filter "status=running" -q | grep -q .; then

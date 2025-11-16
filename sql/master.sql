@@ -1,5 +1,5 @@
 -- Master SQL script to set up the Oracle schema
--- Run sequences, types, tables, and packages as the application user (e.g., ssfuser)
+-- Run sequences, types, tables, and packages as the application user (e.g., APP_USER)
 -- Run users and grants scripts separately as SYS or DBA user
 
 -- Sequences (run as app user)

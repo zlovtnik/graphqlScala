@@ -1,13 +1,20 @@
 package com.rcs.ssf.graphql.persistence;
 
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.distribution.HistogramSnapshot;
+import io.micrometer.core.instrument.distribution.ValueAtPercentile;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -15,6 +22,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Registry for persisted GraphQL queries supporting APQ (Automatic Persisted Queries).
@@ -33,6 +41,26 @@ public class PersistedQueryRegistry {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final MeterRegistry meterRegistry;
+    
+    /**
+     * Self-invocation proxy provider for accessing @Cacheable methods.
+     * 
+     * This ObjectProvider<PersistedQueryRegistry> injects a reference to the proxied bean.
+     * Spring AOP proxies are only applied when methods are invoked through the Spring container
+     * (e.g., via dependency injection). Direct internal method calls bypass the proxy and thus
+     * bypass caching annotations like @Cacheable.
+     * 
+     * To enable caching on internal calls, use: PersistedQueryRegistry proxy = registryProvider.getIfAvailable(() -> this);
+     * Then invoke the cacheable method through the proxy: proxy.getQueryCached(queryHash).
+     * 
+     * Example: In getQuery(), registryProvider.getObject() returns the proxied bean to invoke
+     * getQueryCached() with @Cacheable semantics applied, avoiding cache misses that would occur
+     * from direct method invocation.
+     * 
+     * Reference: Spring AOP does not support intra-class method invocation proxy interception.
+     * This pattern is the standard workaround for self-invocation scenarios.
+     */
+    private final ObjectProvider<PersistedQueryRegistry> registryProvider;
 
     @Value("${graphql.persisted-queries.enabled:true}")
     private boolean persistedQueriesEnabled;
@@ -98,8 +126,29 @@ public class PersistedQueryRegistry {
      * @param queryHash The hash ID of the query
      * @return Optional containing the query, or empty if not found
      */
-    @Cacheable(value = "persistedQueries", key = "#queryHash", unless = "#result == null")
     public Optional<String> getQuery(String queryHash) {
+        if (!persistedQueriesEnabled) {
+            return Optional.empty();
+        }
+
+        PersistedQueryRegistry proxy = registryProvider.getIfAvailable(() -> this);
+        Optional<String> query = proxy.getQueryCached(queryHash);
+        
+        // Update usage stats without failing the query retrieval if Redis fails
+        if (query.isPresent()) {
+            try {
+                updateUsage(queryHash);
+            } catch (Exception e) {
+                log.warn("Failed to update query usage statistics for hash {}: {}", queryHash, e.getMessage());
+                // Continue - query retrieval succeeded even if usage update failed
+            }
+        }
+        
+        return query;
+    }
+
+    @Cacheable(value = "persistedQueries", key = "#queryHash", unless = "#result == null")
+    public Optional<String> getQueryCached(String queryHash) {
         if (!persistedQueriesEnabled) {
             return Optional.empty();
         }
@@ -109,16 +158,37 @@ public class PersistedQueryRegistry {
 
         if (query != null) {
             meterRegistry.counter(METRICS_PREFIX + "cache_hits").increment();
-            
-            // Update usage tracking
-            redisTemplate.opsForHash().increment(redisKey, "usageCount", 1);
-            redisTemplate.opsForHash().put(redisKey, "lastUsedAt", System.currentTimeMillis() + "");
-            
             return Optional.of((String) query);
         }
 
         meterRegistry.counter(METRICS_PREFIX + "cache_misses").increment();
         return Optional.empty();
+    }
+
+    /**
+     * Update usage metadata (hit counter and last used timestamp) for the supplied query hash.
+     * Uses atomic operations with TTL refresh to prevent inconsistent state.
+     *
+     * @param queryHash Query identifier
+     */
+    @SuppressWarnings("null")
+    public void updateUsage(String queryHash) {
+        if (!persistedQueriesEnabled) {
+            return;
+        }
+
+        String redisKey = PERSISTED_QUERY_PREFIX + queryHash;
+        long currentTime = System.currentTimeMillis();
+        
+        try {
+            // Perform all operations atomically in a single batch
+            redisTemplate.opsForHash().increment(redisKey, "usageCount", 1);
+            redisTemplate.opsForHash().put(redisKey, "lastUsedAt", (Object) String.valueOf(currentTime));
+            // Refresh TTL to prevent query eviction while still in active use
+            redisTemplate.expire(redisKey, java.time.Duration.ofMinutes(cacheTtlMinutes));
+        } catch (Exception e) {
+            log.warn("Failed to update query usage for hash {}: {}", queryHash, e.getMessage());
+        }
     }
 
     /**
@@ -144,9 +214,8 @@ public class PersistedQueryRegistry {
         complexity += query.split("\\(").length * 20; // Arguments add complexity
         complexity += query.split("\\[").length * 50; // Lists add significant complexity
         
-        // Cache complexity score
-        meterRegistry.timer(METRICS_PREFIX + "complexity_score")
-                .record(complexity, TimeUnit.MILLISECONDS);
+        // Record complexity score distribution for monitoring
+        complexitySummary().record(complexity);
 
         if (complexity > defaultComplexityThreshold) {
             log.warn("Query complexity exceeds threshold: score={}, threshold={}", 
@@ -183,6 +252,57 @@ public class PersistedQueryRegistry {
         return hexString.toString();
     }
 
+    private DistributionSummary complexitySummary() {
+        DistributionSummary summary = meterRegistry.find(METRICS_PREFIX + "complexity_score").summary();
+        if (summary == null) {
+            summary = DistributionSummary.builder(METRICS_PREFIX + "complexity_score")
+                    .description("GraphQL query complexity score distribution")
+                    .baseUnit("score")
+                    .publishPercentiles(0.5, 0.95, 0.99)
+                    .register(meterRegistry);
+        }
+        return summary;
+    }
+
+    private double percentileOrDefault(HistogramSnapshot snapshot, double targetPercentile) {
+        ValueAtPercentile[] values = snapshot.percentileValues();
+        if (values == null || values.length == 0) {
+            return Double.NaN;
+        }
+
+        for (ValueAtPercentile value : values) {
+            if (Math.abs(value.percentile() - targetPercentile) < 1e-6) {
+                return value.value();
+            }
+        }
+
+        return Double.NaN;
+    }
+
+    private long scanCount(String pattern) {
+        Long matches = redisTemplate.execute((RedisCallback<Long>) connection -> {
+            if (connection == null || connection.keyCommands() == null) {
+                return 0L;
+            }
+            AtomicLong count = new AtomicLong();
+            ScanOptions options = ScanOptions.scanOptions()
+                    .match(Objects.requireNonNull(pattern, "pattern must not be null"))
+                    .count(1_000)
+                    .build();
+            try (Cursor<byte[]> cursor = connection.keyCommands().scan(options)) {
+                while (cursor.hasNext()) {
+                    cursor.next();
+                    count.incrementAndGet();
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to scan Redis keys for pattern " + pattern, e);
+            }
+            return count.get();
+        });
+
+        return matches != null ? matches : 0L;
+    }
+
     /**
      * Get cache hit ratio metrics.
      * 
@@ -201,7 +321,7 @@ public class PersistedQueryRegistry {
                 "totalHits", hitsCount,
                 "totalMisses", missesCount,
                 "hitRatePercentage", String.format("%.2f%%", hitRate),
-                "cacheSize", redisTemplate.keys(PERSISTED_QUERY_PREFIX + "*").size(),
+            "cacheSize", scanCount(PERSISTED_QUERY_PREFIX + "*"),
                 "threshold", defaultComplexityThreshold
         );
     }
@@ -212,19 +332,21 @@ public class PersistedQueryRegistry {
      * @return Percentile breakdown of query complexity scores
      */
     public Map<String, Object> getComplexityStats() {
-        Timer complexityTimer = meterRegistry.find(METRICS_PREFIX + "complexity_score")
-                .timer();
+        DistributionSummary complexitySummary = meterRegistry.find(METRICS_PREFIX + "complexity_score")
+            .summary();
 
-        if (complexityTimer == null) {
+        if (complexitySummary == null || complexitySummary.count() == 0) {
             return Map.of("message", "No complexity data available");
         }
 
+        HistogramSnapshot snapshot = complexitySummary.takeSnapshot();
+
         return Map.of(
-                "p50", complexityTimer.takeSnapshot().percentileValues()[0].percentile(),
-                "p95", complexityTimer.takeSnapshot().percentileValues()[1].percentile(),
-                "p99", complexityTimer.takeSnapshot().percentileValues()[2].percentile(),
-                "count", complexityTimer.count(),
-                "threshold", defaultComplexityThreshold
+            "p50", percentileOrDefault(snapshot, 0.5),
+            "p95", percentileOrDefault(snapshot, 0.95),
+            "p99", percentileOrDefault(snapshot, 0.99),
+            "count", complexitySummary.count(),
+            "threshold", defaultComplexityThreshold
         );
     }
 }

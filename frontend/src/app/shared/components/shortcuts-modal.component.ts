@@ -8,6 +8,7 @@ import { KeyboardShortcut } from '../../core/services/keyboard.service';
   selector: 'app-shortcuts-modal',
   standalone: true,
   imports: [CommonModule, NzButtonModule],
+  styleUrl: './shortcuts-modal.component.css',
   template: `
     <div class="shortcuts-modal">
       <h2>Keyboard Shortcuts</h2>
@@ -24,51 +25,6 @@ import { KeyboardShortcut } from '../../core/services/keyboard.service';
       </div>
     </div>
   `,
-  styles: [`
-    .shortcuts-modal {
-      padding: 20px;
-    }
-
-    .shortcuts-list {
-      margin: 20px 0;
-    }
-
-    .shortcut-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 12px;
-      padding: 8px;
-      border-radius: 4px;
-      background: #f5f5f5;
-    }
-
-    .shortcut-keys {
-      display: flex;
-      gap: 4px;
-      margin-right: 16px;
-    }
-
-    .key {
-      padding: 4px 8px;
-      background: #fff;
-      border: 1px solid #d9d9d9;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
-      min-width: 24px;
-      text-align: center;
-    }
-
-    .shortcut-description {
-      flex: 1;
-      font-size: 14px;
-    }
-
-    .modal-footer {
-      text-align: right;
-      margin-top: 20px;
-    }
-  `]
 })
 export class ShortcutsModalComponent {
   private modalRef = inject(NzModalRef);

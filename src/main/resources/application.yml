@@ -4,7 +4,7 @@ spring:
   datasource:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
     driver-class-name: oracle.jdbc.OracleDriver
-    username: ${ORACLE_USER:ssfuser}
+    username: ${ORACLE_USER:APP_USER}
     password: ${ORACLE_PASSWORD:ssfpassword}
     hikari:
       connection-timeout: 30000
@@ -100,6 +100,17 @@ app:
     url: http://localhost:9000
     access-key: ${MINIO_ACCESS_KEY}
     secret-key: ${MINIO_SECRET_KEY}
+  r2dbc:
+    host: ${ORACLE_HOST:localhost}
+    port: ${ORACLE_PORT:1521}
+    database: ${ORACLE_DB:FREEPDB1}
+    username: ${ORACLE_USER:APP_USER}
+    password: ${ORACLE_PASSWORD:ssfpassword}
+    pool:
+      min-idle: 10
+      max-size: 80              # Keep aligned with Oracle capacity and <4x Hikari max
+      queue-depth: 150          # Prevent deep backlog from exhausting DB sessions
+      idle-timeout: PT30M
 
 ssf:
   cache:

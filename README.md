@@ -56,6 +56,7 @@ Key use cases include:
 | **Oracle-ready** | Defaults to Oracle JDBC with environment overrides for production |
 | **MinIO integration** | Health probes and configuration properties for S3-compatible storage |
 | **Observability** | Spring Actuator endpoints and composite health contributors for runtime insights |
+| **Security & Compliance Roadmap** | Multi-phase plan for MFA, audit logging, encryption, and RBAC (GDPR/SOX ready) |
 
 ## Architecture
 
@@ -101,7 +102,7 @@ clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
    @create_user_with_debug_grants.sql
    ```
 
-2. **Set up the schema** (run as the application user, e.g., `ssfuser`):
+2. **Set up the schema** (run as the application user, e.g., `APP_USER`):
 
    ```sql
    @master.sql
@@ -139,8 +140,8 @@ Create a `.env` or export variables in your shell:
 export ORACLE_HOST=localhost
 export ORACLE_PORT=1521
 export ORACLE_DB=FREEPDB1
-export ORACLE_USER=ssfuser
-export ORACLE_PASSWORD=ssfuser
+export ORACLE_USER=APP_USER
+export ORACLE_PASSWORD=APP_USER
 
 export JWT_SECRET="paste-a-random-32-plus-character-secret-here"
 
@@ -153,6 +154,8 @@ export KEYSTORE_PASSWORD=changeit
 ```
 
 > 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters long and include at least `min(20, length/2)` distinct characters. For example, a 32-character secret must contain 16 distinct characters. The application enforces this requirement at startup.
+
+> ⚠️ **Database Password Warning:** For production deployments, DO NOT use the default database password `APP_USER`. Set `DB_USER_PASSWORD` (or `ORACLE_PASSWORD`) to a strong, unique value in your deployment environment. See `docs/ORACLE_CREDENTIAL_SECURITY.md` for guidance on secrets management.
 
 ### Required Environment Variables
 
@@ -245,7 +248,7 @@ The server boots with HTTPS on `https://localhost:8443`. Since a development key
 # Oracle Database XE (example)
 docker run -d --name oracle-xe \
   -p 1521:1521 -p 5500:5500 \
-  -e ORACLE_PASSWORD=ssfuser \
+  -e ORACLE_PASSWORD=APP_USER \
   gvenzl/oracle-xe:21-slim
 
 # MinIO
@@ -270,7 +273,7 @@ Spring Boot properties can be set via `application.yml`, profile-specific files,
 | `server.port` | HTTPS port | No | `8443` |
 | `server.ssl.*` | Keystore path, password, alias | No | Bundled PKCS12 keystore |
 | `spring.datasource.url` | Oracle JDBC URL | No | `jdbc:oracle:thin:@//${ORACLE_HOST}:${ORACLE_PORT}/${ORACLE_DB}` |
-| `spring.datasource.username` / `password` | Database credentials | No | `ssfuser` / `ssfuser` |
+| `spring.datasource.username` / `password` | Database credentials | No | `APP_USER` / `APP_USER` |
 | `spring.redis.host` | Redis server hostname | No | `localhost` |
 | `spring.redis.port` | Redis server port | No | `6379` |
 | `app.jwt.secret` | Symmetric signing key for JWT | **YES** | **None** (must be set via `JWT_SECRET` environment variable) |
@@ -290,6 +293,12 @@ The `security.password.bcrypt.strength` property controls the computational cost
 
 When increasing strength in production, load-test authentication endpoints to ensure acceptable response times. The default of 12 provides strong security for most deployments.
 
+**Content Security Policy (CSP):**
+
+The application implements a strict Content Security Policy (CSP) without `'unsafe-inline'` directives to prevent XSS attacks. CSP nonces are automatically generated per request by the `CspHeaderFilter` and enforced at the CDN and backend levels. All inline scripts and styles use external files exclusively, or (if necessary) are protected with cryptographically secure nonces.
+
+For detailed CSP implementation, architecture, and troubleshooting, see [`docs/CSP_IMPLEMENTATION.md`](docs/CSP_IMPLEMENTATION.md).
+
 **Breaking Change:** `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` no longer have unsafe default values. All three must be explicitly set via environment variables or the application will fail at startup with a clear error message.
 
 ### Local development secrets
@@ -297,6 +306,33 @@ When increasing strength in production, load-test authentication endpoints to en
 For non-production work, source secrets from an ignored file instead of hardcoding them in `application.yml`. One simple approach is to create a `.env.local` (listed in `.gitignore`) containing only development credentials, then run `set -a && source .env.local && set +a` before `./gradlew bootRun`. This keeps local experimentation convenient without ever committing secrets. Production deployments should continue to rely on a secrets manager or orchestration platform to inject `JWT_SECRET` and other sensitive values at runtime.
 
 Profile-specific overrides live under `src/main/resources/application-*.yml`.
+
+### Oracle Credential Security
+
+The partition maintenance script (`scripts/partition-maintenance.sh`) and database connections use secure credential handling to prevent password exposure. For detailed setup instructions including:
+
+- Setting up a secure password file (chmod 600)
+- Configuring the Oracle External Password Store (Wallet)
+- Kubernetes/Docker deployment with secrets
+- Auditing and monitoring best practices
+
+See [`docs/ORACLE_CREDENTIAL_SECURITY.md`](docs/ORACLE_CREDENTIAL_SECURITY.md).
+
+**Quick Start:**
+```bash
+# Create secrets directory
+mkdir -p .secrets && chmod 700 .secrets
+
+# Store database password securely
+echo -n "your-secure-password" > .secrets/oracle-password
+chmod 600 .secrets/oracle-password
+
+# Add to .gitignore (already included)
+echo ".secrets/" >> .gitignore
+
+# Test partition maintenance
+./scripts/partition-maintenance.sh
+```
 
 ## GraphQL & REST Interfaces
 
@@ -335,6 +371,12 @@ query {
   }
 }
 ```
+
+### Postman Collections & SSL Verification
+
+- `SSF-GraphQL-Postman-Collection.json` is the hardened collection used for shared staging/production testing. It now enforces `strictSSL=true`, so Postman must trust the certificate chain before requests execute. Import the Jetty dev certificate into your OS/Postman trust store or configure Postman *Settings → Certificates* to trust `https://localhost:8443`.
+- `postman-collection.json` is the lightweight developer-focused collection that drives the GraphQL samples in this repo. Its requests rely on the `base_url` variable (default `https://localhost:8443`), so you only need to change that single variable to target another stack. URLs are built with a single `{{base_url}}/graphql` string to avoid accidentally duplicating the protocol prefix.
+- **Local override:** If you cannot trust the dev certificate, duplicate the production collection inside Postman and set `protocolProfileBehavior.strictSSL=false` *only* in that private copy. Never disable strict SSL in workspace-wide or shared collections.
 
 ## Quality & Operations
 
@@ -410,6 +452,36 @@ Because SQL*Plus now receives the password via stdin, it no longer appears in pr
 | **`RedisConnectionFailureException: Unable to connect to Redis`** | Start Redis locally (`docker run redis:7.4-alpine` or `brew services start redis`) or set `REDIS_HOST/PORT` so the app can reach an existing instance. |
 | **GraphiQL reports `Authentication required`** | Supply a valid JWT token in the `Authorization` header. As a last resort for local development only, you may temporarily disable enforcement in `SecurityConfig`; never commit, push, or enable this bypass outside your machine. Prefer safer alternatives such as generating a valid JWT, using a temporary environment-only feature flag, or mocking auth locally, and audit commits plus CI/CD configs before merge/deploy. |
 | **MinIO health check is DOWN** | Confirm MinIO container is reachable and credentials match `minio.*` properties |
+
+## Security & Compliance
+
+SSF implements a comprehensive security roadmap targeting GDPR and SOX compliance. See documentation for details:
+
+- **[SECURITY_ARCHITECTURE.md](docs/SECURITY_ARCHITECTURE.md)**: Current authentication flow, baseline security controls, and risk assessment
+- **[COMPLIANCE_ACCEPTANCE_CRITERIA.md](docs/COMPLIANCE_ACCEPTANCE_CRITERIA.md)**: GDPR/SOX requirements mapped to implementation phases
+- **[MFA_IMPLEMENTATION.md](docs/MFA_IMPLEMENTATION.md)**: Phase 1 design for multi-factor authentication (TOTP, SMS, WebAuthn, backup codes)
+- **[PHASE_0_DELIVERY_SUMMARY.md](docs/PHASE_0_DELIVERY_SUMMARY.md)**: Delivery timeline, risk assessment, and resource requirements
+
+### Security Roadmap Phases
+
+| Phase | Focus | ETA | Key Deliverables |
+|-------|-------|-----|------------------|
+| **Phase 0 – Foundations & Readiness** ✅ | Architecture inventory, baseline controls | ✅ Complete | Security docs, compliance matrix, Grafana placeholders |
+| **Phase 1 – MFA Stack** 🟡 | TOTP, SMS, WebAuthn, recovery codes | Q1 2026 | MFA module, database migrations, GraphQL APIs |
+| **Phase 2 – Audit & Compliance** | Immutable audit logs, data subject rights | Q1-Q2 2026 | Normalized audit schema, export/retention policies |
+| **Phase 3 – Data Encryption** | TDE, app-level crypto, key rotation | Q2-Q3 2026 | EncryptionService, HSM integration, key management |
+| **Phase 4 – Advanced RBAC** | Field-level authorization, policy engine | Q3-Q4 2026 | Role hierarchy, dynamic policies, permission audit |
+
+### Baseline Security Controls
+
+- ✅ JWT-based authentication (HS256 with entropy validation)
+- ✅ Stateless API (no server-side sessions)
+- ✅ Route-level authorization enforced in SecurityFilterChain
+- ✅ GraphQL operation-level authentication (before data fetchers)
+- ✅ Content Security Policy (CSP) headers with nonce generation
+- 🟡 Multi-factor authentication (Phase 1 in progress)
+- 🔴 Field-level access control (Phase 4)
+- 🔴 Transparent Data Encryption (Phase 3)
 
 ## Contributing
 

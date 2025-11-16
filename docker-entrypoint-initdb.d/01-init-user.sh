@@ -1,8 +1,30 @@
 #!/bin/bash
 
+# WARNING: Do NOT use default credentials in production.
+# The APP_USER and DB_USER_PASSWORD must be set to a strong, unique password
+# for production deployments. This script enforces a runtime safeguard that
+# prevents starting in production when a default or missing password is detected.
+
 echo "=== Starting Oracle Database Initialization ==="
 
-DB_PASSWORD=${DB_USER_PASSWORD:-ssfuser}
+# Use DB_USER_PASSWORD for the application user. In production, we require DB_USER_PASSWORD
+# to be explicitly set to a strong password; in non-production we fall back to APP_USER for
+# convenience.
+if [[ "${ENVIRONMENT,,}" == "production" ]]; then
+  DB_PASSWORD=${DB_USER_PASSWORD:-}
+else
+  DB_PASSWORD=${DB_USER_PASSWORD:-APP_USER}
+fi
+ENVIRONMENT=${ENVIRONMENT:-development}
+
+# Protect production environments from weak/no password.
+if [[ "${ENVIRONMENT,,}" == "production" ]]; then
+  if [[ -z "${DB_USER_PASSWORD}" || "${DB_USER_PASSWORD}" == "APP_USER" || "${DB_USER_PASSWORD}" == "app_user" ]]; then
+    echo "ERROR: DB_USER_PASSWORD must be set to a strong, unique value in production."
+    echo "Set DB_USER_PASSWORD to a secure value (do not use 'APP_USER')."
+    exit 1
+  fi
+fi
 RETRIES=0
 MAX_RETRIES=60
 
@@ -69,29 +91,29 @@ DECLARE
 BEGIN
   SELECT COUNT(*) INTO v_user_exists 
   FROM dba_users 
-  WHERE username = 'SSFUSER';
+  WHERE username = 'APP_USER';
   
   IF v_user_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE USER ssfuser IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
-    DBMS_OUTPUT.PUT_LINE('User ssfuser created');
+    EXECUTE IMMEDIATE 'CREATE USER APP_USER IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
+    DBMS_OUTPUT.PUT_LINE('User APP_USER created');
   ELSE
-    DBMS_OUTPUT.PUT_LINE('User ssfuser already exists');
+    DBMS_OUTPUT.PUT_LINE('User APP_USER already exists');
   END IF;
 
-  EXECUTE IMMEDIATE 'ALTER USER ssfuser IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34);
-  DBMS_OUTPUT.PUT_LINE('User ssfuser password synchronized with DB_USER_PASSWORD');
+  EXECUTE IMMEDIATE 'ALTER USER APP_USER IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34);
+  DBMS_OUTPUT.PUT_LINE('User APP_USER password synchronized with DB_USER_PASSWORD');
 END;
 /
 
 -- Grant privileges (execute unconditionally as they may be revoked)
 DECLARE
 BEGIN
-  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT CREATE TABLE TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT CREATE SEQUENCE TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT CREATE INDEX TO ssfuser';
-  EXECUTE IMMEDIATE 'ALTER USER ssfuser QUOTA UNLIMITED ON ssfspace';
-  DBMS_OUTPUT.PUT_LINE('Privileges granted to ssfuser');
+  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO APP_USER';
+  EXECUTE IMMEDIATE 'GRANT CREATE TABLE TO APP_USER';
+  EXECUTE IMMEDIATE 'GRANT CREATE SEQUENCE TO APP_USER';
+  EXECUTE IMMEDIATE 'GRANT CREATE INDEX TO APP_USER';
+  EXECUTE IMMEDIATE 'ALTER USER APP_USER QUOTA UNLIMITED ON ssfspace';
+  DBMS_OUTPUT.PUT_LINE('Privileges granted to APP_USER');
 EXCEPTION
   WHEN OTHERS THEN
     IF SQLCODE = -1931 OR SQLCODE = -4042 THEN
@@ -115,7 +137,7 @@ sleep 2
 # Initialize schema and create default user if none exists
 echo "=== Initializing database schema ==="
 
-"$ORACLE_HOME/bin/sqlplus" -s ssfuser/"$DB_PASSWORD"@FREEPDB1 > /tmp/init_schema.log 2>&1 <<'EOFSCHEMA'
+"$ORACLE_HOME/bin/sqlplus" -s APP_USER/"$DB_PASSWORD"@FREEPDB1 > /tmp/init_schema.log 2>&1 <<'EOFSCHEMA'
 -- Create sequences
 DECLARE
   v_seq_exists NUMBER := 0;

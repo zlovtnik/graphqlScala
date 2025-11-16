@@ -169,17 +169,13 @@ class CacheServiceTest {
     }
 
     @Test
-    @DisplayName("Should default to query_result_cache for unknown cache names")
-    void testUnknownCacheNameDefaultsBehavior() {
+    @DisplayName("Should throw IllegalArgumentException for unknown cache names")
+    void testUnknownCacheNameThrowsException() {
         String cacheKey = "unknown_cache_key";
         String value = "test_value";
         
-        // Put value using unknown cache name (should default to query_result_cache)
-        cacheService.put(cacheKey, value, "unknown_cache");
-        
-        // Verify value is in query_result_cache (the default)
-        String retrieved = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
-        assertEquals(value, retrieved);
+        // Put value using unknown cache name should now throw IllegalArgumentException
+        assertThrows(IllegalArgumentException.class, () -> cacheService.put(cacheKey, value, "unknown_cache"));
     }
 
     @Test
