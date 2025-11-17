@@ -92,8 +92,9 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
         java.util.regex.Pattern cspKeywordPattern = java.util.regex.Pattern.compile("^'(self|none|unsafe-inline|unsafe-eval)'$");
         
         // HTTPS host pattern: https://host[:port] with optional a single left-most wildcard (e.g., https://*.example.com)
+        // Note: Port validation is done separately below to ensure ports are in range 1-65535
         java.util.regex.Pattern httpsHostPattern = java.util.regex.Pattern.compile(
-            "^https://((\\*\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)*)(?::[0-9]{1,5})?$",
+            "^https://((\\*\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)*)(?::([0-9]+))?$",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
         for (String token : source.split("\\s+")) {
@@ -106,12 +107,34 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
             }
             
             // Check if it's a valid keyword or HTTPS host
-            if (!cspKeywordPattern.matcher(token).matches() && 
-                !httpsHostPattern.matcher(token).matches()) {
-                throw new IllegalArgumentException(
-                    String.format("Invalid CSP source in %s: must be a quoted keyword ('self', 'none', 'unsafe-inline', 'unsafe-eval') or HTTPS host (optionally with port): %s", 
-                    propertyName, token));
+            if (cspKeywordPattern.matcher(token).matches()) {
+                // Valid keyword, proceed
+                continue;
             }
+            
+            java.util.regex.Matcher hostMatcher = httpsHostPattern.matcher(token);
+            if (hostMatcher.matches()) {
+                // Valid HTTPS host; validate port if present
+                String portStr = hostMatcher.group(2);
+                if (portStr != null && !portStr.isEmpty()) {
+                    try {
+                        int port = Integer.parseInt(portStr);
+                        if (port < 1 || port > 65535) {
+                            throw new IllegalArgumentException(
+                                String.format("Invalid CSP source in %s: port must be in range 1-65535 (got %d): %s", 
+                                propertyName, port, token));
+                        }
+                    } catch (NumberFormatException ex) {
+                        throw new IllegalArgumentException(
+                            String.format("Invalid CSP source in %s: invalid port number: %s", propertyName, token), ex);
+                    }
+                }
+                continue;
+            }
+            
+            throw new IllegalArgumentException(
+                String.format("Invalid CSP source in %s: must be a quoted keyword ('self', 'none', 'unsafe-inline', 'unsafe-eval') or HTTPS host (optionally with port 1-65535): %s", 
+                propertyName, token));
         }
     }
 

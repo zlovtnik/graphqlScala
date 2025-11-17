@@ -18,8 +18,8 @@ CREATE TABLE AUDIT_MFA_EVENTS (
     CONSTRAINT chk_mfa_method CHECK (mfa_method IS NULL OR mfa_method IN ('TOTP', 'SMS', 'WEBAUTHN', 'BACKUP_CODE')),
     CONSTRAINT chk_mfa_status CHECK (status IN ('SUCCESS', 'FAILURE', 'RATE_LIMITED', 'LOCKED'))
     ,
-    -- Default behavior: do not allow deletion of a user when audit rows exist (RESTRICT is the default in Oracle)
-    CONSTRAINT fk_audit_mfa_user FOREIGN KEY (user_id) REFERENCES USERS(id)
+    -- Default behavior: Allow deletion of a user; set FK to NULL instead of blocking
+    CONSTRAINT fk_audit_mfa_user FOREIGN KEY (user_id) REFERENCES USERS(id) ON DELETE SET NULL
     ,
     CONSTRAINT fk_audit_mfa_admin FOREIGN KEY (admin_id) REFERENCES USERS(id) ON DELETE SET NULL
 )
@@ -35,12 +35,13 @@ CREATE INDEX idx_audit_mfa_event_type ON AUDIT_MFA_EVENTS(event_type) LOCAL;
 CREATE INDEX idx_audit_mfa_created ON AUDIT_MFA_EVENTS(created_at) LOCAL;
 CREATE INDEX idx_audit_mfa_status ON AUDIT_MFA_EVENTS(status) LOCAL;
 
-COMMENT ON TABLE AUDIT_MFA_EVENTS IS 'Audit trail for all multi-factor authentication events (setup, verification, failures, admin overrides). Range partitioned monthly. Retention: 7 years (SOX compliance).';
-COMMENT ON COLUMN AUDIT_MFA_EVENTS.user_id IS 'User ID (NOT NULL - user action is always associated with a user).';
+COMMENT ON TABLE AUDIT_MFA_EVENTS IS 'Audit trail for all multi-factor authentication events (setup, verification, failures, admin overrides). Range partitioned monthly. Retention: 7 years (SOX compliance). Note: Implements pseudonymisation via ON DELETE SET NULL for user_id when users are deleted, maintaining audit integrity while protecting privacy. For enhanced privacy, consider adding a stable hash/token (derived from original user_id + salt) in a separate pseudonymised_user_token column for post-deletion traceability without exposing PII.';
+COMMENT ON COLUMN AUDIT_MFA_EVENTS.user_id IS 'User ID (initially NOT NULL - user action is always associated with a user). Sets to NULL when user is deleted to preserve audit trail while protecting privacy (pseudonymisation). Administrators can correlate with pseudonymised token if captured separately.';
+COMMENT ON COLUMN AUDIT_MFA_EVENTS.admin_id IS 'Admin user ID (nullable). Sets to NULL when admin user is deleted.';
 COMMENT ON COLUMN AUDIT_MFA_EVENTS.event_type IS 'Type of MFA event (setup, verification, admin action, etc.)';
 COMMENT ON COLUMN AUDIT_MFA_EVENTS.status IS 'Outcome of event (success, failure, rate limited, account locked).';
 COMMENT ON COLUMN AUDIT_MFA_EVENTS.details IS 'Additional context (e.g., "Rate limit exceeded: 5 failed attempts in 15 minutes").';
-COMMENT ON COLUMN AUDIT_MFA_EVENTS.created_at IS 'Event timestamp. Partition key for monthly range partitioning.';
+COMMENT ON COLUMN AUDIT_MFA_EVENTS.created_at IS 'Event timestamp. Partition key for monthly range partitioning. Retention: 7 years per SOX requirements. Partitions older than 84 months are dropped automatically to reclaim space and enforce data minimisation.';
 
 
 -- Retention policy: Keep MFA audit logs for 7 years (SOX requirement)

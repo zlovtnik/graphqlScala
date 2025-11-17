@@ -48,8 +48,8 @@ public class User {
      * Creates a new User with required fields validated.
      *
      * <p><strong>Validation Strategy:</strong> This constructor performs defensive null/blank checks
-     * that run immediately, before bean validation occurs. The {@link @NotBlank} field constraints
-     * provide additional protection in validation-aware code paths (e.g., after {@link @Valid} filtering).
+     * that run immediately, before bean validation occurs. The {@code @NotBlank} field constraints
+     * provide additional protection in validation-aware code paths (e.g., after {@code @Valid} filtering).
      * If this constructor is used from such paths, the exceptions thrown here may never surface.
      * For non-validated contexts (e.g., internal service construction), these checks ensure data integrity
      * at creation time.

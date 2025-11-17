@@ -67,24 +67,18 @@ public class CompressionFilter extends OncePerRequestFilter {
                 meterRegistry.counter("http.response.compression.selected", "algorithm", selectedAlgorithm).increment();
                 log.debug("Applied {} compression for: {}", selectedAlgorithm, request.getRequestURI());
 
-                Exception chainException = null;
-                RuntimeException runtimeException = null;
+                Throwable filtrationException = null;
                 try {
                     filterChain.doFilter(request, wrappedResponse);
-                } catch (RuntimeException ex) {
-                    runtimeException = ex;
-                    throw ex;
                 } catch (Exception ex) {
-                    chainException = ex;
+                    filtrationException = ex;
                     throw ex;
                 } finally {
                     try {
                         wrappedResponse.finishCompression();
                     } catch (IOException compressionEx) {
-                        if (runtimeException != null) {
-                            runtimeException.addSuppressed(compressionEx);
-                        } else if (chainException != null) {
-                            chainException.addSuppressed(compressionEx);
+                        if (filtrationException != null) {
+                            filtrationException.addSuppressed(compressionEx);
                         } else {
                             throw compressionEx;
                         }
@@ -205,6 +199,9 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         @Override
         public ServletOutputStream getOutputStream() throws IOException {
+            if (writerObtained) {
+                throw new IllegalStateException("getWriter() has already been called; cannot call getOutputStream()");
+            }
             if (!streamObtained) {
                 streamObtained = true;
                 
@@ -240,6 +237,9 @@ public class CompressionFilter extends OncePerRequestFilter {
          */
         @Override
         public PrintWriter getWriter() throws IOException {
+            if (streamObtained) {
+                throw new IllegalStateException("getOutputStream() has already been called; cannot call getWriter()");
+            }
             if (!writerObtained) {
                 writerObtained = true;
                 
@@ -263,7 +263,8 @@ public class CompressionFilter extends OncePerRequestFilter {
                 try {
                     wrappedWriter.flush();
                 } catch (Exception e) {
-                    log.debug("Error flushing PrintWriter", e);
+                    log.warn("Error flushing PrintWriter during compression: {}", e.getMessage());
+                    throw new IOException("Failed to flush compression stream", e);
                 }
             }
             
@@ -334,8 +335,7 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         @Override
         public void setWriteListener(WriteListener listener) {
-            // Not implemented for non-async context
-            log.debug("setWriteListener called but not implemented");
+            throw new IllegalStateException("Async I/O (WriteListener) is not supported on compressed output streams; use synchronous write methods instead");
         }
     }
 }

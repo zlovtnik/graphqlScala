@@ -56,9 +56,9 @@ public class GraphqlCachingAspect {
         Object result;
         try {
             result = joinPoint.proceed();
-        } catch (Exception ex) {
-            log.error("Method execution failed for cacheKey: {} in cache: {} - {}", cacheKey, cacheName, ex.getMessage(), ex);
-            throw ex;
+        } catch (Throwable t) {
+            log.error("Method execution failed for cacheKey: {} in cache: {} - {}", cacheKey, cacheName, t.getMessage(), t);
+            throw t;
         }
         
         // Cache the result with custom TTL after validation
@@ -76,108 +76,91 @@ public class GraphqlCachingAspect {
     }
 
     private String generateCacheKey(ProceedingJoinPoint joinPoint) {
+        String keyPayload = buildKeyPayload(joinPoint);
+        return hashKeyPayload(keyPayload, joinPoint);
+    }
+
+    private String buildKeyPayload(ProceedingJoinPoint joinPoint) {
+        StringBuilder keyPayload = new StringBuilder();
+        keyPayload.append(joinPoint.getSignature().getDeclaringTypeName())
+                .append(".")
+                .append(joinPoint.getSignature().getName())
+                .append("(");
+
+        Object[] args = joinPoint.getArgs();
+        for (int i = 0; i < args.length; i++) {
+            if (i > 0) keyPayload.append(",");
+            keyPayload.append(serializeArgument(args[i]));
+        }
+        keyPayload.append(")");
+        return keyPayload.toString();
+    }
+
+    private String serializeArgument(Object arg) {
+        if (arg == null) {
+            return "<null>";
+        }
         try {
-            // Build deterministic key payload: type.method(arg1, arg2, ...)
-            StringBuilder keyPayload = new StringBuilder();
-            keyPayload.append(joinPoint.getSignature().getDeclaringTypeName())
-                   .append(".")
-                   .append(joinPoint.getSignature().getName())
-                   .append("(");
-            
-            Object[] args = joinPoint.getArgs();
-            for (int i = 0; i < args.length; i++) {
-                if (i > 0) keyPayload.append(",");
-                if (args[i] == null) {
-                    keyPayload.append("<null>");
-                } else {
-                    try {
-                        // Use JSON serialization for stable string representation
-                        keyPayload.append(objectMapper.writeValueAsString(args[i]));
-                    } catch (Exception e) {
-                        // Fallback to a content-based stable representation
-                        Object arg = args[i];
-                        try {
-                            if (arg.getClass().isArray()) {
-                                // handle common primitive arrays and object arrays
-                                if (arg instanceof Object[]) {
-                                    keyPayload.append(Arrays.deepHashCode((Object[]) arg));
-                                } else if (arg instanceof int[]) {
-                                    keyPayload.append(Arrays.hashCode((int[]) arg));
-                                } else if (arg instanceof long[]) {
-                                    keyPayload.append(Arrays.hashCode((long[]) arg));
-                                } else if (arg instanceof byte[]) {
-                                    keyPayload.append(Arrays.hashCode((byte[]) arg));
-                                } else if (arg instanceof short[]) {
-                                    keyPayload.append(Arrays.hashCode((short[]) arg));
-                                } else if (arg instanceof char[]) {
-                                    keyPayload.append(Arrays.hashCode((char[]) arg));
-                                } else if (arg instanceof float[]) {
-                                    keyPayload.append(Arrays.hashCode((float[]) arg));
-                                } else if (arg instanceof double[]) {
-                                    keyPayload.append(Arrays.hashCode((double[]) arg));
-                                } else if (arg instanceof boolean[]) {
-                                    keyPayload.append(Arrays.hashCode((boolean[]) arg));
-                                } else {
-                                    // generic fallback for any unknown array type
-                                    keyPayload.append(Arrays.deepHashCode(new Object[]{arg}));
-                                }
-                            } else {
-                                // Try standard hashCode (relying on proper equals/hashCode implementations)
-                                keyPayload.append(arg.hashCode());
-                            }
-                        } catch (Exception e2) {
-                            // Fallback to stable content-based representation
-                            try {
-                                if (arg.getClass().isArray()) {
-                                    // handle common primitive arrays and object arrays with stable hashing
-                                    if (arg instanceof Object[]) {
-                                        keyPayload.append(Arrays.deepHashCode((Object[]) arg));
-                                    } else if (arg instanceof int[]) {
-                                        keyPayload.append(Arrays.hashCode((int[]) arg));
-                                    } else if (arg instanceof long[]) {
-                                        keyPayload.append(Arrays.hashCode((long[]) arg));
-                                    } else if (arg instanceof byte[]) {
-                                        keyPayload.append(Arrays.hashCode((byte[]) arg));
-                                    } else if (arg instanceof short[]) {
-                                        keyPayload.append(Arrays.hashCode((short[]) arg));
-                                    } else if (arg instanceof char[]) {
-                                        keyPayload.append(Arrays.hashCode((char[]) arg));
-                                    } else if (arg instanceof float[]) {
-                                        keyPayload.append(Arrays.hashCode((float[]) arg));
-                                    } else if (arg instanceof double[]) {
-                                        keyPayload.append(Arrays.hashCode((double[]) arg));
-                                    } else if (arg instanceof boolean[]) {
-                                        keyPayload.append(Arrays.hashCode((boolean[]) arg));
-                                    } else {
-                                        // generic fallback for any unknown array type
-                                        keyPayload.append(Arrays.deepHashCode(new Object[]{arg}));
-                                    }
-                                } else {
-                                    // Use a stable representation based on class and content
-                                    // Avoid toString() as it may include non-deterministic data
-                                    keyPayload.append(arg.getClass().getName()).append(":").append(arg.hashCode());
-                                }
-                            } catch (Exception e3) {
-                                // Final fallback: use class name only for basic stability
-                                keyPayload.append(arg.getClass().getName()).append(":unhashable");
-                            }
-                        }
-                    }
-                }
+            return objectMapper.writeValueAsString(arg);
+        } catch (Exception e) {
+            return getFallbackRepresentation(arg);
+        }
+    }
+
+    private String getFallbackRepresentation(Object arg) {
+        try {
+            if (arg.getClass().isArray()) {
+                return Integer.toString(computeArrayHash(arg));
+            } else {
+                return arg.getClass().getName() + ":" + arg.hashCode();
             }
-            keyPayload.append(")");
-            
-            // Hash with SHA-256 for security and stability
+        } catch (Exception ex) {
+            try {
+                // Last attempt for arrays
+                if (arg.getClass().isArray()) {
+                    return Integer.toString(computeArrayHash(arg));
+                }
+            } catch (Exception ignored) {
+                // fall through
+            }
+            return arg.getClass().getName() + ":unhashable";
+        }
+    }
+
+    private int computeArrayHash(Object arg) {
+        if (arg instanceof Object[]) {
+            return Arrays.deepHashCode((Object[]) arg);
+        } else if (arg instanceof int[]) {
+            return Arrays.hashCode((int[]) arg);
+        } else if (arg instanceof long[]) {
+            return Arrays.hashCode((long[]) arg);
+        } else if (arg instanceof byte[]) {
+            return Arrays.hashCode((byte[]) arg);
+        } else if (arg instanceof short[]) {
+            return Arrays.hashCode((short[]) arg);
+        } else if (arg instanceof char[]) {
+            return Arrays.hashCode((char[]) arg);
+        } else if (arg instanceof float[]) {
+            return Arrays.hashCode((float[]) arg);
+        } else if (arg instanceof double[]) {
+            return Arrays.hashCode((double[]) arg);
+        } else if (arg instanceof boolean[]) {
+            return Arrays.hashCode((boolean[]) arg);
+        }
+        // generic fallback for unknown array types
+        return Arrays.deepHashCode(new Object[]{arg});
+    }
+
+    private String hashKeyPayload(String keyPayload, ProceedingJoinPoint joinPoint) {
+        try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hashBytes = digest.digest(keyPayload.toString().getBytes());
+            byte[] hashBytes = digest.digest(keyPayload.getBytes());
             return Base64.getUrlEncoder().withoutPadding().encodeToString(hashBytes);
         } catch (NoSuchAlgorithmException e) {
             log.error("SHA-256 algorithm not available, using fallback key generation", e);
-            // Fallback: use a simpler key if SHA-256 is unavailable
-            // Use Arrays.deepHashCode for stable, content-based hash instead of identity hash
-            return joinPoint.getSignature().getDeclaringTypeName() + "." + 
-                   joinPoint.getSignature().getName() + "." +
-                   Arrays.deepHashCode(joinPoint.getArgs());
+            return joinPoint.getSignature().getDeclaringTypeName() + "." +
+                    joinPoint.getSignature().getName() + "." +
+                    Arrays.deepHashCode(joinPoint.getArgs());
         }
     }
 }

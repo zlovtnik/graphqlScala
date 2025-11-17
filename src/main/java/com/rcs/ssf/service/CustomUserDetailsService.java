@@ -7,16 +7,21 @@ import com.rcs.ssf.security.AuthenticatedUser;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Reactive user details service for Spring Security.
+ * 
+ * This service loads user details from the database without blocking,
+ * using Spring Data R2DBC reactive repositories.
+ */
 @Service
-public class CustomUserDetailsService implements UserDetailsService {
+public class CustomUserDetailsService {
 
     private final UserRepository userRepository;
     private final SecurityProperties securityProperties;
@@ -26,15 +31,25 @@ public class CustomUserDetailsService implements UserDetailsService {
         this.securityProperties = securityProperties;
     }
 
-    @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // Block the reactive call since UserDetailsService is a blocking interface.
-        // R2dbcRepository methods return Mono<T>, so we block to get the actual User.
-        // Add a 5-second timeout to prevent indefinite hangs if the database is unresponsive.
-        User user = userRepository.findByUsername(username)
-                .blockOptional(Duration.ofSeconds(5))
-                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
-        
+    /**
+     * Find user details by username without blocking.
+     *
+     * @param username the username to search for
+     * @return Mono of UserDetails if found, otherwise error signal
+     */
+    public Mono<UserDetails> findByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .switchIfEmpty(Mono.error(() -> new UsernameNotFoundException("User not found: " + username)))
+                .map(this::buildUserDetails);
+    }
+
+    /**
+     * Builds UserDetails from a User entity without blocking.
+     *
+     * @param user the user entity
+     * @return AuthenticatedUser with authorities
+     */
+    private UserDetails buildUserDetails(User user) {
         // Fetch user's roles and convert to GrantedAuthority instances
         List<GrantedAuthority> authorities = getUserAuthorities(user);
         

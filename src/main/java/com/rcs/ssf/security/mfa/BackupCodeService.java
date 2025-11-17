@@ -94,6 +94,9 @@ public interface BackupCodeService {
      *
      * @param userId user identifier
      * @return list of 10 new backup codes
+     * @throws IllegalArgumentException if userId is null, blank, or invalid
+     * @throws IllegalStateException if persistence fails (prior codes remain active)
+     * @throws ConcurrentModificationException if the user's backup codes are being regenerated concurrently
      */
     List<String> regenerateBackupCodes(String userId);
 
@@ -106,25 +109,24 @@ public interface BackupCodeService {
      * was successfully consumed (true) or if no codes remained (false). This is logged as
      * "ADMIN_BACKUP_CODE_OVERRIDE" in the audit trail with the admin ID and timestamp.</p>
      *
-    * Used for account recovery by administrators in emergency scenarios.
+     * <p><strong>Authorization (REQUIRED):</strong> Implementations MUST validate that
+     * the provided {@code adminId} holds an appropriate administrative permission (for
+     * example, ROLE_ADMIN or ROLE_MFA_ADMIN) before consuming a backup code. The
+     * method MUST throw {@link java.lang.SecurityException} if the caller lacks the
+     * required privileges. Implementations MAY also use a domain-specific
+     * AuthorizationException if available in your project.</p>
+     *
+     * <p><strong>Auditing (REQUIRED):</strong> All attempts (both successful and
+     * failed) MUST be recorded in the audit trail, including adminId, userId,
+     * timestamp, and a short reason for failure (if any). This ensures compliance
+     * and forensic traceability.</p>
+     *
+     * <p>Used for account recovery by administrators in emergency scenarios.</p>
      *
      * @param userId user identifier
-    *
-    * <p><strong>Authorization (REQUIRED):</strong> Implementations MUST validate that
-    * the provided {@code adminId} holds an appropriate administrative permission (for
-    * example, ROLE_ADMIN or ROLE_MFA_ADMIN) before consuming a backup code. The
-    * method MUST throw {@link java.lang.SecurityException} if the caller lacks the
-    * required privileges. Implementations MAY also use a domain-specific
-    * AuthorizationException if available in your project.</p>
-    *
-    * <p><strong>Auditing (REQUIRED):</strong> All attempts (both successful and
-    * failed) MUST be recorded in the audit trail, including adminId, userId,
-    * timestamp, and a short reason for failure (if any). This ensures compliance
-    * and forensic traceability.</p>
-    *
-    * @param adminId administrator performing override
+     * @param adminId administrator performing override
      * @return true if a code was successfully consumed, false if none were available
-    * @throws SecurityException if the caller is not authorized to perform admin overrides
-    */
+     * @throws SecurityException if the caller is not authorized to perform admin overrides
+     */
     boolean adminConsumeBackupCode(String userId, String adminId);
 }

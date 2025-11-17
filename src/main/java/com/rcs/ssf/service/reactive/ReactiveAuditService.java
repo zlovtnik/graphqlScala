@@ -51,6 +51,7 @@ public class ReactiveAuditService {
     private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(5);
     private static final int MAX_RETRIES = 3;
 
+    @SuppressWarnings("null")
     public Mono<Void> logGraphQLComplexity(String query, int complexity) {
         if (query == null) {
             return Mono.error(new IllegalArgumentException("Query cannot be null"));
@@ -64,11 +65,11 @@ public class ReactiveAuditService {
         
         return template.getDatabaseClient()
                 .sql("INSERT INTO audit_graphql_complexity (query_hash, complexity, threshold, status, timestamp) VALUES (?, ?, ?, ?, ?)")
-                .bind(0, queryHash)
-                .bind(1, complexity)
-                .bind(2, complexityThreshold)
-                .bind(3, status)
-                .bind(4, LocalDateTime.now())
+                .bind(0, (Object) queryHash)
+                .bind(1, (Object) complexity)
+                .bind(2, (Object) complexityThreshold)
+                .bind(3, (Object) status)
+                .bind(4, (Object) LocalDateTime.now())
                 .fetch()
                 .rowsUpdated()
                 .then()
@@ -102,6 +103,7 @@ public class ReactiveAuditService {
      * @param newState The new circuit breaker state (CLOSED, OPEN, HALF_OPEN)
      * @return Mono that completes when audit record is inserted
      */
+    @SuppressWarnings("null")
     public Mono<Void> logCircuitBreakerEvent(String serviceName, String newState) {
         Timer.Sample sample = Timer.start(meterRegistry);
         
@@ -110,10 +112,10 @@ public class ReactiveAuditService {
             
             return template.getDatabaseClient()
                     .sql("INSERT INTO audit_circuit_breaker_events (breaker_name, service_name, state_transition, event_timestamp) VALUES (?, ?, ?, ?)")
-                    .bind(0, serviceName)
-                    .bind(1, serviceName)
-                    .bind(2, newState)
-                    .bind(3, LocalDateTime.now())
+                    .bind(0, (Object) (serviceName + "-breaker"))
+                    .bind(1, (Object) serviceName)
+                    .bind(2, (Object) newState)
+                    .bind(3, (Object) LocalDateTime.now())
                     .fetch()
                     .rowsUpdated()
                     .then()
@@ -146,6 +148,7 @@ public class ReactiveAuditService {
      * @param compressedSize Compressed response size in bytes
      * @return Mono that completes when audit record is inserted
      */
+    @SuppressWarnings("null")
     public Mono<Void> logCompressionEvent(String algorithm, long originalSize, long compressedSize) {
         Timer.Sample sample = Timer.start(meterRegistry);
         
@@ -157,11 +160,11 @@ public class ReactiveAuditService {
             
             return template.getDatabaseClient()
                     .sql("INSERT INTO audit_http_compression (compression_algorithm, original_size, compressed_size, compression_ratio, recorded_at) VALUES (?, ?, ?, ?, ?)")
-                    .bind(0, algorithm)
-                    .bind(1, originalSize)
-                    .bind(2, compressedSize)
-                    .bind(3, compressionRatio)
-                    .bind(4, LocalDateTime.now())
+                    .bind(0, (Object) algorithm)
+                    .bind(1, (Object) originalSize)
+                    .bind(2, (Object) compressedSize)
+                    .bind(3, (Object) compressionRatio)
+                    .bind(4, (Object) LocalDateTime.now())
                     .fetch()
                     .rowsUpdated()
                     .then()
@@ -192,6 +195,7 @@ public class ReactiveAuditService {
      * @param executionTimeMs Query execution time in milliseconds
      * @return Mono that completes when audit record is inserted (or empty if not sampled)
      */
+    @SuppressWarnings("null")
     public Mono<Void> logExecutionPlan(String query, long executionTimeMs) {
         if (query == null) {
             return Mono.error(new IllegalArgumentException("Query cannot be null"));
@@ -211,9 +215,9 @@ public class ReactiveAuditService {
             
             return template.getDatabaseClient()
                     .sql("INSERT INTO audit_graphql_execution_plans (query_hash, p50_time_ms, sampled_at) VALUES (?, ?, ?)")
-                    .bind(0, queryHash)
-                    .bind(1, executionTimeMs)
-                    .bind(2, LocalDateTime.now())
+                    .bind(0, (Object) queryHash)
+                    .bind(1, (Object) executionTimeMs)
+                    .bind(2, (Object) LocalDateTime.now())
                     .fetch()
                     .rowsUpdated()
                     .then()
@@ -253,7 +257,12 @@ public class ReactiveAuditService {
                                 switch (event.getEventType()) {
                                     case "COMPLEXITY" -> {
                                         if (event.getQuery() != null) {
-                                            mono = logGraphQLComplexity(event.getQuery(), event.getScore());
+                                            Integer score = event.getScore();
+                                            if (score == null) {
+                                                mono = Mono.empty();
+                                            } else {
+                                                mono = logGraphQLComplexity(event.getQuery(), score);
+                                            }
                                         } else {
                                             mono = Mono.empty();
                                         }
@@ -269,8 +278,10 @@ public class ReactiveAuditService {
                 .then()
                 .onErrorResume(throwable -> {
                     log.error("Batch audit failed: {}", throwable.getMessage());
-                    meterRegistry.counter("audit.batch.errors_total").increment();
-                    meterRegistry.counter("audit.dropped_events_total").increment();
+                    meterRegistry.counter("audit.batch.failed_total").increment();
+                    // Count total events dropped in this batch by size (each event in failed batch is dropped)
+                    // Note: In the current code, we don't have access to batch size here after buffering.
+                    // This will need to be refactored to track batch size in a wrapper or handle errors per-batch.
                     return Mono.empty();
                 });
     }
@@ -284,6 +295,9 @@ public class ReactiveAuditService {
      * @throws IllegalStateException if SHA-256 algorithm is not available (JVM configuration issue)
      */
     private String generateHash(String query) {
+        if (query == null) {
+            throw new IllegalArgumentException("Query cannot be null");
+        }
         return HashUtils.sha256Hex(query);
     }
 

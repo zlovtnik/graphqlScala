@@ -322,15 +322,16 @@ class CacheServiceTest {
     void testPutWithTtlZero() {
         String cacheKey = "ttl_zero_key";
         String value = "test_value";
-        // Reconfigure default TTL to a very short value for deterministic testing
-        cacheConfiguration.getQueryResultCache().setTtlMinutes(0);
-        cacheService = new CacheService(cacheConfiguration);
+        // Create a fresh cache configuration locally to avoid test interference
+        CacheConfiguration freshConfig = new CacheConfiguration();
+        freshConfig.setQueryResultCache(new CacheConfiguration.CacheProperties(1000, 0));
+        CacheService freshCacheService = new CacheService(freshConfig);
 
         // Should not throw; uses default TTL (now 0 minutes, immediate expiry)
-        cacheService.putWithTtl(cacheKey, value, CacheService.QUERY_RESULT_CACHE, 0);
+        freshCacheService.putWithTtl(cacheKey, value, CacheService.QUERY_RESULT_CACHE, 0);
 
         // Immediately present OR already expired if default TTL is 0
-        String retrieved = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        String retrieved = freshCacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
         if (retrieved == null) {
             // If the configured default TTL is 0, Caffeine may consider the entry expired immediately.
             assertNull(retrieved, "Entry expired immediately due to default TTL=0");
@@ -345,7 +346,7 @@ class CacheServiceTest {
         }
 
         // Now the entry should be expired
-        String after = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        String after = freshCacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
         assertNull(after, "Expected entry to expire shortly after default TTL when ttlSeconds == 0");
     }
 

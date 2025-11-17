@@ -197,7 +197,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"query\": \"mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { id username email } }\", \"variables\": {\"input\": {\"username\": \"newuser_{{$timestamp}}\", \"email\": \"user_{{$timestamp}}@example.com\", \"password\": \"SecurePassword123!\"}}}"
+              "raw": "{\"query\": \"mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { id username email } }\", \"variables\": {\"input\": {\"username\": \"newuser_{{$timestamp}}\", \"email\": \"user_{{$timestamp}}@example.com\", \"password\": \"{{user_password}}\"}}}"
             },
             "url": {
               "raw": "{{base_url}}/graphql"
@@ -257,6 +257,12 @@
       "value": "",
       "type": "string",
       "description": "JWT token from login - auto-populated after successful login"
+    },
+    {
+      "key": "user_password",
+      "value": "",
+      "type": "string",
+      "description": "Password for creating users - set to a secure value per developer environment (e.g., MySecurePass123!). Empty by default for security."
     },
     {
       "key": "user_id",

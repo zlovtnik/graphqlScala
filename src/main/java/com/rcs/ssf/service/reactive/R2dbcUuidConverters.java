@@ -35,7 +35,7 @@ final class R2dbcUuidConverters {
 
         @Override
         public String convert(@NonNull UUID source) {
-            return source != null ? source.toString() : null;
+            return source.toString();
         }
     }
 
@@ -45,7 +45,7 @@ final class R2dbcUuidConverters {
 
         @Override
         public UUID convert(@NonNull String source) {
-            return source != null ? UUID.fromString(source) : null;
+            return UUID.fromString(source);
         }
     }
 }

@@ -16,7 +16,6 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import reactor.core.publisher.Mono;
 
 import javax.sql.DataSource;
 import java.sql.CallableStatement;
@@ -33,7 +32,6 @@ public class UserService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$",
             Pattern.CASE_INSENSITIVE);
 
-    private static final Duration R2DBC_TIMEOUT = Duration.ofSeconds(5);
 
     private final Optional<JdbcTemplate> jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
@@ -85,7 +83,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findById(id);
+        return userRepository.findByUsername(username).blockOptional();
     }
 
     public Optional<User> findByEmail(String email) {
@@ -108,7 +106,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findByEmail(email);
+        return userRepository.findByEmail(email).blockOptional();
     }
 
     public User createUser(User user) {
@@ -139,8 +137,8 @@ public class UserService {
             return user;
         }
 
-        // Use blocking repository save - CrudRepository returns the saved entity directly
-        User saved = userRepository.save(user);
+        // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
+        User saved = userRepository.save(user).block();
         if (saved == null) {
             throw new RuntimeException(
                 String.format("Failed to persist new user: email=%s, username=%s. Save returned null.",
@@ -194,8 +192,8 @@ public class UserService {
             return existing;
         }
 
-        // Use blocking repository save - CrudRepository returns the saved entity directly
-        User saved = userRepository.save(existing);
+        // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
+        User saved = userRepository.save(existing).block();
         if (saved == null) {
             throw new RuntimeException(
                 String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
@@ -222,8 +220,8 @@ public class UserService {
             return response.affectedRows() > 0;
         }
 
-        // Use blocking repository calls - CrudRepository methods are synchronous
-        if (userRepository.existsById(userId)) {
+        // Use blocking repository calls - R2dbcRepository returns Mono, block it
+        if (userRepository.existsById(userId).block()) {
             userRepository.deleteById(userId);
             return true;
         }
@@ -253,7 +251,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findByEmail(email);
+        return userRepository.findById(id).blockOptional();
     }
 
     private void validateNewUser(User user) {
@@ -286,38 +284,15 @@ public class UserService {
     }
 
     private void ensureUsernameAvailable(String username, Long currentUserId) {
-        if (hasJdbcSupport()) {
-            Boolean exists = jdbcTemplate.get()
-                    .execute((ConnectionCallback<Boolean>) (Connection con) -> instrumentationSupport.withAction(con,
-                            "user_pkg", "username_exists", () -> {
-                                try (CallableStatement cs = con
-                                        .prepareCall("{ ? = call user_pkg.username_exists(?) }")) {
-                                    cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
-                                    cs.setString(2, username);
-                                    cs.execute();
-                                    boolean result = cs.getBoolean(1);
-                                    if (cs.wasNull())
-                                        result = false;
-                                    return result;
-                                }
-                            }));
-            if (Boolean.TRUE.equals(exists)) {
-                // Check if it's the current user
-                if (currentUserId != null) {
-                    Optional<User> existingUser = findByUsername(username);
-                    if (existingUser.isPresent() && !existingUser.get().getId().equals(currentUserId)) {
-                        throw new IllegalArgumentException("USERNAME_IN_USE");
-                    }
-                } else {
-                    throw new IllegalArgumentException("USERNAME_IN_USE");
-                }
-            }
-            return;
-        }
-
+        // Fetch the user by username once to avoid TOCTOU (Time-of-Check-Time-of-Use) races
         Optional<User> existingUser = findByUsername(username);
-        if (existingUser.isPresent() && (currentUserId == null || !existingUser.get().getId().equals(currentUserId))) {
-            throw new IllegalArgumentException("USERNAME_IN_USE");
+        
+        if (existingUser.isPresent()) {
+            User found = existingUser.get();
+            // If a user with this username exists and is NOT the current user, it's in use
+            if (currentUserId == null || !found.getId().equals(currentUserId)) {
+                throw new IllegalArgumentException("USERNAME_IN_USE");
+            }
         }
     }
 

@@ -31,6 +31,50 @@
 --    b) For example: UPDATE audit_graphql_complexity SET complexity_score = 0 WHERE complexity_score IS NULL;
 --    c) Then rerun this migration script
 
+-- Pre-migration validation and data migration to handle existing rows
+-- If the persisted_queries table exists with data, perform the following steps:
+-- 1. Check for NULL or invalid values in NOT NULL columns
+-- 2. Migrate existing data to match new schema constraints
+-- 3. Handle user_id conversions if needed
+
+BEGIN
+    -- Check if table exists
+    DECLARE
+        v_table_exists NUMBER := 0;
+        v_null_complexity_rows NUMBER := 0;
+        v_null_version_rows NUMBER := 0;
+        v_null_status_rows NUMBER := 0;
+    BEGIN
+        SELECT COUNT(*) INTO v_table_exists FROM user_tables WHERE table_name = 'PERSISTED_QUERIES';
+        
+        IF v_table_exists > 0 THEN
+            -- Pre-migration validation queries
+            SELECT COUNT(*) INTO v_null_complexity_rows FROM persisted_queries WHERE complexity_score IS NULL;
+            SELECT COUNT(*) INTO v_null_version_rows FROM persisted_queries WHERE version IS NULL;
+            SELECT COUNT(*) INTO v_null_status_rows FROM persisted_queries WHERE status IS NULL;
+            
+            -- Fix NULL complexity_score (set to 0)
+            IF v_null_complexity_rows > 0 THEN
+                UPDATE persisted_queries SET complexity_score = 0 WHERE complexity_score IS NULL;
+                COMMIT;
+            END IF;
+            
+            -- Fix NULL version (set to default)
+            IF v_null_version_rows > 0 THEN
+                UPDATE persisted_queries SET version = 'v1' WHERE version IS NULL;
+                COMMIT;
+            END IF;
+            
+            -- Fix NULL status (set to ACTIVE)
+            IF v_null_status_rows > 0 THEN
+                UPDATE persisted_queries SET status = 'ACTIVE' WHERE status IS NULL;
+                COMMIT;
+            END IF;
+        END IF;
+    END;
+END;
+/
+
 CREATE TABLE persisted_queries (
     id VARCHAR2(64) PRIMARY KEY,
     query_hash VARCHAR2(64) NOT NULL UNIQUE,

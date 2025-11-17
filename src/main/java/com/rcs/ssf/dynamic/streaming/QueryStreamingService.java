@@ -22,7 +22,6 @@ import java.util.NoSuchElementException;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -47,7 +46,7 @@ public class QueryStreamingService {
         QueryStreamOptions effectiveOptions = normalize(options);
         int fetchSize = Math.min(Math.max(effectiveOptions.fetchSize(), properties.getFetchSize()), properties.getMaxFetchSize());
 
-        Connection connection = DataSourceUtils.getConnection(Objects.requireNonNull(ds, "DataSource must not be null"));
+        Connection connection = DataSourceUtils.getConnection(ds);
         PreparedStatement statement = null;
         ResultSet resultSet = null;
         try {
@@ -66,9 +65,7 @@ public class QueryStreamingService {
         } catch (SQLException e) {
             JdbcUtils.closeResultSet(resultSet);
             JdbcUtils.closeStatement(statement);
-            if (ds != null) {
-                DataSourceUtils.releaseConnection(connection, ds);
-            }
+            DataSourceUtils.releaseConnection(connection, ds);
             throw new DataAccessResourceFailureException("Unable to open streaming cursor", e);
         }
 
@@ -105,9 +102,7 @@ public class QueryStreamingService {
     private void closeQuietly(ResultSet resultSet, PreparedStatement statement, Connection connection, DataSource ds) {
         JdbcUtils.closeResultSet(resultSet);
         JdbcUtils.closeStatement(statement);
-        if (ds != null) {
-            DataSourceUtils.releaseConnection(connection, ds);
-        }
+        DataSourceUtils.releaseConnection(connection, ds);
     }
 
     private static final class ResultSetIterator<T> implements java.util.Iterator<T> {

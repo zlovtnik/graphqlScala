@@ -1,8 +1,14 @@
 {
   "info": {
     "name": "SSF GraphQL API",
-    "description": "GraphQL API collection for SSF with authentication, user queries, and mutations",
+    "description": "GraphQL API collection for SSF with authentication, user queries, and mutations.\n\n**IMPORTANT - SECURITY NOTICE:**\nThis collection contains PLACEHOLDER values for credentials (username, password, email, user_id, jwt_token).\nPlease set these values per your developer environment before running requests.\nNever commit real credentials to this collection.\n\n**SSL/TLS for Local Development:**\nIf using a self-signed certificate on localhost, disable SSL verification in Postman:\n1. Go to Settings → SSL certificate verification → OFF\nOR\n2. Import your CA certificate into Postman (Settings → Certificates → CA Certificates)\n\nFor production, always use valid certificates and enable SSL verification.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "protocolProfileBehavior": {
+    "disableBodyPruning": false,
+    "disableUrlEncoding": false,
+    "disableCookies": false,
+    "strictSSL": false
   },
   "item": [
     {
@@ -188,7 +194,7 @@
                   "var jsonData = pm.response.json();",
                   "pm.test('User retrieved by ID', function() {",
                   "    pm.expect(jsonData.data.user).to.have.property('id');",
-                  "    pm.expect(jsonData.data.user.id).to.equal(pm.environment.get('user_id'));",
+                  "    pm.expect(String(jsonData.data.user.id)).to.equal(pm.environment.get('user_id'));",
                   "});"
                 ]
               }
@@ -413,31 +419,31 @@
       "key": "jwt_token",
       "value": "",
       "type": "string",
-      "description": "JWT token for authentication (populated from login)"
+      "description": "{{jwt_token}} - PLACEHOLDER: Set after successful login. Empty by default."
     },
     {
       "key": "user_id",
       "value": "",
       "type": "string",
-      "description": "User ID from create user response"
+      "description": "{{user_id}} - PLACEHOLDER: Auto-populated from Create User response. Start with empty value."
     },
     {
       "key": "username",
-      "value": "testuser",
+      "value": "",
       "type": "string",
-      "description": "Username for testing"
+      "description": "{{username}} - PLACEHOLDER: Set this to an actual username per developer environment. Empty by default for security."
     },
     {
       "key": "password",
-      "value": "TestPassword123",
+      "value": "",
       "type": "string",
-      "description": "Password for testing"
+      "description": "{{password}} - PLACEHOLDER: Set this to an actual password per developer environment. Empty by default for security."
     },
     {
       "key": "email",
-      "value": "testuser@example.com",
+      "value": "",
       "type": "string",
-      "description": "Email for testing"
+      "description": "{{email}} - PLACEHOLDER: Set this to an actual email per developer environment. Empty by default for security."
     }
   ]
 }

@@ -16,7 +16,6 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 
 @Configuration
 public class HealthConfig {
@@ -36,12 +35,10 @@ public class HealthConfig {
 
     @Bean
     @ConditionalOnBean(DataSource.class)
-    public HealthContributor customHealthContributors(Optional<DataSource> dataSource) {
+    public HealthContributor customHealthContributors(DataSource dataSource) {
         Map<String, HealthIndicator> indicators = new LinkedHashMap<>();
         indicators.put(DATABASE_FILE, sqliteDatabaseFileHealthIndicator());
-        if (dataSource.isPresent()) {
-            indicators.put(DATABASE_CONNECTION, databaseConnectionHealthIndicator(dataSource.get()));
-        }
+        indicators.put(DATABASE_CONNECTION, databaseConnectionHealthIndicator(dataSource));
         indicators.put(MINIO, minioHealthIndicator());
         return CompositeHealthContributor.fromMap(indicators);
     }

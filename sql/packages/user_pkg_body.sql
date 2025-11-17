@@ -168,6 +168,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_user_agent IN VARCHAR2 DEFAULT NULL,
         p_failure_reason IN VARCHAR2 DEFAULT NULL
     ) IS
+        PRAGMA AUTONOMOUS_TRANSACTION;
     BEGIN
         -- id auto-generated via GENERATED ALWAYS AS IDENTITY
         INSERT INTO audit_login_attempts (username, success, ip_address, user_agent, failure_reason)
@@ -243,14 +244,9 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_user_agent IN VARCHAR2 DEFAULT NULL
     ) IS
     BEGIN
-        -- Log MFA events to audit_error_log with context containing all event details
-        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name, user_id)
-        VALUES ('MFA_EVENT', p_event_type,
-            'user_id=' || NVL(TO_CHAR(p_user_id), 'N/A') || ', admin_id=' || NVL(TO_CHAR(p_admin_id), 'N/A') ||
-            ', mfa_method=' || NVL(p_mfa_method, 'N/A') || ', status=' || p_status ||
-            ', details=' || NVL(p_details, 'N/A') || ', ip_address=' || NVL(p_ip_address, 'N/A') ||
-            ', user_agent=' || NVL(p_user_agent, 'N/A'),
-            'log_mfa_event', p_user_id);
+        -- Log MFA events to dedicated audit_mfa_events table with structured columns
+        INSERT INTO AUDIT_MFA_EVENTS (user_id, admin_id, event_type, mfa_method, status, details, ip_address, user_agent, created_at)
+        VALUES (p_user_id, p_admin_id, p_event_type, p_mfa_method, p_status, p_details, p_ip_address, p_user_agent, SYSTIMESTAMP);
         COMMIT;
     EXCEPTION
         WHEN OTHERS THEN
@@ -261,7 +257,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
                     log_session_error(p_user_id, 'N/A', SQLCODE, SUBSTR(SQLERRM, 1, 4000), 'log_mfa_event');
                 EXCEPTION
                     WHEN OTHERS THEN
-                        NULL;  -- Guard logging itself
+                        NULL;  -- Guard logging itself to prevent propagation
                 END;
                 RAISE;
             END IF;

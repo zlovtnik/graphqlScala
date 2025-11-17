@@ -222,12 +222,15 @@ export class AuthService implements OnDestroy {
     const nextUser = response.user ?? null;
     if (nextUser) {
       this.currentUser$.next(nextUser);
+      this.authStateSubject$.next(AuthState.AUTHENTICATED);
     } else if (!this.currentUser$.value) {
       // We only re-fetch when we do not already have user context
+      // loadCurrentUser() will set AUTHENTICATED on successful fetch
       this.loadCurrentUser();
+    } else {
+      // We already have user context from a previous successful load
+      this.authStateSubject$.next(AuthState.AUTHENTICATED);
     }
-
-    this.authStateSubject$.next(AuthState.AUTHENTICATED);
   }
 
   /**

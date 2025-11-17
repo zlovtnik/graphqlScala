@@ -56,7 +56,7 @@ Key use cases include:
 | **Oracle-ready** | Defaults to Oracle JDBC with environment overrides for production |
 | **MinIO integration** | Health probes and configuration properties for S3-compatible storage |
 | **Observability** | Spring Actuator endpoints and composite health contributors for runtime insights |
-| **Security & Compliance Roadmap** | Multi-phase plan for MFA, audit logging, encryption, and RBAC (GDPR/SOX ready) |
+| **Security & Compliance Roadmap** | Multi-phase plan for MFA, audit logging, encryption, and RBAC (Phase 2 – Audit & Compliance planned Q1–Q2 2026; see [Security Roadmap](#security-roadmap-phases)) |
 
 ## Architecture
 

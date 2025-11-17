@@ -129,7 +129,7 @@ public class SecurityConfig {
                 )
                 // GraphQL request logging filter (highest precedence)
                 .addFilterBefore(graphQLRequestLoggingFilter, SecurityContextHolderFilter.class)
-                // CSP filter runs first (generates nonce for every response)
+                // CSP filter runs after GraphQL logging (generates nonce for every response)
                 .addFilterBefore(cspHeaderFilter, SecurityContextHolderFilter.class)
                 // JWT filter extracts token and populates SecurityContext
                 .addFilterAfter(jwtAuthenticationFilter, SecurityContextHolderFilter.class);

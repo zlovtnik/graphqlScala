@@ -86,32 +86,25 @@ cdn:
   security_headers:
     strict_transport_security: "max-age=31536000; includeSubDomains"
     # Content Security Policy (CSP): Strict policy without 'unsafe-inline'
-    # Nonces are generated server-side (CspHeaderFilter) for each request
-    # All inline scripts and styles MUST use matching nonce attribute
-    # CSP directives:
-    #   - default-src 'self': Only allow same-origin resources
-    #   - script-src 'self' 'nonce-*': Only same-origin + nonce-protected inline scripts
-    #   - style-src 'self' 'nonce-*': Only same-origin + nonce-protected inline styles
-    #   - img-src: Allow same-origin and data: URIs
-    #   - font-src: Allow same-origin and Google Fonts
-    #   - connect-src: Allow XHR/fetch to same-origin and HTTPS endpoints
-    #   - frame-ancestors: Prevent clickjacking
-    #   - base-uri: Restrict <base> tag
-    #   - form-action: Restrict form submissions
-    content_security_policy: |
-      default-src 'self';
-      script-src 'self' 'nonce-${CSP_NONCE}' https://cdn.jsdelivr.net;
-      style-src 'self' 'nonce-${CSP_NONCE}' https://fonts.googleapis.com;
-      img-src 'self' data: https://${TRUSTED_CDN_DOMAIN};
-      font-src 'self' https://fonts.gstatic.com;
-      connect-src 'self' https://${API_DOMAIN} ${REALTIME_DOMAIN};
-      frame-ancestors 'none';
-      base-uri 'self';
-      form-action 'self';
+    # IMPORTANT: Nonces are generated server-side (CspHeaderFilter) for each request
+    # and cannot be set at the CDN edge (which does not see per-request data).
+    # The CDN should NOT set CSP headers; let the application handle them via CspHeaderFilter.
+    # This ensures nonce values are unique per request and properly synchronized.
+    # If CSP must be set at CDN level, use a static nonce-free policy (stars only for CSP):
+    # content_security_policy: |
+    #   default-src 'self';
+    #   script-src 'self' https://cdn.jsdelivr.net;
+    #   style-src 'self' https://fonts.googleapis.com;
+    #   img-src 'self' data: https://${TRUSTED_CDN_DOMAIN};
+    #   font-src 'self' https://fonts.gstatic.com;
+    #   connect-src 'self' https://${API_DOMAIN} ${REALTIME_DOMAIN};
+    #   frame-ancestors 'none';
+    #   base-uri 'self';
+    #   form-action 'self';
     # Security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
-    # Referrer-Policy, Permissions-Policy) are managed by the application (CspHeaderFilter)
-    # to keep a single source-of-truth for security headers. If you prefer to set them
-    # at the CDN edge, add them here, but ensure they match the application configuration.
+    # Referrer-Policy, Permissions-Policy, Content-Security-Policy) are managed by 
+    # the application (CspHeaderFilter) to maintain a single source-of-truth.
+    # The application generates nonces server-side and applies them to CSP headers for every request.
 
   # Rate limiting at CDN edge
   rate_limiting:

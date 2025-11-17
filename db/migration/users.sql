@@ -3,8 +3,9 @@ DECLARE
     v_seq_exists NUMBER := 0;
 BEGIN
     SELECT COUNT(*) INTO v_seq_exists
-    FROM user_sequences
-    WHERE sequence_name = 'USER_ID_SEQ';
+    FROM user_objects
+    WHERE object_type = 'SEQUENCE'
+      AND object_name = 'USER_ID_SEQ';
 
     IF v_seq_exists = 0 THEN
         EXECUTE IMMEDIATE 'CREATE SEQUENCE user_id_seq

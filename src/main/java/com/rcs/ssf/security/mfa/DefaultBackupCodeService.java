@@ -18,14 +18,21 @@ import org.mindrot.jbcrypt.BCrypt;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Default implementation of {@link BackupCodeService}.
  *
- * Provides per-user thread-safe backup code generation with idempotent semantics:
- * concurrent calls for the same user return identical plain-text codes.
+ * Provides per-user thread-safe backup code generation. The per-user
+ * {@link ReentrantReadWriteLock} serializes access so concurrent callers for
+ * the same user are executed sequentially (later callers wait for earlier
+ * ones to complete). Each completed call generates and persists a new,
+ * distinct set of backup codes. To achieve true idempotency, a separate
+ * cache of previously generated codes would be required; this implementation
+ * intentionally regenerates codes per invocation.
  *
  * Thread-safety is achieved via per-user {@link ReentrantReadWriteLock}s to serialize
  * generation and storage updates while allowing parallel operations for different users.
@@ -42,8 +49,12 @@ public class DefaultBackupCodeService implements BackupCodeService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final JdbcTemplate jdbcTemplate;
-    // Per-user locks to serialize generate/regenerate operations while allowing parallel ops for different users
-    private final ConcurrentHashMap<String, ReentrantReadWriteLock> userLocks = new ConcurrentHashMap<>();
+        // Per-user locks to serialize generate/regenerate operations while allowing parallel ops for different users
+        // Bounded and expiring to avoid unbounded growth/memory leak
+        private final Cache<String, ReentrantReadWriteLock> userLocks = Caffeine.newBuilder()
+            .maximumSize(10_000)
+            .expireAfterAccess(30, TimeUnit.MINUTES)
+            .build();
     private final AuditService auditService;
 
     /**
@@ -78,13 +89,16 @@ public class DefaultBackupCodeService implements BackupCodeService {
     }
 
     /**
-     * Internal helper that generates and persists backup codes with per-user concurrency guarantees.
+     * Internal helper that generates and persists backup codes with per-user concurrency control.
      *
      * <p><strong>Concurrency & Idempotency:</strong> Uses per-user {@link ReentrantReadWriteLock}
-     * to serialize concurrent calls for the same user. If multiple threads call this method
-     * simultaneously for the same userId, only the first thread generates fresh codes;
-     * other threads wait and receive the same generated codes (idempotent semantics).
-     * This ensures all concurrent callers receive identical plain-text codes.</p>
+     * to serialize concurrent calls for the same user. Each call generates a new set of codes;
+     * the lock ensures only one thread proceeds at a time for a given userId. The method is
+     * NOT idempotent: each invocation produces and persists a distinct set of new codes.
+     * If multiple threads call this method simultaneously for the same userId, they will be
+     * serialized by the lock; each will generate fresh codes independent of the others.
+     * To achieve true idempotency, implement a separate cache or call deduplication mechanism
+     * at a higher level.</p>
      *
      * <p><strong>Atomicity:</strong> Code generation and persistence are atomic:
      * prior codes are invalidated and new codes are persisted in a single transaction
@@ -96,7 +110,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
      * @throws IllegalStateException if persistence fails (prior codes remain active)
      */
     private List<String> generateCodesInternal(String userId, String actionTag) {
-        ReentrantReadWriteLock lock = userLocks.computeIfAbsent(userId, k -> new ReentrantReadWriteLock());
+        ReentrantReadWriteLock lock = userLocks.get(userId, k -> new ReentrantReadWriteLock());
         lock.writeLock().lock();
         try {
             // Generate fresh codes

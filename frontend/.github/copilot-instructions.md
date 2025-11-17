@@ -1,7 +1,7 @@
 # Copilot Instructions
 
 ## Project Snapshot
-- Angular 18 standalone app + NG-ZORRO UI + Apollo GraphQL client; backend expected at `http://localhost:8443/graphql` (see `src/environments`).
+- Angular 18 standalone app + NG-ZORRO UI + Apollo GraphQL client; backend expected at `https://localhost:8443/graphql` (see `src/environments`).
 - Project root scripts: `npm start`, `npm run build`, `npm test`, `npm run serve:ssr:frontend`, `npm run codegen*`, `npm run lint[:fix]`.
 - SSR build artifacts land in `dist/frontend/{browser,server}`; Express entrypoint is `server.ts`.
 

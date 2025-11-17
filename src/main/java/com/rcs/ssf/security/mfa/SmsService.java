@@ -37,8 +37,8 @@ public interface SmsService {
      *         - "EXPIRED_CODE": code has expired (valid window: 10 minutes)
      *         - "RATE_LIMITED": too many verification attempts (>5 failed attempts)
      *         - "NO_ENROLLMENT_PENDING": no enrollment in progress for user
-     */
-    void verifyEnrollmentCode(String userId, String code);
+    */
+    void verifyEnrollmentCode(String userId, String code) throws MfaVerificationException;
 
     /**
      * Send an SMS OTP code for authentication.
@@ -53,12 +53,12 @@ public interface SmsService {
      * 
      * Validates that the provided code matches the current OTP code.
      * Tracks verification attempts and enforces rate limiting.
-    * Accepts codes based on a fixed time-step algorithm; specifically:
-    * <ul>
-    *   <li>Time-step duration = 5 minutes.</li>
-    *   <li>Verification accepts codes in the current time-step and optionally the previous and next time-steps (i.e., current ±1 time-step) to tolerate clock skew.</li>
-    *   <li>Therefore the total valid window is 15 minutes (5 minutes before the current step, the current 5 minute step, and 5 minutes after).</li>
-    * </ul>
+     * Accepts codes based on a fixed time-step algorithm; specifically:
+     * <ul>
+     *   <li>Time-step duration = 5 minutes.</li>
+     *   <li>Verification accepts codes in the current time-step and optionally the previous and next time-steps (i.e., current ±1 time-step) to tolerate clock skew.</li>
+     *   <li>Therefore the total valid window is 15 minutes (5 minutes before the current step, the current 5 minute step, and 5 minutes after).</li>
+     * </ul>
      *
      * @param userId user identifier
      * @param code 6-digit OTP code from SMS
@@ -68,7 +68,7 @@ public interface SmsService {
      *         - "RATE_LIMITED": too many verification attempts (>5 failed attempts)
      *         - "OTP_NOT_SENT": no OTP currently sent for user
      */
-    void verifyOtpCode(String userId, String code);
+    void verifyOtpCode(String userId, String code) throws MfaVerificationException;
 
     /**
      * Disable SMS MFA for a user.

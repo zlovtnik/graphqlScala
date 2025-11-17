@@ -50,18 +50,12 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
                     .map(name -> name.toLowerCase(Locale.ROOT))
                     .collect(Collectors.toUnmodifiableSet());
     private static final int PUBLIC_MUTATION_CACHE_MAX_ENTRIES = 512;
-    private static final ThreadLocal<MessageDigest> SHA256_DIGEST = ThreadLocal.withInitial(() -> {
-        try {
-            return MessageDigest.getInstance("SHA-256");
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 algorithm not available", e);
-        }
-    });
     private final Cache<String, Boolean> publicMutationCache = Caffeine.newBuilder()
             .maximumSize(PUBLIC_MUTATION_CACHE_MAX_ENTRIES)
             .build();
 
     @Override
+    @SuppressWarnings({"null", "unchecked"})
     public @NonNull Mono<WebGraphQlResponse> intercept(@NonNull WebGraphQlRequest request, @NonNull Chain chain) {
         // Allow introspection queries without authentication
         if (isIntrospectionQuery(request)) {
@@ -83,7 +77,7 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
             // Mono.error() returns Mono<T> where T cannot be narrowed by the type system;
             // explicitly cast to satisfy @NonNull return type requirement
             @SuppressWarnings("null")
-            final Mono<WebGraphQlResponse> errorMono = Mono.error(new AccessDeniedException(
+            final Mono<WebGraphQlResponse> errorMono = (Mono<WebGraphQlResponse>)(Mono<?>) Mono.error(new AccessDeniedException(
                 "Authentication required: Missing or invalid JWT token. " +
                 "Please provide a valid JWT token in the Authorization header."));
             return errorMono;
@@ -142,14 +136,18 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
 
         // Use normalized document as cache key for stable lookups
         String cacheKey = generateCacheKey(document);
-        Boolean cachedResult = publicMutationCache.getIfPresent(cacheKey);
-        if (cachedResult != null) {
-            return cachedResult;
+        if (cacheKey != null) {
+            Boolean cachedResult = publicMutationCache.getIfPresent(cacheKey);
+            if (cachedResult != null) {
+                return cachedResult;
+            }
         }
 
         // Parse AST to confirm it's a public mutation
         boolean parserResult = parseDocumentForPublicMutation(document);
-        publicMutationCache.put(cacheKey, parserResult);
+        if (cacheKey != null) {
+            publicMutationCache.put(cacheKey, parserResult);
+        }
         return parserResult;
     }
 
@@ -162,8 +160,7 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
      */
     private String generateCacheKey(String document) {
         try {
-            MessageDigest digest = SHA256_DIGEST.get();
-            digest.reset();
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(document.getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
@@ -172,9 +169,11 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
                 hexString.append(hex);
             }
             return hexString.toString();
-        } catch (Exception e) {
-            log.warn("Error generating cache key, falling back to normalized document", e);
-            return document.toLowerCase(Locale.ROOT);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
+        } catch (RuntimeException e) {
+            log.warn("Error generating cache key, skipping cache for this document: {}", e.getMessage(), e);
+            return null; // signal skip caching
         }
     }
 
@@ -190,13 +189,20 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
                     if (selectionSet == null) {
                         continue;
                     }
+                    boolean sawAnyField = false;
                     for (Selection<?> selection : selectionSet.getSelections()) {
                         if (selection instanceof Field field) {
+                            sawAnyField = true;
                             String fieldName = field.getName();
-                            if (fieldName != null && PUBLIC_MUTATIONS_NORMALIZED.contains(fieldName.toLowerCase(Locale.ROOT))) {
-                                return true;
+                            if (fieldName == null || !PUBLIC_MUTATIONS_NORMALIZED.contains(fieldName.toLowerCase(Locale.ROOT))) {
+                                return false; // mixed or non-public -> deny
                             }
+                        } else {
+                            return false; // non-field selection -> treat as non-public
                         }
+                    }
+                    if (sawAnyField) {
+                        return true; // every field was public
                     }
                 }
             }
