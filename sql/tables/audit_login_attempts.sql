@@ -11,12 +11,23 @@ CREATE TABLE audit_login_attempts (
 );
 
 -- Indexes for audit_login_attempts
-CREATE INDEX idx_audit_login_attempts_username ON audit_login_attempts(username);
-CREATE INDEX idx_audit_login_attempts_success ON audit_login_attempts(success);
-CREATE INDEX idx_audit_login_attempts_created_at ON audit_login_attempts(created_at);
+-- Removed redundant single-column indexes which duplicate leading columns of composite indexes
+-- Rationale: composite indexes (username, created_at), (success, created_at), (ip_address, created_at)
+-- provide the necessary access patterns; single-column indexes on those leading columns are redundant
+-- and add extra space/maintenance cost. Retain ip single-column index if single-column lookups on IP
+-- are required; otherwise rely on (ip_address, created_at).
+
+-- (Single-column indexes dropped to reduce redundancy)
+-- CREATE INDEX idx_audit_login_attempts_username ON audit_login_attempts(username);
+-- CREATE INDEX idx_audit_login_attempts_success ON audit_login_attempts(success);
+-- CREATE INDEX idx_audit_login_attempts_created_at ON audit_login_attempts(created_at);
 
 -- Additional indexes for security monitoring
 CREATE INDEX idx_audit_login_attempts_ip ON audit_login_attempts(ip_address);
 CREATE INDEX idx_audit_login_attempts_username_created ON audit_login_attempts(username, created_at);
 CREATE INDEX idx_audit_login_attempts_success_created ON audit_login_attempts(success, created_at);
 CREATE INDEX idx_audit_login_attempts_ip_created ON audit_login_attempts(ip_address, created_at);
+
+-- Optional composite index to support failed-attempt count queries efficiently by IP+username
+-- Useful for queries that filter by ip_address AND username AND created_at window (e.g., windowed failed attempts)
+CREATE INDEX idx_audit_login_attempts_ip_username_created ON audit_login_attempts(ip_address, username, created_at);

@@ -2,12 +2,12 @@ package com.rcs.ssf.service.reactive;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.r2dbc.pool.ConnectionPool;
+import io.r2dbc.pool.PoolMetrics;
 import io.r2dbc.pool.ConnectionPoolConfiguration;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -72,7 +72,7 @@ public class ReactiveDataSourceConfiguration {
         boolean useSsl = Boolean.TRUE.equals(r2dbcProperties.getSsl());
         
         ConnectionFactoryOptions options = ConnectionFactoryOptions.builder()
-            .option(DRIVER, "oracle")
+            .option(DRIVER, r2dbcProperties.getDriver())
             .option(HOST, r2dbcProperties.getHost())
             .option(PORT, r2dbcProperties.getPort())
             .option(DATABASE, r2dbcProperties.getDatabase())
@@ -112,6 +112,22 @@ public class ReactiveDataSourceConfiguration {
         if (props.getPassword() == null || props.getPassword().isBlank()) {
             throw new IllegalArgumentException("R2DBC password is required and cannot be empty");
         }
+        // Validate pool settings if present
+        if (props.getPool() != null) {
+            Integer minIdle = props.getPool().getMinIdle();
+            Integer maxSize = props.getPool().getMaxSize();
+
+            if (minIdle != null && minIdle < 0) {
+                throw new IllegalArgumentException("R2DBC pool minIdle must be non-negative (>= 0); provided: " + minIdle);
+            }
+            if (maxSize != null && maxSize <= 0) {
+                throw new IllegalArgumentException("R2DBC pool maxSize must be positive (> 0); provided: " + maxSize);
+            }
+            if (minIdle != null && maxSize != null && minIdle > maxSize) {
+                throw new IllegalArgumentException("R2DBC pool minIdle cannot be greater than maxSize; provided minIdle: " +
+                        minIdle + ", maxSize: " + maxSize);
+            }
+        }
     }
 
     @Bean
@@ -140,17 +156,16 @@ public class ReactiveDataSourceConfiguration {
         
         // Export pool metrics
         pool.getMetrics().ifPresent(metrics -> {
-            meterRegistry.gauge("r2dbc.pool.acquired", metrics, m -> m.acquiredSize());
-            meterRegistry.gauge("r2dbc.pool.idle", metrics, m -> m.idleSize());
-            meterRegistry.gauge("r2dbc.pool.pending", metrics, m -> m.pendingAcquireSize());
+            meterRegistry.gauge("r2dbc.pool.acquired", metrics, PoolMetrics::acquiredSize);
+            meterRegistry.gauge("r2dbc.pool.idle", metrics, PoolMetrics::idleSize);
+            meterRegistry.gauge("r2dbc.pool.pending", metrics, PoolMetrics::pendingAcquireSize);
         });
         
         return pool;
     }
 
     @Bean
-    public R2dbcEntityTemplate r2dbcEntityTemplate(ConnectionPool connectionPool,
-                                                   MeterRegistry meterRegistry) {
+    public R2dbcEntityTemplate r2dbcEntityTemplate(ConnectionPool connectionPool) {
         return new R2dbcEntityTemplate(connectionPool);
     }
 
@@ -159,6 +174,7 @@ public class ReactiveDataSourceConfiguration {
      */
     @org.springframework.boot.context.properties.ConfigurationProperties(prefix = "app.r2dbc")
     public static class R2dbcProperties {
+        private String driver = "oracle";
         private String host = "localhost";
         private Integer port = 1521;
         private String database = "XEPDB1";
@@ -203,6 +219,9 @@ public class ReactiveDataSourceConfiguration {
         
         public Boolean getSsl() { return ssl; }
         public void setSsl(Boolean ssl) { this.ssl = ssl; }
+
+        public String getDriver() { return driver; }
+        public void setDriver(String driver) { this.driver = driver; }
 
         public Pool getPool() { return pool; }
         public void setPool(Pool pool) { this.pool = pool; }

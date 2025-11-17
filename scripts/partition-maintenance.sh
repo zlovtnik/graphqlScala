@@ -63,20 +63,20 @@ START_EPOCH=$(date +%s)
 LOG_FILE=$(mktemp)
 
 # Save debug state to restore it later (prevents logging of credentials)
-SET_DEBUG_STATE=$(set +o | grep xtrace || true)
+SET_DEBUG_STATE=$(set -o | grep xtrace || true)
 set +x
 
 {
   printf 'CONNECT %s/%s@%s\n' "${ORACLE_USER}" "${ORACLE_PASSWORD}" "${ORACLE_CONNECT_STRING}"
   printf 'WHENEVER SQLERROR EXIT SQL.SQLCODE\n'
   printf 'SET DEFINE OFF FEEDBACK OFF TERMOUT ON\n'
-  printf '@@db/migration/R__partition_rollover.sql\n'
+  printf '@@"%s"\n' "${SQL_SCRIPT}"
   printf 'EXIT\n'
 } | ${SQLPLUS_BIN} -s /nolog > "${LOG_FILE}".out 2>&1
 STATUS=$?
 
 # Restore debug state if it was previously enabled
-if [[ "$SET_DEBUG_STATE" == *"on" ]]; then
+if [[ "$SET_DEBUG_STATE" == *"on"* ]]; then
   set -x
 fi
 

@@ -38,7 +38,7 @@ public class GraphQLRequestLoggingFilter extends OncePerRequestFilter implements
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
             throws ServletException, IOException {
 
-        if (!loggingEnabled || !"POST".equalsIgnoreCase(request.getMethod()) || !"/graphql".equals(request.getRequestURI())) {
+        if (!loggingEnabled || !"POST".equalsIgnoreCase(request.getMethod()) || !isGraphQLEndpoint(request)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -50,7 +50,7 @@ public class GraphQLRequestLoggingFilter extends OncePerRequestFilter implements
         if (body == null || body.trim().isEmpty()) {
             logger.warn("Received empty or null GraphQL request body from {}", request.getRemoteAddr());
         } else if (!isValidJson(body)) {
-            logger.warn("Received malformed GraphQL request body from {}: {}", request.getRemoteAddr(), body);
+            logger.warn("Received malformed GraphQL request body from {}: <REDACTED_BODY> (length: {})", request.getRemoteAddr(), body.length());
         } else {
             // Log the request with sensitive data redacted
             String sanitizedBody = sanitizeGraphQLRequest(body);
@@ -75,11 +75,17 @@ public class GraphQLRequestLoggingFilter extends OncePerRequestFilter implements
                     objNode.put("variables", "[REDACTED]");
                 }
                 return objNode.toString();
+            } else {
+                // Root is not an ObjectNode (e.g., array or primitive), return safe placeholder
+                // to prevent leakage of sensitive data in non-object structures
+                logger.debug("GraphQL request root is not an ObjectNode, redacting");
+                return "[UNPARSEABLE_REQUEST]";
             }
         } catch (Exception e) {
             logger.debug("Unable to parse GraphQL body for sanitization", e);
+            // Return safe placeholder instead of unredacted body to prevent sensitive data leakage
+            return "[UNPARSEABLE_REQUEST]";
         }
-        return body;
     }
 
     private boolean isValidJson(String json) {
@@ -93,5 +99,20 @@ public class GraphQLRequestLoggingFilter extends OncePerRequestFilter implements
             logger.debug("Invalid GraphQL JSON payload", ex);
             return false;
         }
+    }
+
+    /**
+     * Checks if the request is for a GraphQL endpoint.
+     * Matches paths like "/graphql", "/graphql/", or mounted paths like "/api/graphql".
+     * Uses getServletPath() for context-agnostic matching.
+     *
+     * @param request the HTTP request
+     * @return true if the request path matches a GraphQL endpoint pattern
+     */
+    private boolean isGraphQLEndpoint(@NonNull HttpServletRequest request) {
+        String servletPath = request.getServletPath();
+        // Remove trailing slash for comparison, then check if path ends with graphql
+        String normalizedPath = servletPath.replaceAll("/$", "");
+        return normalizedPath.endsWith("/graphql") || "/graphql".equals(normalizedPath);
     }
 }

@@ -98,8 +98,8 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
             v_metadata := p_audit.metadata;
         END IF;
 
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
         INSERT INTO audit_dynamic_crud (
-            id,
             table_name,
             operation,
             actor,
@@ -112,7 +112,6 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
             error_code,
             created_at
         ) VALUES (
-            audit_seq.NEXTVAL,
             p_table_name,
             p_operation,
             v_actor,

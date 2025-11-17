@@ -29,12 +29,18 @@ This guide distills the essential commands, workflows, and troubleshooting tacti
 3. **Secrets** – export a high-entropy `JWT_SECRET` (≥32 chars, ≥10 unique chars).
 4. **SSL** – bundled keystore (`src/main/resources/keystore.p12`) usable for local HTTPS.
 
+5. **Repository Type (optional)** – The application can be configured to use either blocking JDBC (DataSource) or reactive R2DBC connections:
+
+  - To use JDBC (blocking): activate the `jdbc` profile: `-Dspring.profiles.active=jdbc` or `SPRING_PROFILES_ACTIVE=jdbc` and configure `spring.datasource.*` properties (URL, username, password). This profile also enables the blocking `DataSource` bean and disables the default reactive DataSource auto-configuration.
+
+  - To use R2DBC (reactive): set `app.datasource.enabled=false` (default) or omit it, and provide `spring.r2dbc.url`, `spring.r2dbc.username`, and `spring.r2dbc.password`. Ensure the R2DBC driver is on the classpath (e.g., `spring-boot-starter-data-r2dbc` and a db-specific driver). The default profile excludes the JDBC `DataSource` autos-configuration to prefer reactive mode; use `jdbc` profile to enable blocking mode.
+
 Copy/paste environment template:
 
 ```bash
 export ORACLE_HOST=localhost
 export ORACLE_PORT=1521
-export ORACLE_DB=FREEPDB1
+export ORACLE_DB=XEPDB1
 export ORACLE_USER=APP_USER
 export ORACLE_PASSWORD=APP_USER
 
@@ -45,6 +51,9 @@ export MINIO_SECRET_KEY=minioadmin
 export JWT_SECRET="replace-with-long-unique-string"
 export KEYSTORE_PASSWORD=changeit
 ```
+
+> **Note:** `ORACLE_DB=XEPDB1` matches the application default (app.r2dbc.database property). Docker local environments use FREEPDB1; update `ORACLE_DB` accordingly when connecting to those deployments.
+> **WARNING:** The `ORACLE_USER` and `ORACLE_PASSWORD` values above are development defaults only. Never use these in production; set them to strong, unique credentials.
 
 ## 🧪 Exercising the Platform
 

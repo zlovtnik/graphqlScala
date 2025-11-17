@@ -1,6 +1,33 @@
 -- Persisted Queries Registry for GraphQL Query Optimization
 -- This table stores common GraphQL queries for APQ (Automatic Persisted Queries) support
 -- Reduces query size by 90%+ on repeated queries; enables query complexity analysis
+--
+-- IMPORTANT PRE-MIGRATION VALIDATION:
+-- Before running this migration in environments with existing data, verify:
+--
+-- 1. Data Conformance:
+--    a) No NULL values in complexity_score, failure_rate, slow_call_rate, compression_ratio columns
+--    b) All complexity_score values >= 0
+--    c) All failure_rate values in range 0-100
+--    d) All slow_call_rate values in range 0-100
+--    d) All compression_ratio values in range 0-100
+--
+--    Run this query to identify non-conforming rows BEFORE applying migration:
+--    SELECT * FROM audit_graphql_complexity WHERE complexity_score IS NULL OR complexity_score < 0;
+--    SELECT * FROM audit_circuit_breaker_events WHERE failure_rate IS NULL OR failure_rate NOT BETWEEN 0 AND 100;
+--    SELECT * FROM audit_circuit_breaker_events WHERE slow_call_rate IS NULL OR slow_call_rate NOT BETWEEN 0 AND 100;
+--    SELECT * FROM audit_http_compression WHERE compression_ratio IS NULL OR compression_ratio NOT BETWEEN 0 AND 100;
+--
+-- 2. User Permissions:
+--    Verify that the database user executing this migration (typically app_user) exists and matches
+--    the APP_USER convention in your environment. If using a different user name (e.g., ssfuser),
+--    update the GRANT statements below accordingly before running this migration.
+--
+-- 3. Rollback Strategy:
+--    If migration fails due to non-conforming data:
+--    a) Run UPDATE statements to fix NULL values or out-of-range values
+--    b) For example: UPDATE audit_graphql_complexity SET complexity_score = 0 WHERE complexity_score IS NULL;
+--    c) Then rerun this migration script
 
 CREATE TABLE persisted_queries (
     id VARCHAR2(64) PRIMARY KEY,
@@ -77,8 +104,8 @@ CREATE TABLE audit_circuit_breaker_events (
     breaker_name VARCHAR2(100) NOT NULL,
     service_name VARCHAR2(100) NOT NULL,
     state_transition VARCHAR2(50) NOT NULL, -- CLOSED->OPEN, OPEN->HALF_OPEN, etc.
-    failure_rate NUMBER(5,2) CONSTRAINT chk_failure_rate CHECK (failure_rate >= 0 AND failure_rate <= 100),
-    slow_call_rate NUMBER(5,2) CONSTRAINT chk_slow_call_rate CHECK (slow_call_rate >= 0 AND slow_call_rate <= 100),
+    failure_rate NUMBER(5,2) NOT NULL CONSTRAINT chk_failure_rate CHECK (failure_rate >= 0 AND failure_rate <= 100),
+    slow_call_rate NUMBER(5,2) NOT NULL CONSTRAINT chk_slow_call_rate CHECK (slow_call_rate >= 0 AND slow_call_rate <= 100),
     failure_reason CLOB,
     event_timestamp TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
 ) PARTITION BY RANGE (event_timestamp) (
@@ -95,7 +122,7 @@ CREATE TABLE audit_http_compression (
     compression_algorithm VARCHAR2(20) NOT NULL, -- GZIP, BROTLI, NONE
     original_size NUMBER(19),
     compressed_size NUMBER(19),
-    compression_ratio NUMBER(5,2) CONSTRAINT chk_compression_ratio CHECK (compression_ratio >= 0 AND compression_ratio <= 100),
+    compression_ratio NUMBER(5,2) NOT NULL CONSTRAINT chk_compression_ratio CHECK (compression_ratio >= 0 AND compression_ratio <= 100),
     cpu_time_ms NUMBER(10),
     endpoint_path VARCHAR2(500),
     recorded_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL

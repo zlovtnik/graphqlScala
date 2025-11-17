@@ -1,5 +1,8 @@
 package com.rcs.ssf.metrics;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
@@ -48,13 +51,21 @@ public class QueryPlanAnalyzer {
     private static final int BASELINE_SAMPLES = 100;
     private static final double ANOMALY_THRESHOLD_PERCENT = 5.0;
     private static final int TOP_QUERIES_LIMIT = 10;
+    private static final int QUERY_METRICS_MAX_ENTRIES = 10_000;
     private static final long N_PLUS_ONE_THRESHOLD_MS = 100; // Similar queries within 100ms
     private static final int N_PLUS_ONE_MIN_COUNT = 3;
 
     // Thread-safe collections for tracking queries
-    private final Map<String, QueryStats> queryMetrics = new ConcurrentHashMap<>();
-    private final Deque<QueryExecution> recentQueries = new ArrayDeque<>(); // Last 1000 queries
     private final Map<String, Double> queryBaselines = new ConcurrentHashMap<>();
+    private final Cache<String, QueryStats> queryMetrics = Caffeine.newBuilder()
+            .maximumSize(QUERY_METRICS_MAX_ENTRIES)
+            .removalListener((String key, QueryStats stats, RemovalCause cause) -> {
+                if (key != null) {
+                    queryBaselines.remove(key);
+                }
+            })
+            .build();
+    private final Deque<QueryExecution> recentQueries = new ArrayDeque<>(); // Last 1000 queries
 
     /**
      * Record a query execution for analysis.
@@ -67,12 +78,12 @@ public class QueryPlanAnalyzer {
         String queryType = normalizeQuery(query);
         
         // Update statistics
-        QueryStats stats = queryMetrics.computeIfAbsent(queryType, k -> new QueryStats(query));
+        QueryStats stats = queryMetrics.get(queryType, k -> new QueryStats(query));
         stats.recordExecution(executionTimeMs, rowsAffected);
         
         // Track recent queries for N+1 detection
         synchronized (recentQueries) {
-            recentQueries.addLast(new QueryExecution(queryType, executionTimeMs, System.currentTimeMillis()));
+            recentQueries.addLast(new QueryExecution(queryType, System.currentTimeMillis()));
             if (recentQueries.size() > 1000) {
                 recentQueries.removeFirst();
             }
@@ -94,7 +105,7 @@ public class QueryPlanAnalyzer {
      * Export metrics to Prometheus.
      */
     private void exportMetrics(String queryType, long executionTimeMs) {
-        QueryStats stats = queryMetrics.get(queryType);
+        QueryStats stats = queryMetrics.getIfPresent(queryType);
         if (stats == null) return;
 
         // Histogram with percentiles
@@ -125,7 +136,7 @@ public class QueryPlanAnalyzer {
      * Trigger alert if execution time >5% variance from baseline.
      */
     private void checkForAnomalies(String queryType, long executionTimeMs) {
-        QueryStats stats = queryMetrics.get(queryType);
+        QueryStats stats = queryMetrics.getIfPresent(queryType);
         if (stats == null || stats.getCount() < BASELINE_SAMPLES) {
             // Not enough samples yet
             if (stats != null && stats.getCount() == BASELINE_SAMPLES) {
@@ -228,7 +239,7 @@ public class QueryPlanAnalyzer {
      * @return List of slowest queries with execution times
      */
     public List<String> getTopSlowQueries() {
-        return queryMetrics.entrySet().stream()
+        return queryMetrics.asMap().entrySet().stream()
                 .sorted((a, b) -> Long.compare(b.getValue().getMaxExecutionTime(), a.getValue().getMaxExecutionTime()))
                 .limit(TOP_QUERIES_LIMIT)
                 .map(e -> String.format("%s (max: %d ms, avg: %.1f ms, count: %d)",
@@ -247,7 +258,7 @@ public class QueryPlanAnalyzer {
     public Map<String, ResolverStats> getResolverBreakdown() {
         Map<String, ResolverStats> stats = new HashMap<>();
         
-        queryMetrics.forEach((queryType, queryStats) -> {
+        queryMetrics.asMap().forEach((queryType, queryStats) -> {
             String resolver = extractResolverName(queryType);
             stats.computeIfAbsent(resolver, k -> new ResolverStats())
                     .addQuery(queryStats);
@@ -315,16 +326,52 @@ public class QueryPlanAnalyzer {
         }
 
         public void recordExecution(long executionTimeMs, long rowsAffected) {
+            Long removedTime = null;
             synchronized (lock) {
                 executionTimes.addLast(executionTimeMs);
                 // Trim oldest samples if exceeding max
                 if (executionTimes.size() > MAX_SAMPLES) {
-                    executionTimes.removeFirst();
+                    removedTime = executionTimes.removeFirst();
+                    // Recompute min/max if the removed value was one of them
+                    recomputeMinMaxIfStale(removedTime);
                 }
+            }
+            // Subtract removed sample from total
+            if (removedTime != null) {
+                totalExecutionTime.add(-removedTime);
             }
             // Update min/max using atomic operations (non-blocking)
             updateMinMax(executionTimeMs);
             totalExecutionTime.add(executionTimeMs);
+        }
+
+        /**
+         * Recompute min/max from current deque contents if the removed sample was
+         * one of the extreme values. Called under synchronized(lock) to ensure
+         * consistent snapshot of executionTimes.
+         */
+        private void recomputeMinMaxIfStale(long removedValue) {
+            long currentMin = minExecutionTime.get();
+            long currentMax = maxExecutionTime.get();
+            
+            // Check if removed value matches current min or max
+            if (removedValue == currentMin || removedValue == currentMax) {
+                if (executionTimes.isEmpty()) {
+                    // Deque is now empty, reset to sentinel values
+                    minExecutionTime.set(Long.MAX_VALUE);
+                    maxExecutionTime.set(0);
+                } else {
+                    // Recompute from current deque contents (already holding lock)
+                    long newMin = Long.MAX_VALUE;
+                    long newMax = 0;
+                    for (long time : executionTimes) {
+                        if (time < newMin) newMin = time;
+                        if (time > newMax) newMax = time;
+                    }
+                    minExecutionTime.set(newMin);
+                    maxExecutionTime.set(newMax);
+                }
+            }
         }
 
         private void updateMinMax(long executionTimeMs) {
@@ -407,13 +454,11 @@ public class QueryPlanAnalyzer {
      * Recent query execution for N+1 detection.
      */
     private static class QueryExecution {
-        String queryType;
-        long executionTime;
-        long timestamp;
+        final String queryType;
+        final long timestamp;
 
-        QueryExecution(String queryType, long executionTime, long timestamp) {
+        QueryExecution(String queryType, long timestamp) {
             this.queryType = queryType;
-            this.executionTime = executionTime;
             this.timestamp = timestamp;
         }
     }

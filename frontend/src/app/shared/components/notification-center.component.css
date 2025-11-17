@@ -21,7 +21,7 @@
 .notification-empty {
   padding: 16px 0;
   text-align: center;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--text-secondary, rgba(0, 0, 0, 0.45));
 }
 
 .notification-content {

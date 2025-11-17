@@ -300,6 +300,11 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "description": "Admin user token required for user creation. If self-service registration is enabled, this header can be omitted or an unauthenticated endpoint should be used instead."
               }
             ],
             "body": {

@@ -3,6 +3,10 @@ package com.rcs.ssf.security.mfa;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.annotation.Nullable;
+import jakarta.validation.Constraint;
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import jakarta.validation.Payload;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -10,13 +14,92 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
+import java.lang.annotation.*;
+import java.util.Base64;
 
 /**
- * WebAuthn registration options returned to client.
- * Properly annotated DTO with validation and Jackson support.
+ * Validates that a string is valid Base64 encoding (standard or URL-safe).
+ * Accepts strings with proper padding or without padding.
  */
+@Target({ElementType.FIELD, ElementType.PARAMETER})
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = ValidBase64.Validator.class)
+@interface ValidBase64 {
+    String message() default "Invalid Base64 encoding";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+
+    class Validator implements ConstraintValidator<ValidBase64, String> {
+        @Override
+        public boolean isValid(String value, ConstraintValidatorContext context) {
+            if (value == null || value.isBlank()) {
+                // Null/blank is handled by @NotBlank; this validator only checks format
+                return true;
+            }
+
+            try {
+                // Try standard Base64 decoder first
+                Base64.getDecoder().decode(value);
+                return true;
+            } catch (IllegalArgumentException e) {
+                // Try URL-safe decoder as fallback
+                try {
+                    Base64.getUrlDecoder().decode(value);
+                    return true;
+                } catch (IllegalArgumentException ex) {
+                    // Neither decoder succeeded; invalid Base64
+                    return false;
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Validates that WebAuthn credential timestamps are temporally consistent.
+ * Ensures createdAt ≤ lastUsedAt and prevents future-dated credentials.
+ */
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = ValidCredentialTimestamps.Validator.class)
+@interface ValidCredentialTimestamps {
+    String message() default "Credential timestamps are invalid: createdAt must not exceed lastUsedAt, and neither should be in the future";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+
+    class Validator implements ConstraintValidator<ValidCredentialTimestamps, WebAuthnCredential> {
+        private static final long MAX_FUTURE_DRIFT_MS = 5000; // Allow 5s clock skew
+
+        @Override
+        public boolean isValid(WebAuthnCredential cred, ConstraintValidatorContext context) {
+            if (cred == null) return true;
+
+            long now = System.currentTimeMillis();
+
+            // Validate createdAt is not in the future
+            if (cred.getCreatedAt() > now + MAX_FUTURE_DRIFT_MS) {
+                return false;
+            }
+
+            // Validate lastUsedAt is not in the future (unless 0, indicating never used)
+            if (cred.getLastUsedAt() != 0 && cred.getLastUsedAt() > now + MAX_FUTURE_DRIFT_MS) {
+                return false;
+            }
+
+            // Validate createdAt ≤ lastUsedAt (when lastUsedAt is set)
+            if (cred.getLastUsedAt() != 0 && cred.getLastUsedAt() < cred.getCreatedAt()) {
+                return false;
+            }
+
+            return true;
+        }
+    }
+}
+
+
 public class WebAuthnRegistrationOptions {
     @NotBlank(message = "Challenge is required")
+    @ValidBase64(message = "Challenge must be valid Base64 encoding")
     private String challenge; // Base64-encoded challenge
     
     @NotBlank(message = "Relying Party is required")
@@ -161,6 +244,7 @@ class WebAuthnRegistrationResponse {
  */
 class WebAuthnAuthenticationOptions {
     @NotBlank(message = "Challenge is required")
+    @ValidBase64(message = "Challenge must be valid Base64 encoding")
     private String challenge;        // Base64-encoded challenge
     
     @Positive(message = "Timeout must be positive")
@@ -197,7 +281,6 @@ class WebAuthnAuthenticationOptions {
  */
 class AuthenticatorAssertionResponse {
     @NotNull(message = "Client data JSON is required")
-    @JsonProperty(value = "clientDataJSON")
     private byte[] clientDataJSON;  // ClientDataJSON in base64 format
     
     @NotNull(message = "Authenticator data is required")
@@ -243,8 +326,12 @@ class WebAuthnAuthenticationResponse {
     @NotBlank(message = "ID is required")
     private String id;              // Credential ID
     
+    @NotNull(message = "Raw ID is required")
+    @Size(min = 1, message = "Raw ID must not be empty")
     private byte[] rawId;           // Raw credential ID (binary)
     
+    @NotNull(message = "Authenticator response is required")
+    @Valid
     private AuthenticatorAssertionResponse response;  // Authenticator assertion
     
     @NotBlank(message = "Type is required")
@@ -281,6 +368,7 @@ class WebAuthnAuthenticationResponse {
 /**
  * WebAuthn credential metadata.
  */
+@ValidCredentialTimestamps
 class WebAuthnCredential {
     @NotBlank(message = "Credential ID is required")
     private String credentialId;

@@ -1,6 +1,11 @@
 spring:
   application:
     name: ssf
+  # When using the default reactive mode (preferred), exclude DataSource auto-configuration
+  # and prefer R2DBC to avoid accidental blocking DataSource creation.
+  # To use JDBC instead, activate the 'jdbc' profile which will enable DataSource auto-configuration.
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
   datasource:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
     driver-class-name: oracle.jdbc.OracleDriver
@@ -46,6 +51,10 @@ spring:
       password: ${REDIS_PASSWORD}
       timeout: 2000ms
       database: 0
+  r2dbc:
+    url: r2dbc:oracle://${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
+    username: ${ORACLE_USER:APP_USER}
+    password: ${ORACLE_PASSWORD:ssfpassword}
 
 # Cache Service Configuration
 # Configures individual cache behavior (query result cache and session cache)
@@ -111,6 +120,14 @@ app:
       max-size: 80              # Keep aligned with Oracle capacity and <4x Hikari max
       queue-depth: 150          # Prevent deep backlog from exhausting DB sessions
       idle-timeout: PT30M
+    # If you prefer Spring's boot R2DBC auto-configuration, uncomment and set the following properties
+    # spring.r2dbc.url: r2dbc:oracle://${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
+    # spring.r2dbc.username: ${ORACLE_USER:APP_USER}
+    # spring.r2dbc.password: ${ORACLE_PASSWORD:ssfpassword}
+
+# Use this flag to enable the blocking JDBC DataSource (default: false)
+  datasource:
+    enabled: false
 
 ssf:
   cache:

@@ -27,15 +27,21 @@ import org.springframework.security.web.context.SecurityContextHolderFilter;
  * 3. GraphQLAuthorizationInstrumentation - enforces authentication for GraphQL operations
  * 4. GraphQLSecurityHandler - translates Spring Security exceptions to GraphQL errors
  *
- * Protected Endpoints:
- * - POST /graphql - requires valid JWT token
- * - All other endpoints except /api/auth/**, /graphiql, /actuator/**
+ * Protected Endpoints (HTTP-level):
+ * - Most endpoints except listed public endpoints below
  *
- * Public Endpoints:
- * - POST /api/auth/login - login to get JWT token
- * - POST /api/auth/validate - validate token (can be public or protected)
+ * Public Endpoints (HTTP-level):
+ * - POST /api/auth/** - login to get JWT token
+ * - POST /api/users - user creation (bootstrap)
  * - GET /graphiql - GraphQL IDE
+ * - POST /graphql - HTTP-public; authorization enforced at GraphQL operation level
+ *     (public mutations like login, createUser allowed; authenticated-only operations denied by GraphQLAuthorizationInstrumentation)
  * - /actuator/** - health checks and metrics
+ *
+ * Note: /graphql does not require authentication at the HTTP layer; instead, authentication
+ * and authorization are enforced by GraphQLAuthorizationInstrumentation for each GraphQL
+ * operation. This allows public mutations (login, createUser) while denying access to
+ * authenticated-only queries and mutations without valid JWT tokens.
  */
 @Configuration
 @EnableWebSecurity

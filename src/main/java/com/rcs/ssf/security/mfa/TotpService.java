@@ -65,8 +65,26 @@ public interface TotpService {
     /**
      * Get TOTP secret for a user (admin only).
      *
+     * <strong>SECURITY CRITICAL:</strong> This method returns the raw TOTP secret and must only be exposed
+     * through tightly controlled admin-only endpoints with comprehensive audit logging. Implementations
+     * must treat this secret as highly sensitive:
+     *
+     * <ul>
+     *   <li><strong>Storage:</strong> Secrets must be encrypted at rest (AES-256-GCM or equivalent) and
+     *       never stored in plaintext. Use database-level encryption (Oracle TDE) or application-level encryption.</li>
+     *   <li><strong>Logging:</strong> Never log the raw secret value. Log only the user ID, timestamp, and
+     *       access context (admin ID, IP, audit event). Use dedicated audit tables for compliance.</li>
+     *   <li><strong>Access Control:</strong> Restrict this method to authenticated admin users with explicit
+     *       "ADMIN_READ_MFA_SECRETS" permission or higher. Verify permissions before returning the secret.</li>
+     *   <li><strong>Recovery-Only Use Case:</strong> Ideally, expose this capability only in constrained recovery
+     *       flows (e.g., manual account recovery by authorized support staff), not in regular operations.</li>
+     *   <li><strong>Alternative Approach:</strong> Consider returning only obfuscated data or a dedicated
+     *       admin DTO (e.g., SecretRecoveryToken with expiration) instead of the raw secret for better security posture.</li>
+     * </ul>
+     *
      * @param userId user identifier
-     * @return optional containing secret if enabled
+     * @return optional containing secret if enabled and caller is authorized
+     * @throws MfaVerificationException or SecurityException if caller lacks admin permission
      */
     Optional<String> getTotpSecret(String userId);
 }

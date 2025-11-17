@@ -306,4 +306,186 @@ class CacheServiceTest {
     private long getQueryCacheThreshold() {
         return (long) (getQueryCacheMaxSize() * cacheConfiguration.getMemoryPressureThreshold());
     }
+
+    // --- TTL-aware putWithTtl tests ---
+
+    @Test
+    @DisplayName("putWithTtl should fail fast for invalid negative TTL")
+    void testPutWithTtlInvalidNegative() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.putWithTtl("key", "value", CacheService.QUERY_RESULT_CACHE, -5)
+        );
+    }
+
+    @Test
+    @DisplayName("putWithTtl should accept ttlSeconds = 0 (use default)")
+    void testPutWithTtlZero() {
+        String cacheKey = "ttl_zero_key";
+        String value = "test_value";
+        // Reconfigure default TTL to a very short value for deterministic testing
+        cacheConfiguration.getQueryResultCache().setTtlMinutes(0);
+        cacheService = new CacheService(cacheConfiguration);
+
+        // Should not throw; uses default TTL (now 0 minutes, immediate expiry)
+        cacheService.putWithTtl(cacheKey, value, CacheService.QUERY_RESULT_CACHE, 0);
+
+        // Immediately present OR already expired if default TTL is 0
+        String retrieved = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        if (retrieved == null) {
+            // If the configured default TTL is 0, Caffeine may consider the entry expired immediately.
+            assertNull(retrieved, "Entry expired immediately due to default TTL=0");
+            return; // test condition satisfied
+        }
+
+        // Wait slightly longer than default TTL (0 minutes -> immediate, but use a small buffer)
+        try {
+            Thread.sleep(500); // 500ms buffer
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Now the entry should be expired
+        String after = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        assertNull(after, "Expected entry to expire shortly after default TTL when ttlSeconds == 0");
+    }
+
+    @Test
+    @DisplayName("putWithTtl should accept ttlSeconds = -1 (never expire)")
+    void testPutWithTtlNeverExpire() {
+        String cacheKey = "ttl_never_expire_key";
+        String value = "test_value";
+        // Reconfigure default TTL to a very short value for deterministic testing
+        cacheConfiguration.getQueryResultCache().setTtlMinutes(0);
+        cacheService = new CacheService(cacheConfiguration);
+
+        // Should not throw; stores with never-expire sentinel
+        cacheService.putWithTtl(cacheKey, value, CacheService.QUERY_RESULT_CACHE, -1);
+
+        // Immediately present
+        String retrieved = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        assertEquals(value, retrieved);
+
+        // Wait slightly longer than default TTL to ensure never-expire is honored
+        try {
+            Thread.sleep(500); // 500ms buffer
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        // Entry should still be present
+        String after = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        assertEquals(value, after, "Expected never-expire entry to remain present past default TTL");
+    }
+
+    @Test
+    @DisplayName("putWithTtl should accept positive ttlSeconds")
+    void testPutWithTtlPositive() {
+        String cacheKey = "ttl_positive_key";
+        String value = "test_value";
+
+        // Should not throw; stores with custom TTL (10 seconds)
+        cacheService.putWithTtl(cacheKey, value, CacheService.QUERY_RESULT_CACHE, 10);
+
+        // Immediately present
+        String retrieved = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        assertEquals(value, retrieved);
+
+        // Wait just over 10 seconds (10s + 500ms buffer) to ensure it expires
+        try {
+            Thread.sleep(10_500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        String after = cacheService.getIfPresent(cacheKey, CacheService.QUERY_RESULT_CACHE);
+        assertNull(after, "Expected entry to expire after custom TTL (10 seconds)");
+    }
+
+    @Test
+    @DisplayName("putWithTtl should detect overflow for very large TTL values")
+    void testPutWithTtlOverflow() {
+        // Long.MAX_VALUE seconds would overflow when converted to nanoseconds
+        long overflowSeconds = Long.MAX_VALUE / 1_000_000_000L + 1; // Beyond safe conversion range
+
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.putWithTtl("key", "value", CacheService.QUERY_RESULT_CACHE, overflowSeconds)
+        );
+    }
+
+    // --- Tests for fail-fast behavior on unknown cache names ---
+
+    @Test
+    @DisplayName("getOrCompute should fail fast for unknown cache name")
+    void testGetOrComputeUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.getOrCompute("key", k -> "value", "unknown_cache")
+        );
+    }
+
+    @Test
+    @DisplayName("getIfPresent should fail fast for unknown cache name")
+    void testGetIfPresentUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.getIfPresent("key", "unknown_cache")
+        );
+    }
+
+    @Test
+    @DisplayName("invalidate should fail fast for unknown cache name")
+    void testInvalidateUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.invalidate("key", "unknown_cache")
+        );
+    }
+
+    @Test
+    @DisplayName("invalidateAll should fail fast for unknown cache name")
+    void testInvalidateAllUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.invalidateAll("unknown_cache")
+        );
+    }
+
+    @Test
+    @DisplayName("isMemoryPressureHigh should fail fast for unknown cache name")
+    void testIsMemoryPressureHighUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.isMemoryPressureHigh("unknown_cache")
+        );
+    }
+
+    @Test
+    @DisplayName("getCacheSize should fail fast for unknown cache name")
+    void testGetCacheSizeUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.getCacheSize("unknown_cache")
+        );
+    }
+
+    @Test
+    @DisplayName("getConfiguredMaxSize should fail fast for unknown cache name")
+    void testGetConfiguredMaxSizeUnknownCache() {
+        assertThrows(IllegalArgumentException.class, () ->
+            cacheService.getConfiguredMaxSizePublic("unknown_cache")
+        );
+    }
+
+    // --- Tests for getConfiguredMaxSize consistency ---
+
+    @Test
+    @DisplayName("getConfiguredMaxSize should return query result cache max size")
+    void testGetConfiguredMaxSizeQueryCache() {
+        long configuredMax = cacheService.getConfiguredMaxSizePublic(CacheService.QUERY_RESULT_CACHE);
+        long expectedMax = cacheConfiguration.getQueryResultCache().getMaxSize();
+        assertEquals(expectedMax, configuredMax);
+    }
+
+    @Test
+    @DisplayName("getConfiguredMaxSize should return session cache max size")
+    void testGetConfiguredMaxSizeSessionCache() {
+        long configuredMax = cacheService.getConfiguredMaxSizePublic(CacheService.SESSION_CACHE);
+        long expectedMax = cacheConfiguration.getSessionCache().getMaxSize();
+        assertEquals(expectedMax, configuredMax);
+    }
+
 }

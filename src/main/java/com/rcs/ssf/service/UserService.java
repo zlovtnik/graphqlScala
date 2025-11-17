@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
 public class UserService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$", Pattern.CASE_INSENSITIVE);
 
-    private final JdbcTemplate jdbcTemplate;
+    private final Optional<JdbcTemplate> jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
     private final DynamicCrudGateway dynamicCrudGateway;
     private final PlsqlInstrumentationSupport instrumentationSupport;
@@ -47,18 +47,21 @@ public class UserService {
         }
     };
 
-    public UserService(@NonNull DataSource dataSource,
+    public UserService(Optional<DataSource> dataSource,
                        PasswordEncoder passwordEncoder,
                        DynamicCrudGateway dynamicCrudGateway,
                        @NonNull PlsqlInstrumentationSupport instrumentationSupport) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource);
+        this.jdbcTemplate = dataSource.map(JdbcTemplate::new);
         this.passwordEncoder = passwordEncoder;
         this.dynamicCrudGateway = dynamicCrudGateway;
         this.instrumentationSupport = instrumentationSupport;
     }
 
     public Optional<User> findByUsername(String username) {
-        return jdbcTemplate.execute((ConnectionCallback<Optional<User>>) (Connection con) ->
+        if (jdbcTemplate.isEmpty()) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.get().execute((ConnectionCallback<Optional<User>>) (Connection con) ->
             instrumentationSupport.withAction(con, "user_pkg", "get_user_by_username", () -> {
                 try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_username(?) }")) {
                     cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
@@ -77,7 +80,10 @@ public class UserService {
     }
 
     public Optional<User> findByEmail(String email) {
-        return jdbcTemplate.execute((ConnectionCallback<Optional<User>>) (Connection con) ->
+        if (jdbcTemplate.isEmpty()) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.get().execute((ConnectionCallback<Optional<User>>) (Connection con) ->
             instrumentationSupport.withAction(con, "user_pkg", "get_user_by_email", () -> {
                 try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_email(?) }")) {
                     cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
@@ -186,7 +192,10 @@ public class UserService {
     }
 
     public Optional<User> findById(UUID id) {
-        return jdbcTemplate.execute((ConnectionCallback<Optional<User>>) (Connection con) ->
+        if (jdbcTemplate.isEmpty()) {
+            return Optional.empty();
+        }
+        return jdbcTemplate.get().execute((ConnectionCallback<Optional<User>>) (Connection con) ->
             instrumentationSupport.withAction(con, "user_pkg", "get_user_by_id", () -> {
                 try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.get_user_by_id(?) }")) {
                     cs.registerOutParameter(1, oracle.jdbc.OracleTypes.CURSOR);
@@ -234,7 +243,10 @@ public class UserService {
     }
 
     private void ensureUsernameAvailable(String username, UUID currentUserId) {
-        Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) (Connection con) ->
+        if (jdbcTemplate.isEmpty()) {
+            return;
+        }
+        Boolean exists = jdbcTemplate.get().execute((ConnectionCallback<Boolean>) (Connection con) ->
             instrumentationSupport.withAction(con, "user_pkg", "username_exists", () -> {
                 try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.username_exists(?) }")) {
                     cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
@@ -260,7 +272,10 @@ public class UserService {
     }
 
     private void ensureEmailAvailable(String email, UUID currentUserId) {
-        Boolean exists = jdbcTemplate.execute((ConnectionCallback<Boolean>) (Connection con) ->
+        if (jdbcTemplate.isEmpty()) {
+            return;
+        }
+        Boolean exists = jdbcTemplate.get().execute((ConnectionCallback<Boolean>) (Connection con) ->
             instrumentationSupport.withAction(con, "user_pkg", "email_exists", () -> {
                 try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.email_exists(?) }")) {
                     cs.registerOutParameter(1, java.sql.Types.BOOLEAN);

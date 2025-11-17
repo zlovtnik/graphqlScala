@@ -8,8 +8,7 @@ services:
     environment:
       ORACLE_PWD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
       ORACLE_CHARACTERSET: AL32UTF8
-      DB_PASSWORD: ${DB_PASSWORD:-ssf_admin_password}
-      DB_USER_PASSWORD: ${DB_USER_PASSWORD:-ssf_user_password}
+      DB_USER_PASSWORD: ${DB_USER_PASSWORD:-ssfpassword}
     ports:
       - "1521:1521"
       - "5500:5500"
@@ -66,7 +65,7 @@ services:
       retries: 3
 
   # Spring Boot Application
-  app:
+  app: 
     build:
       context: .
       dockerfile: Dockerfile

@@ -10,8 +10,6 @@ import java.util.Optional;
  * - Verify OTP codes with time window
  * - Rate-limit verification attempts
  * - Manage phone number enrollment
- *
- * Implementation integrates with Resilience4j for resilience (circuit breaker, retries).
  */
 public interface SmsService {
 
@@ -55,7 +53,12 @@ public interface SmsService {
      * 
      * Validates that the provided code matches the current OTP code.
      * Tracks verification attempts and enforces rate limiting.
-     * Accepts codes within ±1 time window (60 second window) for clock skew tolerance.
+    * Accepts codes based on a fixed time-step algorithm; specifically:
+    * <ul>
+    *   <li>Time-step duration = 5 minutes.</li>
+    *   <li>Verification accepts codes in the current time-step and optionally the previous and next time-steps (i.e., current ±1 time-step) to tolerate clock skew.</li>
+    *   <li>Therefore the total valid window is 15 minutes (5 minutes before the current step, the current 5 minute step, and 5 minutes after).</li>
+    * </ul>
      *
      * @param userId user identifier
      * @param code 6-digit OTP code from SMS

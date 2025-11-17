@@ -10,6 +10,12 @@ BEGIN
     )';
 EXCEPTION
     WHEN OTHERS THEN
-        NULL; -- Table already exists
+        -- Only suppress the "object already exists" error (ORA-00955)
+        -- All other errors (permissions, syntax, tablespace, etc.) are re-raised
+        IF SQLCODE = -955 THEN
+            NULL;  -- Table already exists, continue
+        ELSE
+            RAISE;  -- Re-raise any other error for visibility
+        END IF;
 END;
 /

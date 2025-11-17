@@ -3,6 +3,7 @@ package com.rcs.ssf.controller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
+import org.springframework.context.NoSuchMessageException;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -28,12 +29,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleIllegalArgumentException(IllegalArgumentException ex) {
         LOGGER.warn("Illegal argument received", ex);
         String exceptionMessage = ex.getMessage();
-        String clientMessage = DEFAULT_MESSAGE;
+        String clientMessage;
         var locale = LocaleContextHolder.getLocale();
 
-        // Map known validation error codes to message keys
+        // Try to resolve the exception message as a message key, falling back to the default message
         if (exceptionMessage != null) {
-            clientMessage = messageSource.getMessage(exceptionMessage, null, DEFAULT_MESSAGE, locale);
+            try {
+                clientMessage = messageSource.getMessage(exceptionMessage, null, locale);
+            } catch (NoSuchMessageException e) {
+                // Message key not found in message source, use the default message for security
+                LOGGER.warn("No i18n message found for key: {}", exceptionMessage);
+                clientMessage = DEFAULT_MESSAGE;
+            }
+        } else {
+            clientMessage = DEFAULT_MESSAGE;
         }
 
         return ResponseEntity.badRequest().body(Map.of("error", clientMessage));

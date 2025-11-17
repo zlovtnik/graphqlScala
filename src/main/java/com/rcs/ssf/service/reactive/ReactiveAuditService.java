@@ -73,6 +73,10 @@ public class ReactiveAuditService {
                 .rowsUpdated()
                 .then()
                 .timeout(OPERATION_TIMEOUT)
+                .retryWhen(Retry.backoff(MAX_RETRIES, Duration.ofMillis(100))
+                        .doBeforeRetry(signal -> 
+                            log.info("Retrying complexity audit (attempt {}/{})", 
+                                    signal.totalRetries() + 1, MAX_RETRIES)))
                 .onErrorResume(TimeoutException.class, throwable -> {
                     log.warn("Audit insert timeout: {}", throwable.getMessage());
                     meterRegistry.counter("audit.graphql_complexity.errors_total").increment();
@@ -83,11 +87,6 @@ public class ReactiveAuditService {
                     meterRegistry.counter("audit.graphql_complexity.errors_total").increment();
                     return Mono.empty(); // Continue despite failure
                 })
-                .retryWhen(Retry.backoff(MAX_RETRIES, Duration.ofMillis(100))
-                        .filter(throwable -> !(throwable instanceof TimeoutException))
-                        .doBeforeRetry(signal -> 
-                            log.info("Retrying complexity audit (attempt {}/{})", 
-                                    signal.totalRetries() + 1, MAX_RETRIES)))
                 .doFinally(signalType -> {
                     sample.stop(Timer.builder("audit.graphql_complexity.duration_ms")
                             .publishPercentiles(0.5, 0.95, 0.99)
@@ -249,6 +248,9 @@ public class ReactiveAuditService {
      * @throws IllegalStateException if SHA-256 algorithm is not available (JVM configuration issue)
      */
     private String generateHash(String query) {
+        if (query == null) {
+            throw new IllegalArgumentException("Query cannot be null");
+        }
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(query.getBytes(StandardCharsets.UTF_8));

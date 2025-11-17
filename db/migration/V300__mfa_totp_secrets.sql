@@ -18,6 +18,8 @@ CREATE TABLE MFA_TOTP_SECRETS (
 );
 
 -- Low-cardinality is_verified index intentionally omitted; monitor query plans before adding secondary indexes.
+-- Composite index for common MFA verification patterns (queries filtering by both user_id and is_verified)
+CREATE INDEX idx_mfa_totp_user_verified ON MFA_TOTP_SECRETS(user_id, is_verified);
 
 -- Audit comment for DDL tracking
 COMMENT ON TABLE MFA_TOTP_SECRETS IS 'Stores encrypted TOTP (Time-based One-Time Password) secrets for MFA enrollment. Encryption: Oracle TDE at tablespace level or AES-256-GCM at application level.';

@@ -1,6 +1,7 @@
 package com.rcs.ssf.bootstrap;
 
 import javax.sql.DataSource;
+import java.util.Optional;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -17,8 +18,8 @@ public class SchemaBootstrapConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "schema.bootstrap", name = "enabled", havingValue = "true", matchIfMissing = false)
-    OracleSchemaBootstrapInitializer oracleSchemaBootstrapInitializer(DataSource dataSource,
+    OracleSchemaBootstrapInitializer oracleSchemaBootstrapInitializer(Optional<DataSource> dataSource,
             SchemaBootstrapProperties properties) {
-        return new OracleSchemaBootstrapInitializer(dataSource, properties);
+        return dataSource.map(ds -> new OracleSchemaBootstrapInitializer(ds, properties)).orElse(null);
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,10 +28,11 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // Block the reactive call since UserDetailsService is a blocking interface
-        // R2dbcRepository methods return Mono<T>, so we block to get the actual User
+        // Block the reactive call since UserDetailsService is a blocking interface.
+        // R2dbcRepository methods return Mono<T>, so we block to get the actual User.
+        // Add a 5-second timeout to prevent indefinite hangs if the database is unresponsive.
         User user = userRepository.findByUsername(username)
-                .blockOptional()
+                .blockOptional(Duration.ofSeconds(5))
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
         
         // Fetch user's roles and convert to GrantedAuthority instances

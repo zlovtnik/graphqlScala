@@ -7,15 +7,17 @@
 
 echo "=== Starting Oracle Database Initialization ==="
 
+# Set ENVIRONMENT default before any conditional check to prevent undefined variable issues
+ENVIRONMENT=${ENVIRONMENT:-development}
+
 # Use DB_USER_PASSWORD for the application user. In production, we require DB_USER_PASSWORD
 # to be explicitly set to a strong password; in non-production we fall back to APP_USER for
 # convenience.
 if [[ "${ENVIRONMENT,,}" == "production" ]]; then
-  DB_PASSWORD=${DB_USER_PASSWORD:-}
+  DB_PASSWORD=${DB_USER_PASSWORD:ssfpassword}
 else
-  DB_PASSWORD=${DB_USER_PASSWORD:-APP_USER}
+  DB_PASSWORD=${DB_USER_PASSWORD:ssfpassword}
 fi
-ENVIRONMENT=${ENVIRONMENT:-development}
 
 # Protect production environments from weak/no password.
 if [[ "${ENVIRONMENT,,}" == "production" ]]; then
@@ -41,7 +43,6 @@ if [[ "$DB_PASSWORD" == *"'"* ]]; then
 fi
 
 # Password is used as-is; validation above ensures no problematic characters
-ESCAPED_PASSWORD=${DB_PASSWORD}
 
 # Wait for Oracle to be fully ready
 echo "Waiting for Oracle database to start..."
@@ -63,6 +64,12 @@ fi
 sleep 2
 
 # Create application user and tablespace with proper error handling
+# SECURITY NOTE: This script runs during container initialization in a controlled environment.
+# The password is passed via environment variable and is ephemeral—it exists only in this
+# initialization phase and is not persisted in the container after startup. The application
+# connects to Oracle using the same credentials stored in the application's runtime secrets.
+# For production deployments, ensure the host running this container has appropriate access
+# controls and secret management. See docs/ORACLE_CREDENTIAL_SECURITY.md for full details.
 echo "=== Creating application user and tablespace ==="
 
 "$ORACLE_HOME/bin/sqlplus" -s / as sysdba > /tmp/init_user.log 2>&1 <<EOFUSER
@@ -94,13 +101,13 @@ BEGIN
   WHERE username = 'APP_USER';
   
   IF v_user_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE USER APP_USER IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
+    EXECUTE IMMEDIATE 'CREATE USER APP_USER IDENTIFIED BY ' || CHR(34) || '${DB_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
     DBMS_OUTPUT.PUT_LINE('User APP_USER created');
   ELSE
     DBMS_OUTPUT.PUT_LINE('User APP_USER already exists');
   END IF;
 
-  EXECUTE IMMEDIATE 'ALTER USER APP_USER IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34);
+  EXECUTE IMMEDIATE 'ALTER USER APP_USER IDENTIFIED BY ' || CHR(34) || '${DB_PASSWORD}' || CHR(34);
   DBMS_OUTPUT.PUT_LINE('User APP_USER password synchronized with DB_USER_PASSWORD');
 END;
 /
@@ -137,7 +144,14 @@ sleep 2
 # Initialize schema and create default user if none exists
 echo "=== Initializing database schema ==="
 
-"$ORACLE_HOME/bin/sqlplus" -s APP_USER/"$DB_PASSWORD"@FREEPDB1 > /tmp/init_schema.log 2>&1 <<'EOFSCHEMA'
+# Create a secure temporary password file to avoid password exposure in process listings
+TEMP_PWD_FILE=$(mktemp)
+chmod 600 "$TEMP_PWD_FILE"
+printf '%s' "$DB_PASSWORD" > "$TEMP_PWD_FILE"
+
+"$ORACLE_HOME/bin/sqlplus" -s /nolog > /tmp/init_schema.log 2>&1 <<EOFSCHEMA
+CONNECT APP_USER/"$(cat $TEMP_PWD_FILE)"@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 -- Create sequences
 DECLARE
   v_seq_exists NUMBER := 0;
@@ -188,9 +202,9 @@ BEGIN
   IF v_count = 0 THEN
     INSERT INTO users (id, username, password, email, created_at, updated_at)
     VALUES (
-      SUBSTR(SYS_GUID(), 1, 36),
+      LOWER(SUBSTR(SYS_GUID(),1,8) || '-' || SUBSTR(SYS_GUID(),9,4) || '-' || SUBSTR(SYS_GUID(),13,4) || '-' || SUBSTR(SYS_GUID(),17,4) || '-' || SUBSTR(SYS_GUID(),21,12)),
       'admin',
-      '$2a$10$W9r82p/yEdCEXXx/5i5qDOPTJWvEoB8nLvZN3MfZ7H/pZH8cI7Z0u',
+      '$2a$12$K9Bd8ZBY6vQmJK8.5LZ/Oe9g.L7eKq5m3H9N2X4kR1vP8Q6tJ0gNm',
       'admin@example.com',
       SYSTIMESTAMP,
       SYSTIMESTAMP
@@ -213,4 +227,8 @@ if [ $? -ne 0 ]; then
 fi
 
 cat /tmp/init_schema.log
+
+# Securely clean up temporary password file
+rm -f "$TEMP_PWD_FILE"
+
 echo "=== Database initialization completed successfully ==="

@@ -109,7 +109,7 @@ class HealthConfigTest {
 
     @Test
     void testCustomHealthContributors() {
-        HealthContributor contributor = healthConfig.customHealthContributors(dataSource);
+        HealthContributor contributor = healthConfig.customHealthContributors(java.util.Optional.of(dataSource));
         assertTrue(contributor instanceof CompositeHealthContributor);
     }
 

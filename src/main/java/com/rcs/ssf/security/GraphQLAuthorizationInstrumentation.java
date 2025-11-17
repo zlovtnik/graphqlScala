@@ -7,6 +7,8 @@ import graphql.language.Selection;
 import graphql.language.SelectionSet;
 import graphql.parser.InvalidSyntaxException;
 import graphql.parser.Parser;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.graphql.server.WebGraphQlInterceptor;
 import org.springframework.graphql.server.WebGraphQlRequest;
@@ -19,9 +21,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -46,12 +49,19 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
             PUBLIC_MUTATIONS.stream()
                     .map(name -> name.toLowerCase(Locale.ROOT))
                     .collect(Collectors.toUnmodifiableSet());
-    private static final Parser GRAPHQL_PARSER = new Parser();
     private static final int PUBLIC_MUTATION_CACHE_MAX_ENTRIES = 512;
-    private final ConcurrentHashMap<Integer, Boolean> publicMutationCache = new ConcurrentHashMap<>();
+    private static final ThreadLocal<MessageDigest> SHA256_DIGEST = ThreadLocal.withInitial(() -> {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
+        }
+    });
+    private final Cache<String, Boolean> publicMutationCache = Caffeine.newBuilder()
+            .maximumSize(PUBLIC_MUTATION_CACHE_MAX_ENTRIES)
+            .build();
 
     @Override
-    @SuppressWarnings("null")
     public @NonNull Mono<WebGraphQlResponse> intercept(@NonNull WebGraphQlRequest request, @NonNull Chain chain) {
         // Allow introspection queries without authentication
         if (isIntrospectionQuery(request)) {
@@ -70,8 +80,10 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
         if (authentication == null ||
                 !authentication.isAuthenticated() ||
                 authentication instanceof AnonymousAuthenticationToken) {
+            // Mono.error() returns Mono<T> where T cannot be narrowed by the type system;
+            // explicitly cast to satisfy @NonNull return type requirement
             @SuppressWarnings("null")
-            Mono<WebGraphQlResponse> errorMono = Mono.error(new AccessDeniedException(
+            final Mono<WebGraphQlResponse> errorMono = Mono.error(new AccessDeniedException(
                 "Authentication required: Missing or invalid JWT token. " +
                 "Please provide a valid JWT token in the Authorization header."));
             return errorMono;
@@ -122,33 +134,55 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
             return false;
         }
 
-        int cacheKey = document.hashCode();
-        Boolean cachedResult = publicMutationCache.get(cacheKey);
+        // Cheap textual pre-filter: skip parsing if no "mutation" token exists
+        String normalizedDocument = document.toLowerCase(Locale.ROOT);
+        if (!normalizedDocument.contains("mutation")) {
+            return false;
+        }
+
+        // Use normalized document as cache key for stable lookups
+        String cacheKey = generateCacheKey(document);
+        Boolean cachedResult = publicMutationCache.getIfPresent(cacheKey);
         if (cachedResult != null) {
             return cachedResult;
         }
 
-        String normalizedDocument = document.toLowerCase(Locale.ROOT);
-        if (!normalizedDocument.contains("mutation")) {
-            cachePublicMutationResult(cacheKey, false);
-            return false;
-        }
-
-        for (String mutation : PUBLIC_MUTATIONS_NORMALIZED) {
-            if (normalizedDocument.contains(mutation)) {
-                cachePublicMutationResult(cacheKey, true);
-                return true;
-            }
-        }
-
+        // Parse AST to confirm it's a public mutation
         boolean parserResult = parseDocumentForPublicMutation(document);
-        cachePublicMutationResult(cacheKey, parserResult);
+        publicMutationCache.put(cacheKey, parserResult);
         return parserResult;
+    }
+
+    /**
+     * Generate a stable cache key from the GraphQL document.
+     * Uses SHA-256 hash to create a compact, stable key from the document.
+     *
+     * @param document the GraphQL document
+     * @return hex-encoded SHA-256 hash of the normalized document
+     */
+    private String generateCacheKey(String document) {
+        try {
+            MessageDigest digest = SHA256_DIGEST.get();
+            digest.reset();
+            byte[] hash = digest.digest(document.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            log.warn("Error generating cache key, falling back to normalized document", e);
+            return document.toLowerCase(Locale.ROOT);
+        }
     }
 
     private boolean parseDocumentForPublicMutation(String document) {
         try {
-            Document parsedDocument = GRAPHQL_PARSER.parseDocument(document);
+            // Instantiate new Parser for each parse operation (thread-safe, no shared state)
+            Parser parser = new Parser();
+            Document parsedDocument = parser.parseDocument(document);
             for (var definition : parsedDocument.getDefinitions()) {
                 if (definition instanceof OperationDefinition operation &&
                         operation.getOperation() == OperationDefinition.Operation.MUTATION) {
@@ -170,16 +204,9 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
             log.error("Invalid GraphQL syntax while checking for public mutations", syntaxEx);
             return false;
         } catch (RuntimeException unexpected) {
-            log.warn("Unexpected error while parsing GraphQL document for public mutation detection", unexpected);
-            throw unexpected;
+            log.warn("Unexpected error while parsing GraphQL document for public mutation detection, treating as non-public", unexpected);
+            return false;
         }
         return false;
-    }
-
-    private void cachePublicMutationResult(int cacheKey, boolean result) {
-        if (publicMutationCache.size() >= PUBLIC_MUTATION_CACHE_MAX_ENTRIES) {
-            publicMutationCache.clear();
-        }
-        publicMutationCache.put(cacheKey, result);
     }
 }

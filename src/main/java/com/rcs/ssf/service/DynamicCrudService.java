@@ -8,7 +8,6 @@ import com.rcs.ssf.dynamic.streaming.QueryStreamingService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.lang.NonNull;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -24,7 +23,7 @@ import java.util.stream.Stream;
 @Service
 public class DynamicCrudService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final Optional<JdbcTemplate> jdbcTemplate;
     private final DynamicCrudGateway dynamicCrudGateway;
     private final QueryStreamingService queryStreamingService;
     private final String requiredRole;
@@ -40,12 +39,12 @@ public class DynamicCrudService {
     private static final int STREAM_FETCH_SIZE = 250;
 
     public DynamicCrudService(
-        @NonNull DataSource dataSource,
+        Optional<DataSource> dataSource,
         DynamicCrudGateway dynamicCrudGateway,
         QueryStreamingService queryStreamingService,
         @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole
     ) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource);
+        this.jdbcTemplate = dataSource.map(JdbcTemplate::new);
         this.dynamicCrudGateway = dynamicCrudGateway;
         this.queryStreamingService = queryStreamingService;
         this.requiredRole = requiredRole;
@@ -136,9 +135,11 @@ public class DynamicCrudService {
             countSql += " WHERE " + String.join(" AND ", whereClauses);
         }
 
-        Integer totalCount = filterParams.isEmpty()
-            ? jdbcTemplate.queryForObject(countSql, Integer.class)
-            : jdbcTemplate.queryForObject(countSql, Integer.class, filterParams.toArray());
+        Integer totalCount = jdbcTemplate.isEmpty() ? 0 : (
+            filterParams.isEmpty()
+            ? jdbcTemplate.get().queryForObject(countSql, Integer.class)
+            : jdbcTemplate.get().queryForObject(countSql, Integer.class, filterParams.toArray())
+        );
 
         return new DynamicCrudResponseDto(rows, totalCount != null ? totalCount : 0, columnMetadata);
     }
@@ -193,6 +194,9 @@ public class DynamicCrudService {
     }
 
     private List<DynamicCrudResponseDto.ColumnMeta> getColumnMetadata(String tableName) {
+        if (jdbcTemplate.isEmpty()) {
+            return List.of();
+        }
         final String sql = """
                 SELECT utc.column_name,
                        utc.data_type,
@@ -211,7 +215,7 @@ public class DynamicCrudService {
                 ORDER BY utc.column_id
                 """;
 
-        List<DynamicCrudResponseDto.ColumnMeta> columns = jdbcTemplate.query(
+        List<DynamicCrudResponseDto.ColumnMeta> columns = jdbcTemplate.get().query(
             sql,
             (rs, rowNum) -> new DynamicCrudResponseDto.ColumnMeta(
                 rs.getString("column_name"),

@@ -149,9 +149,9 @@ public class PersistedQueryRegistry {
 
     @Cacheable(value = "persistedQueries", key = "#queryHash", unless = "#result == null")
     public Optional<String> getQueryCached(String queryHash) {
-        if (!persistedQueriesEnabled) {
-            return Optional.empty();
-        }
+        // Do not short-circuit here; function-level caller (getQuery) will decide whether persisted queries
+        // are enabled. Keep metrics and cache lookup logic consistent regardless of config and rely
+        // on @Cacheable semantics for optimization.
 
         String redisKey = PERSISTED_QUERY_PREFIX + queryHash;
         Object query = redisTemplate.opsForHash().get(redisKey, "query");
@@ -181,11 +181,27 @@ public class PersistedQueryRegistry {
         long currentTime = System.currentTimeMillis();
         
         try {
-            // Perform all operations atomically in a single batch
-            redisTemplate.opsForHash().increment(redisKey, "usageCount", 1);
-            redisTemplate.opsForHash().put(redisKey, "lastUsedAt", (Object) String.valueOf(currentTime));
-            // Refresh TTL to prevent query eviction while still in active use
-            redisTemplate.expire(redisKey, java.time.Duration.ofMinutes(cacheTtlMinutes));
+            // Perform all operations as a pipelined callback so they are sent together
+            // Convert TTL into seconds for the low-level connection
+            long ttlSeconds = java.time.Duration.ofMinutes(cacheTtlMinutes).getSeconds();
+
+            // Use String serializer for both key and field serializations to avoid generic wildcard issues
+            byte[] keyBytes = redisTemplate.getStringSerializer().serialize(redisKey);
+            byte[] fieldUsageCount = redisTemplate.getStringSerializer().serialize("usageCount");
+            byte[] fieldLastUsedAt = redisTemplate.getStringSerializer().serialize("lastUsedAt");
+            byte[] lastUsedAtValue = redisTemplate.getStringSerializer().serialize(String.valueOf(currentTime));
+
+            redisTemplate.executePipelined((RedisCallback<Object>) connection -> {
+                // Use hashCommands and keyCommands to avoid deprecated DefaultedRedisConnection methods
+                try {
+                    connection.hashCommands().hIncrBy(keyBytes, fieldUsageCount, 1);
+                    connection.hashCommands().hSet(keyBytes, fieldLastUsedAt, lastUsedAtValue);
+                    connection.keyCommands().expire(keyBytes, ttlSeconds);
+                } catch (Exception e) {
+                    log.warn("Redis pipeline operation failed for key {}: {}", redisKey, e.getMessage());
+                }
+                return null;
+            });
         } catch (Exception e) {
             log.warn("Failed to update query usage for hash {}: {}", queryHash, e.getMessage());
         }
@@ -264,6 +280,18 @@ public class PersistedQueryRegistry {
         return summary;
     }
 
+    /**
+     * Helper to extract percentile value from histogram snapshot.
+     *
+     * @param snapshot the histogram snapshot containing percentile data
+     * @param targetPercentile the percentile to extract (e.g., 0.5 for p50, 0.95 for p95)
+     * @return the percentile value, or {@link Double#NaN} if:
+     *   - snapshot has no percentile data (no observations recorded)
+     *   - the target percentile is not present in the snapshot
+     *   - snapshot is null or has empty percentile values
+     * @implNote Callers must check for NaN using {@link Double#isNaN(double)} before using
+     *   the result in calculations or alerting logic to avoid propagating NaN values.
+     */
     private double percentileOrDefault(HistogramSnapshot snapshot, double targetPercentile) {
         ValueAtPercentile[] values = snapshot.percentileValues();
         if (values == null || values.length == 0) {
@@ -295,7 +323,8 @@ public class PersistedQueryRegistry {
                     count.incrementAndGet();
                 }
             } catch (Exception e) {
-                throw new IllegalStateException("Failed to scan Redis keys for pattern " + pattern, e);
+                log.error("Failed to scan Redis keys for pattern '{}': {}", pattern, e.getMessage(), e);
+                return 0L;
             }
             return count.get();
         });
@@ -306,7 +335,13 @@ public class PersistedQueryRegistry {
     /**
      * Get cache hit ratio metrics.
      * 
-     * @return Map containing cache statistics
+     * @return Map containing cache statistics:
+     *         - "totalHits" (double): Total cache hits recorded
+     *         - "totalMisses" (double): Total cache misses recorded
+     *         - "hitRatePercentage" (String): Hit rate as percentage (e.g., "95.50%"), or "0.00%" if no requests
+     *         - "cacheSize" (long): Number of persisted queries in Redis cache
+     *         - "threshold" (int): Current query complexity threshold
+     * @implNote If metrics have not been recorded yet, counters default to 0; hitRate will be "0.00%"
      */
     public Map<String, Object> getCacheStats() {
         Counter hits = meterRegistry.find(METRICS_PREFIX + "cache_hits").counter();
@@ -329,7 +364,16 @@ public class PersistedQueryRegistry {
     /**
      * Get query complexity distribution for monitoring.
      * 
-     * @return Percentile breakdown of query complexity scores
+     * @return Map containing complexity percentiles and statistics:
+     *         - "p50", "p95", "p99" (double): Percentile values, or {@link Double#NaN} if no data available
+     *         - "count" (long): Total number of queries tracked
+     *         - "threshold" (int): Current complexity threshold
+     *         - "message" (String): If no data available, returns map with only "message" key
+     * @implNote Percentile values may be NaN if:
+     *           - No queries have been tracked yet
+     *           - Metric collection has not completed
+     *           Callers should use {@link Double#isNaN(double)} to detect unavailable percentiles
+     *           before using them in dashboards or alerting logic
      */
     public Map<String, Object> getComplexityStats() {
         DistributionSummary complexitySummary = meterRegistry.find(METRICS_PREFIX + "complexity_score")

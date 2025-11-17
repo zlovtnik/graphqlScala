@@ -1,5 +1,6 @@
 package com.rcs.ssf.security;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -36,8 +37,17 @@ import java.util.Base64;
 public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
 
     private static final String NONCE_ATTRIBUTE = "cspNonce";
-    private static final SecureRandom RANDOM = new SecureRandom();
+    private static volatile SecureRandom secureRandom;
     private static final int NONCE_BYTES = 16;
+
+    @Value("${csp.script-hosts:https://cdn.jsdelivr.net}")
+    private String scriptHosts;
+
+    @Value("${csp.style-hosts:https://fonts.googleapis.com}")
+    private String styleHosts;
+
+    @Value("${csp.font-hosts:https://fonts.gstatic.com}")
+    private String fontHosts;
 
     @Value("${csp.trusted-cdn-hosts:}")
     private String trustedCdnHosts;
@@ -47,6 +57,80 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
     
     @Value("${csp.realtime-hosts:}")
     private String realtimeHosts;
+
+    /**
+     * Validates CSP configuration sources after dependency injection.
+     * Runs validation on all configured hosts before the filter starts processing requests.
+     */
+    @PostConstruct
+    public void validateConfiguration() {
+        validateCspSource(trustedCdnHosts, "csp.trusted-cdn-hosts");
+        validateCspSource(apiHosts, "csp.api-hosts");
+        validateCspSource(realtimeHosts, "csp.realtime-hosts");
+    }
+
+    /**
+     * Validates a CSP source string against security rules.
+     * 
+     * Allows:
+     * - Null or blank values (skipped)
+     * - Quoted keywords: 'self', 'none', 'unsafe-inline', 'unsafe-eval'
+     * - HTTPS host sources optionally with port (e.g., https://example.com, https://example.com:8443)
+     *
+     * Rejects any strings containing semicolons or other CSP directive separators.
+     *
+     * @param source the CSP source string to validate
+     * @param propertyName the configuration property name (for error messages)
+     * @throws IllegalArgumentException if the source fails validation
+     */
+    private void validateCspSource(String source, String propertyName) {
+        if (source == null || source.isBlank()) {
+            return; // Null/blank values are acceptable
+        }
+
+        // CSP keyword pattern: 'keyword' format
+        java.util.regex.Pattern cspKeywordPattern = java.util.regex.Pattern.compile("^'(self|none|unsafe-inline|unsafe-eval)'$");
+        
+        // HTTPS host pattern: https://host[:port] with optional a single left-most wildcard (e.g., https://*.example.com)
+        java.util.regex.Pattern httpsHostPattern = java.util.regex.Pattern.compile(
+            "^https://((\\*\\.)?[a-z0-9-]+(?:\\.[a-z0-9-]+)*)(?::[0-9]{1,5})?$",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        for (String token : source.split("\\s+")) {
+            if (token.isEmpty()) continue;
+            
+            // Reject if contains semicolon (directive separator)
+            if (token.contains(";")) {
+                throw new IllegalArgumentException(
+                    String.format("Invalid CSP source in %s: contains semicolon (directive separator): %s", propertyName, token));
+            }
+            
+            // Check if it's a valid keyword or HTTPS host
+            if (!cspKeywordPattern.matcher(token).matches() && 
+                !httpsHostPattern.matcher(token).matches()) {
+                throw new IllegalArgumentException(
+                    String.format("Invalid CSP source in %s: must be a quoted keyword ('self', 'none', 'unsafe-inline', 'unsafe-eval') or HTTPS host (optionally with port): %s", 
+                    propertyName, token));
+            }
+        }
+    }
+
+    /**
+     * Lazy initialization of SecureRandom to avoid blocking application startup.
+     * Uses double-checked locking for thread-safe lazy initialization.
+     *
+     * @return initialized SecureRandom instance
+     */
+    private static SecureRandom getSecureRandom() {
+        if (secureRandom == null) {
+            synchronized (CspHeaderFilter.class) {
+                if (secureRandom == null) {
+                    secureRandom = new SecureRandom();
+                }
+            }
+        }
+        return secureRandom;
+    }
 
     @Override
     protected void doFilterInternal(
@@ -87,9 +171,9 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
     private String buildCspHeader(String nonce) {
         StringBuilder csp = new StringBuilder();
         csp.append("default-src 'self'; ");
-        csp.append(String.format("script-src 'self' 'nonce-%s' https://cdn.jsdelivr.net; ", nonce));
-        csp.append(String.format("style-src 'self' 'nonce-%s' https://fonts.googleapis.com; ", nonce));
-        
+        csp.append(String.format("script-src 'self' 'nonce-%s' %s; ", nonce, scriptHosts));
+        csp.append(String.format("style-src 'self' 'nonce-%s' %s; ", nonce, styleHosts));
+
         // Build img-src with optional trusted CDN hosts
         csp.append("img-src 'self' data:");
         if (trustedCdnHosts != null && !trustedCdnHosts.isBlank()) {
@@ -98,8 +182,8 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
         csp.append("; ");
         
         // Build font-src with optional additional hosts
-        csp.append("font-src 'self' https://fonts.gstatic.com; ");
-        
+        csp.append(String.format("font-src 'self' %s; ", fontHosts));
+
         // Build connect-src with optional API and realtime hosts
         csp.append("connect-src 'self'");
         if (apiHosts != null && !apiHosts.isBlank()) {
@@ -124,7 +208,7 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
      */
     private String generateNonce() {
         byte[] nonceBytes = new byte[NONCE_BYTES];
-        RANDOM.nextBytes(nonceBytes);
+        getSecureRandom().nextBytes(nonceBytes);
         return Base64.getEncoder().encodeToString(nonceBytes);
     }
 

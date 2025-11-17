@@ -12,7 +12,7 @@ cdn:
 
   # Origin server configuration
   origin:
-    host: "api.example.com"
+    host: "${API_DOMAIN}"
     port: 8443
     protocol: "https"
     path: "/graphql"
@@ -102,9 +102,9 @@ cdn:
       default-src 'self';
       script-src 'self' 'nonce-${CSP_NONCE}' https://cdn.jsdelivr.net;
       style-src 'self' 'nonce-${CSP_NONCE}' https://fonts.googleapis.com;
-      img-src 'self' data: https://trusted-cdn.example.com;
+      img-src 'self' data: https://${TRUSTED_CDN_DOMAIN};
       font-src 'self' https://fonts.gstatic.com;
-      connect-src 'self' https://api.example.com wss://realtime.example.com;
+      connect-src 'self' https://${API_DOMAIN} ${REALTIME_DOMAIN};
       frame-ancestors 'none';
       base-uri 'self';
       form-action 'self';
@@ -128,11 +128,11 @@ cdn:
     enabled: false
     rules:
       - region: "us-east"
-        origin: "api-us-east.example.com"
+        origin: "${API_DOMAIN_US_EAST}"
       - region: "eu-west"
-        origin: "api-eu-west.example.com"
+        origin: "${API_DOMAIN_EU_WEST}"
       - region: "ap-southeast"
-        origin: "api-ap.example.com"
+        origin: "${API_DOMAIN_AP_SOUTHEAST}"
 
   # Monitoring and metrics
   monitoring:
@@ -187,10 +187,10 @@ cdn:
     api_token: "${CLOUDFLARE_API_TOKEN}"
     rules:
       - action: "cache"
-        expression: '(http.host eq "api.example.com" and http.request.uri.path contains "graphql")'
+        expression: '(http.host eq "${API_DOMAIN}" and http.request.uri.path contains "graphql")'
         cache_ttl: 300
       - action: "compress"
-        expression: '(http.host eq "api.example.com")'
+        expression: '(http.host eq "${API_DOMAIN}")'
         compression_level: 6
 
   # Expected performance improvements

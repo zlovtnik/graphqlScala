@@ -4,6 +4,7 @@ import com.rcs.ssf.dto.AuthResponse;
 import com.rcs.ssf.security.AuthenticatedUser;
 import com.rcs.ssf.security.JwtTokenProvider;
 import com.rcs.ssf.service.AuditService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
@@ -35,8 +36,8 @@ public class AuthMutation {
     @Autowired
     private AuditService auditService;
 
-    @Autowired(required = false)
-    private HttpServletRequest httpServletRequest;
+    @Autowired
+    private ObjectProvider<HttpServletRequest> requestProvider;
 
     @MutationMapping
     public AuthResponse login(@Argument String username, @Argument String password) {
@@ -47,10 +48,13 @@ public class AuthMutation {
             throw new IllegalArgumentException("Password must not be blank");
         }
         
-        // Use autowired HttpServletRequest (safe for synchronous HTTP mutations)
-        String ipAddress = (httpServletRequest != null) ? getClientIpAddress(httpServletRequest) : "unknown";
-        String userAgent = (httpServletRequest != null) ? httpServletRequest.getHeader("User-Agent") : "unknown";
-        
+        // Lazily resolve HttpServletRequest; works in HTTP contexts and gracefully falls back in tests
+        // SECURITY NOTE: Ensure upstream infrastructure (proxy/load balancer) controls X-Forwarded-For
+        // to prevent external clients from spoofing IP addresses in audit logs
+        HttpServletRequest request = requestProvider.getIfAvailable();
+        String ipAddress = (request != null) ? getClientIpAddress(request) : "unknown";
+        String userAgent = (request != null) ? request.getHeader("User-Agent") : "unknown";
+
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password)

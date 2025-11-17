@@ -93,34 +93,38 @@ clients ─┬─▶ HTTPS (Spring Boot + Jetty @ 8443)
 
 ### Database Setup
 
+> ⚠️ **IMPORTANT:** The following manual setup steps must be performed by a DBA with SYS/DBA privileges **before** running the application or Flyway migrations.
+
 1. **Create the application user** (run as SYS or DBA):
 
-   ```sql
-   -- Run one of these scripts to create the user and basic grants
-   @create_user_with_grants.sql
-   -- OR for development with debug privileges
-   @create_user_with_debug_grants.sql
+   Execute the scripts in `sql/users/` as SYS/DBA:
+
+   ```bash
+   sqlplus / as sysdba
+   SQL> @sql/users/create_user_with_grants.sql
+   # For development only:
+   SQL> @sql/users/create_user_with_debug_grants.sql
    ```
 
-2. **Set up the schema** (run as the application user, e.g., `APP_USER`):
+   See [`sql/users/README.md`](sql/users/README.md) for full deployment instructions and password management.
 
-   ```sql
-   @master.sql
+2. **Automated Schema Setup** (run via application):
+
+   The application uses Flyway to automatically create tables, sequences, and indexes on first startup. This is managed by:
+
+   ```bash
+   ./gradlew bootRun
+   # OR
+   docker-compose up  # Includes automatic user creation via docker-entrypoint-initdb.d/01-init-user.sh
    ```
 
-3. **Apply additional grants** (run as SYS or DBA):
+3. **Default Admin User**:
 
-   ```sql
-   @grant_privileges.sql
-   ```
+   When the application starts for the first time, a default admin user is created with:
+   - **Username:** `admin`
+   - **Password:** `Admin@123` (hashed in the database)
 
-### Default Admin User
-
-When the application starts for the first time, a default admin user is created with:
-- **Username:** `admin`
-- **Password:** `Admin@123` (hashed in the database)
-
-> ⚠️ **Security Warning:** Change the default admin password immediately after first login. The default password is for initial setup only and should never be used in production.
+   > ⚠️ **Security Warning:** Change the default admin password immediately after first login.
 
 ### 1. Clone & Build
 
@@ -155,7 +159,7 @@ export KEYSTORE_PASSWORD=changeit
 
 > 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters long and include at least `min(20, length/2)` distinct characters. For example, a 32-character secret must contain 16 distinct characters. The application enforces this requirement at startup.
 
-> ⚠️ **Database Password Warning:** For production deployments, DO NOT use the default database password `APP_USER`. Set `DB_USER_PASSWORD` (or `ORACLE_PASSWORD`) to a strong, unique value in your deployment environment. See `docs/ORACLE_CREDENTIAL_SECURITY.md` for guidance on secrets management.
+> ⚠️ **Database Password Warning:** For production deployments, DO NOT use the default database password `APP_USER`. Set `DB_USER_PASSWORD` (or `ORACLE_PASSWORD`) to a strong, unique value in your deployment environment. See `docs/SECURITY_ARCHITECTURE.md` for guidance on secrets management.
 
 ### Required Environment Variables
 
@@ -316,7 +320,7 @@ The partition maintenance script (`scripts/partition-maintenance.sh`) and databa
 - Kubernetes/Docker deployment with secrets
 - Auditing and monitoring best practices
 
-See [`docs/ORACLE_CREDENTIAL_SECURITY.md`](docs/ORACLE_CREDENTIAL_SECURITY.md).
+See [`docs/SECURITY_ARCHITECTURE.md`](docs/SECURITY_ARCHITECTURE.md).
 
 **Quick Start:**
 ```bash
@@ -324,7 +328,7 @@ See [`docs/ORACLE_CREDENTIAL_SECURITY.md`](docs/ORACLE_CREDENTIAL_SECURITY.md).
 mkdir -p .secrets && chmod 700 .secrets
 
 # Store database password securely
-echo -n "your-secure-password" > .secrets/oracle-password
+printf '%s' "your-secure-password" > .secrets/oracle-password
 chmod 600 .secrets/oracle-password
 
 # Add to .gitignore (already included)

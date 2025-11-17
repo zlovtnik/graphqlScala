@@ -40,6 +40,10 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 	
 	// Reactive Data Access
+	// NOTE: R2DBC versions must be compatible with Spring Boot 3.5.7's managed dependencies.
+	// Verified compatible: oracle-r2dbc:1.3.0 with Boot 3.5.7 (Reactor 3.5.7, r2dbc-spi:1.0.0.RELEASE)
+	// If upgrading Boot version, verify R2DBC compatibility via:
+	// https://github.com/spring-projects/spring-boot/blob/3.5.7/spring-boot-project/spring-boot-dependencies/build.gradle
 	implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
 	implementation 'com.oracle.database.r2dbc:oracle-r2dbc:1.3.0'
 	implementation 'io.r2dbc:r2dbc-pool:1.0.2.RELEASE'

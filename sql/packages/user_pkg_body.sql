@@ -166,8 +166,9 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
     BEGIN
         v_context := 'Logging login attempt for user: ' || p_username || ', success: ' || TO_CHAR(p_success);
         -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
-        INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
-        VALUES (audit_seq.NEXTVAL, p_error_code, p_error_msg, v_context, p_procedure_name);
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name)
+        VALUES (p_error_code, p_error_msg, v_context, p_procedure_name);
         COMMIT;
     END log_login_error;
 
@@ -179,8 +180,9 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_failure_reason IN VARCHAR2 DEFAULT NULL
     ) IS
     BEGIN
-        INSERT INTO audit_login_attempts (id, username, success, ip_address, user_agent, failure_reason)
-        VALUES (audit_seq.NEXTVAL, p_username, p_success, p_ip_address, p_user_agent, p_failure_reason);
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_login_attempts (username, success, ip_address, user_agent, failure_reason)
+        VALUES (p_username, p_success, p_ip_address, p_user_agent, p_failure_reason);
         COMMIT;
     EXCEPTION
         -- Targeted exception handling: swallow only benign errors (e.g., missing audit table ORA-00942)
@@ -212,8 +214,9 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
     BEGIN
         v_context := 'Logging session start for user: ' || p_user_id || ', token_hash: ' || p_token_hash;
         -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
-        INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
-        VALUES (audit_seq.NEXTVAL, p_error_code, p_error_msg, v_context, p_procedure_name);
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name)
+        VALUES (p_error_code, p_error_msg, v_context, p_procedure_name);
         COMMIT;
     END log_session_error;
 
@@ -224,8 +227,9 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_user_agent IN VARCHAR2 DEFAULT NULL
     ) IS
     BEGIN
-        INSERT INTO audit_sessions (id, user_id, token_hash, ip_address, user_agent)
-        VALUES (audit_seq.NEXTVAL, p_user_id, p_token_hash, p_ip_address, p_user_agent);
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_sessions (user_id, token_hash, ip_address, user_agent)
+        VALUES (p_user_id, p_token_hash, p_ip_address, p_user_agent);
         COMMIT;
     EXCEPTION
         WHEN OTHERS THEN

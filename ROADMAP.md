@@ -383,29 +383,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
 
 ### **Security & Compliance**
 
-- [ ] **Multi-Factor Authentication (MFA)**
-  - TOTP (Time-based One-Time Password) implementation
-  - SMS-based authentication backup
-  - Hardware security key support (WebAuthn)
-  - MFA recovery and management
-
-- [ ] **Advanced Audit & Compliance**
-  - Comprehensive audit log viewer for administrators
-  - Audit log export and archiving capabilities
-  - Compliance reporting (GDPR, SOX, etc.)
-  - Data retention and deletion policies
-
-- [ ] **Data Encryption & Security**
-  - Transparent Data Encryption (TDE) for Oracle
-  - Application-level encryption for sensitive data
-  - Secure key management and rotation
-  - Encryption performance monitoring
-
-- [ ] **Role-Based Access Control (RBAC)**
-  - Granular permission system beyond basic auth
-  - Role hierarchy and inheritance
-  - Permission auditing and reporting
-  - Dynamic permission assignment
+This section outlines the complete security roadmap in phases. See **Security & Compliance Delivery Plan** table below for detailed phase breakdown, key deliverables, and compliance hooks.
 
 #### Security & Compliance Delivery Plan
 

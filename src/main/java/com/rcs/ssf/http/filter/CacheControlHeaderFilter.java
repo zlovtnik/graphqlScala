@@ -23,7 +23,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.regex.Pattern;
-import java.util.zip.CRC32;
 
 /**
  * HTTP Cache-Control header filter for GraphQL responses.
@@ -70,6 +69,8 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
     private static final String ETAG_HASH_ALGORITHM = "SHA-256";
     private static final long SCHEMA_CACHE_TTL = 3600; // 1 hour
     private static final long QUERY_BASE_CACHE_TTL = 300; // 5 minutes base
+    private static final long MAX_ETAG_CAPTURE_BYTES = 1_048_576; // 1 MiB capture cap
+    private static final int ETAG_LENGTH = 24; // Base64 characters: ~144 bits, collision resistance ~2^72
 
     public CacheControlHeaderFilter(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -89,7 +90,7 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
 
         try {
             // Wrap response to capture response body for ETag generation
-            CapturedResponseWrapper wrappedResponse = new CapturedResponseWrapper(response);
+            CapturedResponseWrapper wrappedResponse = new CapturedResponseWrapper(response, MAX_ETAG_CAPTURE_BYTES);
 
             // Proceed with request, capturing response
             filterChain.doFilter(request, wrappedResponse);
@@ -98,7 +99,7 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
             // and content type is JSON (cacheable)
             if (!wrappedResponse.isCommitted()) {
                 String contentType = wrappedResponse.getContentType();
-                if (contentType != null && contentType.contains("application/json")) {
+                if (contentType != null && isApplicationJson(contentType)) {
                     addCacheHeaders(request, wrappedResponse);
                 }
             } else {
@@ -132,16 +133,22 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
             String cacheControl = String.format("public, max-age=%d", maxAge);
             wrappedResponse.setHeader(HttpHeaders.CACHE_CONTROL, cacheControl);
 
-            // Generate ETag from actual response body (skip if empty)
-            String responseBody = wrappedResponse.getCapturedBody();
-            String etag = generateETag(responseBody);
-            if (etag != null) {
-                wrappedResponse.setHeader(HttpHeaders.ETAG, etag);
-                // Note: Cannot return 304 here because response body already committed after
-                // filterChain.doFilter()
-                // For validation, clients will use If-None-Match header on next request
-                meterRegistry.counter("http.cache.etag.generated").increment();
-                log.debug("ETag generated: {} (max-age: {}s)", etag, maxAge);
+            if (wrappedResponse.hasExceededCaptureLimit()) {
+                meterRegistry.counter("http.cache.etag.skipped", "reason", "response_too_large").increment();
+                log.debug("Skipping ETag generation: response exceeded {} bytes (captured ~{} bytes)",
+                        MAX_ETAG_CAPTURE_BYTES, wrappedResponse.getCapturedSize());
+            } else {
+                // Generate ETag from actual response body (skip if empty)
+                String responseBody = wrappedResponse.getCapturedBody();
+                String etag = generateETag(responseBody);
+                if (etag != null) {
+                    wrappedResponse.setHeader(HttpHeaders.ETAG, etag);
+                    // Note: Cannot return 304 here because response body already committed after
+                    // filterChain.doFilter()
+                    // For validation, clients will use If-None-Match header on next request
+                    meterRegistry.counter("http.cache.etag.generated").increment();
+                    log.debug("ETag generated: {} (max-age: {}s)", etag, maxAge);
+                }
             }
             maxAgeDistribution.record(maxAge);
         }
@@ -229,11 +236,22 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
      * Generate ETag using SHA-256 hash of response body.
      * 
      * Computes a stable content-based hash from the actual response:
-     * - Primary: SHA-256 hash of response body, Base64-encoded and trimmed
-     * - Fallback: Java hashCode() of response body if SHA-256 unavailable
+     * - SHA-256 hash of response body, Base64-encoded and truncated to ETAG_LENGTH characters
+     * - Fails fast if SHA-256 is unavailable (required algorithm)
+     * 
+     * ETag Length Strategy:
+     * - 24 Base64 characters represent ~144 bits (2^144) of entropy
+     * - Collision resistance: ~2^72 (birthday paradox), sufficient for typical GraphQL APIs
+     * - RFC 7232 does not mandate length; 24 chars balances collision safety with header size
+     * - Alternative: Remove truncation for full 44-char SHA-256 Base64 if stricter guarantees needed
+     * 
+     * Security Note: SHA-256 is required. No fallback to weaker algorithms (e.g., CRC32) is provided
+     * to ensure ETag collision resistance. If SHA-256 is unavailable, the application fails fast
+     * rather than silently using insecure hashing.
      * 
      * @param responseBody The response body string to hash
-     * @return Base64-encoded or hex-encoded ETag value (quoted), or null if responseBody is empty
+     * @return Base64-encoded ETag value (quoted), or null if responseBody is empty
+     * @throws IllegalStateException if SHA-256 algorithm is not available
      */
     private String generateETag(String responseBody) {
         // Skip ETag generation for null or empty response bodies
@@ -245,14 +263,12 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
             MessageDigest digest = MessageDigest.getInstance(ETAG_HASH_ALGORITHM);
             byte[] hash = digest.digest(responseBody.getBytes(StandardCharsets.UTF_8));
             String encoded = Base64.getEncoder().encodeToString(hash);
-            // Trim to 16 characters for reasonable ETag length
-            return "\"" + encoded.substring(0, Math.min(16, encoded.length())) + "\"";
+            // Truncate to ETAG_LENGTH characters for reasonable ETag length and collision resistance
+            return "\"" + encoded.substring(0, Math.min(ETAG_LENGTH, encoded.length())) + "\"";
         } catch (NoSuchAlgorithmException e) {
-            log.warn("SHA-256 algorithm not available, using fallback hash", e);
-            CRC32 crc32 = new CRC32();
-            crc32.update(responseBody.getBytes(StandardCharsets.UTF_8));
-            String crcHex = String.format("%08x", crc32.getValue());
-            return "\"" + crcHex + "\"";
+            log.error("SHA-256 algorithm is not available; this is a critical security configuration error. " +
+                    "ETags require SHA-256 for collision resistance. Failing fast to prevent security bypass.", e);
+            throw new IllegalStateException("SHA-256 algorithm is required but not available", e);
         }
     }
 
@@ -290,8 +306,27 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         return isGraphQLPath &&
                 !isSensitivePath &&
                 contentType != null &&
-                contentType.contains("application/json") &&
+                isApplicationJson(contentType) &&
                 "POST".equalsIgnoreCase(request.getMethod());
+    }
+
+    /**
+     * Check if content-type is exactly "application/json" (case-insensitive).
+     * Parses out media type from parameters like charset or boundary.
+     * 
+     * Matches: "application/json", "application/json; charset=utf-8"
+     * Does not match: "application/json-patch+json", "application/problem+json"
+     * 
+     * @param contentType The Content-Type header value
+     * @return true if the media type is exactly application/json
+     */
+    private boolean isApplicationJson(String contentType) {
+        if (contentType == null || contentType.isBlank()) {
+            return false;
+        }
+        // Extract media type (before any semicolon and parameters)
+        String mediaType = contentType.split(";", 2)[0].trim();
+        return "application/json".equalsIgnoreCase(mediaType);
     }
 
     @Override
@@ -308,30 +343,41 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
      * the stream twice.
      */
     private static class CapturedResponseWrapper extends HttpServletResponseWrapper {
-        private final ByteArrayOutputStream captureBuffer = new ByteArrayOutputStream();
+        private final long maxCaptureBytes;
+        private ByteArrayOutputStream captureBuffer;
         private PrintWriter capturedWriter;
         private CapturingOutputStream capturedOutputStream;
         private boolean isWriterCalled = false;
         private boolean isOutputStreamCalled = false;
+        private boolean captureLimitExceeded = false;
+        private long capturedSize = 0L;
 
-        public CapturedResponseWrapper(HttpServletResponse response) {
+        public CapturedResponseWrapper(HttpServletResponse response, long maxCaptureBytes) {
             super(response);
+            this.maxCaptureBytes = maxCaptureBytes;
+            this.captureBuffer = new ByteArrayOutputStream((int) Math.min(maxCaptureBytes, 8192));
+        }
+
+        public boolean hasExceededCaptureLimit() {
+            return captureLimitExceeded;
+        }
+
+        public long getCapturedSize() {
+            return capturedSize;
         }
 
         /**
          * Get the captured response body.
-         * 
+         *
          * @return Response body as string, or empty string if nothing captured
          */
         public String getCapturedBody() {
             try {
-                if (capturedWriter != null) {
-                    capturedWriter.flush();
+                flushCaptureStreams();
+                if (captureLimitExceeded || captureBuffer == null) {
+                    return "";
                 }
-                if (capturedOutputStream != null) {
-                    capturedOutputStream.flush();
-                }
-                return captureBuffer.toString(StandardCharsets.UTF_8);
+                return new String(captureBuffer.toByteArray(), StandardCharsets.UTF_8);
             } catch (Exception e) {
                 log.debug("Could not retrieve captured response body", e);
                 return "";
@@ -340,112 +386,172 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
 
         @Override
         public PrintWriter getWriter() throws IOException {
-            if (!isWriterCalled && !isOutputStreamCalled) {
+            if (isOutputStreamCalled) {
+                return super.getWriter();
+            }
+            if (!isWriterCalled) {
                 isWriterCalled = true;
-                // Create a PrintWriter that writes to both the capture buffer and the original
-                // response
                 PrintWriter originalWriter = super.getWriter();
-                capturedWriter = new PrintWriter(new java.io.OutputStreamWriter(captureBuffer, StandardCharsets.UTF_8),
-                        true) {
+                capturedWriter = new PrintWriter(originalWriter, true) {
                     @Override
                     public void write(int c) {
+                        captureChars(Character.toString((char) c));
                         super.write(c);
-                        originalWriter.write(c);
                     }
 
                     @Override
                     public void write(char[] cbuf) {
+                        captureChars(new String(cbuf));
                         super.write(cbuf);
-                        originalWriter.write(cbuf);
                     }
 
                     @Override
                     public void write(char[] cbuf, int off, int len) {
+                        captureChars(new String(cbuf, off, len));
                         super.write(cbuf, off, len);
-                        originalWriter.write(cbuf, off, len);
                     }
 
                     @Override
                     public void write(String str) {
+                        captureChars(str);
                         super.write(str);
-                        originalWriter.write(str);
                     }
 
                     @Override
                     public void write(String str, int off, int len) {
+                        if (str != null && len > 0) {
+                            captureChars(str.substring(off, Math.min(str.length(), off + len)));
+                        }
                         super.write(str, off, len);
-                        originalWriter.write(str, off, len);
                     }
 
                     @Override
                     public void flush() {
                         super.flush();
-                        originalWriter.flush();
                     }
 
                     @Override
                     public void close() {
                         super.close();
-                        originalWriter.close();
                     }
                 };
-                return capturedWriter;
             }
-            return super.getWriter();
+            return capturedWriter;
         }
 
         @Override
         public jakarta.servlet.ServletOutputStream getOutputStream() throws IOException {
-            if (!isOutputStreamCalled && !isWriterCalled) {
-                isOutputStreamCalled = true;
-                capturedOutputStream = new CapturingOutputStream(super.getOutputStream(), captureBuffer);
-                return capturedOutputStream;
+            if (isWriterCalled) {
+                return super.getOutputStream();
             }
-            return super.getOutputStream();
+            if (!isOutputStreamCalled) {
+                isOutputStreamCalled = true;
+                capturedOutputStream = new CapturingOutputStream(super.getOutputStream(), this);
+            }
+            return capturedOutputStream;
+        }
+
+        private void flushCaptureStreams() {
+            try {
+                if (capturedWriter != null) {
+                    capturedWriter.flush();
+                }
+            } catch (Exception e) {
+                log.debug("Unable to flush captured writer", e);
+            }
+            try {
+                if (capturedOutputStream != null) {
+                    capturedOutputStream.flush();
+                }
+            } catch (IOException e) {
+                log.debug("Unable to flush captured output stream", e);
+            }
+        }
+
+        private void captureChars(CharSequence seq) {
+            if (seq == null || seq.length() == 0) {
+                return;
+            }
+            byte[] bytes = seq.toString().getBytes(StandardCharsets.UTF_8);
+            captureBytes(bytes, 0, bytes.length);
+        }
+
+        private void captureByte(int b) {
+            if (captureLimitExceeded || captureBuffer == null) {
+                return;
+            }
+            if (captureBuffer.size() >= maxCaptureBytes) {
+                disableCapture();
+                return;
+            }
+            captureBuffer.write(b);
+            capturedSize++;
+            if (captureBuffer.size() >= maxCaptureBytes) {
+                disableCapture();
+            }
+        }
+
+        private void captureBytes(byte[] data, int off, int len) {
+            if (captureLimitExceeded || captureBuffer == null || data == null || len <= 0) {
+                return;
+            }
+            long remaining = maxCaptureBytes - captureBuffer.size();
+            if (remaining <= 0) {
+                disableCapture();
+                return;
+            }
+            int bytesToWrite = (int) Math.min(len, remaining);
+            captureBuffer.write(data, off, bytesToWrite);
+            capturedSize += bytesToWrite;
+            if (bytesToWrite < len || captureBuffer.size() >= maxCaptureBytes) {
+                disableCapture();
+            }
+        }
+
+        private void disableCapture() {
+            captureLimitExceeded = true;
+            captureBuffer = null;
         }
     }
 
     /**
-     * ServletOutputStream that captures bytes written to response.
+     * ServletOutputStream that captures bytes written to response while enforcing a size cap.
      */
     private static class CapturingOutputStream extends jakarta.servlet.ServletOutputStream {
         private final jakarta.servlet.ServletOutputStream delegate;
-        private final ByteArrayOutputStream captureBuffer;
+        private final CapturedResponseWrapper owner;
 
-        public CapturingOutputStream(jakarta.servlet.ServletOutputStream delegate,
-                ByteArrayOutputStream captureBuffer) {
+        public CapturingOutputStream(jakarta.servlet.ServletOutputStream delegate, CapturedResponseWrapper owner) {
             this.delegate = delegate;
-            this.captureBuffer = captureBuffer;
+            this.owner = owner;
         }
 
         @Override
         public void write(int b) throws IOException {
             delegate.write(b);
-            captureBuffer.write(b);
+            owner.captureByte(b);
         }
 
         @Override
         public void write(byte[] b) throws IOException {
             delegate.write(b);
-            captureBuffer.write(b);
+            owner.captureBytes(b, 0, b.length);
         }
 
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
             delegate.write(b, off, len);
-            captureBuffer.write(b, off, len);
+            owner.captureBytes(b, off, len);
         }
 
         @Override
         public void flush() throws IOException {
             delegate.flush();
-            captureBuffer.flush();
         }
 
         @Override
         public void close() throws IOException {
             delegate.close();
-            captureBuffer.close();
         }
 
         @Override

@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 
 import javax.sql.DataSource;
@@ -24,6 +25,7 @@ import java.util.Objects;
  * spring.datasource.* properties in application configuration.
  */
 @Configuration
+@ConditionalOnProperty(prefix = "app.datasource", name = "enabled", havingValue = "true", matchIfMissing = false)
 public class DataSourceConfig {
 
     /**

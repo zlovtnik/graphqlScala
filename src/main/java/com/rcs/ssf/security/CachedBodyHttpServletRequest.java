@@ -40,12 +40,13 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
                 : Charset.forName(encoding);
         
         StringBuilder stringBuilder = new StringBuilder();
+        long estimatedBytes = 0L;
         try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(request.getInputStream(), bodyCharset))) {
             char[] charBuffer = new char[128];
             int bytesRead;
             while ((bytesRead = bufferedReader.read(charBuffer)) > 0) {
-                // Check size limit (convert chars to bytes using charset)
-                long estimatedBytes = stringBuilder.length() * 4; // Conservative estimate
+                // Check size limit (conservative UTF-8 upper bound: 4 bytes per char)
+                estimatedBytes += (long) bytesRead * 4;
                 if (estimatedBytes > maxBodySizeBytes) {
                     throw new IOException("Request body exceeds maximum allowed size of " + maxBodySizeBytes + " bytes");
                 }
