@@ -31,7 +31,7 @@ export interface User {
 
 export interface AuthResponse {
   token: string;
-  user: User;
+  user?: User | null;
 }
 
 @Injectable({
@@ -117,10 +117,11 @@ export class AuthService implements OnDestroy {
       variables: { username, password }
     }).pipe(
       map(result => {
-        if (!result.data?.login) {
+        const payload = result.data?.login;
+        if (!payload?.token) {
           throw new Error('Invalid login response from server');
         }
-        return result.data.login;
+        return payload;
       }),
       tap(response => this.setAuthToken(response))
     );
@@ -135,10 +136,11 @@ export class AuthService implements OnDestroy {
       variables: { username, email, password }
     }).pipe(
       map(result => {
-        if (!result.data?.register) {
+        const payload = result.data?.register;
+        if (!payload?.token) {
           throw new Error('Invalid register response from server');
         }
-        return result.data.register;
+        return payload;
       }),
       tap(response => this.setAuthToken(response))
     );
@@ -217,7 +219,14 @@ export class AuthService implements OnDestroy {
       }
     });
 
-    this.currentUser$.next(response.user);
+    const nextUser = response.user ?? null;
+    if (nextUser) {
+      this.currentUser$.next(nextUser);
+    } else if (!this.currentUser$.value) {
+      // We only re-fetch when we do not already have user context
+      this.loadCurrentUser();
+    }
+
     this.authStateSubject$.next(AuthState.AUTHENTICATED);
   }
 

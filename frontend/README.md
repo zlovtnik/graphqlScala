@@ -6,7 +6,7 @@ Angular 18 + NG-ZORRO + Apollo client application targeting the SSF GraphQL back
 
 - Node.js 18.x or 20.x (LTS); v25 is used by some developers but is optional - verify compatibility if using newer versions
 - npm (bundled with Node.js)
-- Java backend running at `http://localhost:8080/graphql`
+- Java backend running at `http://localhost:8443/graphql`
 
 ## Install dependencies
 
@@ -26,7 +26,7 @@ npm test             # Run unit tests
 
 ## Project structure
 
-```
+```text
 src/
   app/
     core/           # Services, guards, interceptors
@@ -41,4 +41,4 @@ Defined in `src/app/graphql.config.ts` with auth token support via `localStorage
 
 ## Code generation
 
-Configure operations under `src/app/graphql`. Schema is read from `http://localhost:8080/graphql`. Generated types are written to `src/app/graphql/generated.ts`.
+Configure operations under `src/app/graphql`. Schema is read from `http://localhost:8443/graphql`. Generated types are written to `src/app/graphql/generated.ts`.

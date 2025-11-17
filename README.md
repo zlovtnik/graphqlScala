@@ -303,6 +303,10 @@ The application implements a strict Content Security Policy (CSP) without `'unsa
 
 For detailed CSP implementation, architecture, and troubleshooting, see [`docs/CSP_IMPLEMENTATION.md`](docs/CSP_IMPLEMENTATION.md).
 
+**Cross-Origin Resource Sharing (CORS):**
+
+The application configures CORS to allow requests from `http://localhost:4200` for development purposes. This enables the Angular frontend running on the default development port to communicate with the backend. In production, CORS should be restricted to trusted origins only. The CORS policy is defined in `SecurityConfig.java` and allows GET, POST, PUT, DELETE, and OPTIONS methods with credentials.
+
 **Breaking Change:** `JWT_SECRET`, `MINIO_ACCESS_KEY`, and `MINIO_SECRET_KEY` no longer have unsafe default values. All three must be explicitly set via environment variables or the application will fail at startup with a clear error message.
 
 ### Local development secrets

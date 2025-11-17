@@ -52,6 +52,9 @@ public class ReactiveAuditService {
     private static final int MAX_RETRIES = 3;
 
     public Mono<Void> logGraphQLComplexity(String query, int complexity) {
+        if (query == null) {
+            return Mono.error(new IllegalArgumentException("Query cannot be null"));
+        }
         Timer.Sample sample = Timer.start(meterRegistry);
         
         String queryHash = generateHash(query);
@@ -190,6 +193,9 @@ public class ReactiveAuditService {
      * @return Mono that completes when audit record is inserted (or empty if not sampled)
      */
     public Mono<Void> logExecutionPlan(String query, long executionTimeMs) {
+        if (query == null) {
+            return Mono.error(new IllegalArgumentException("Query cannot be null"));
+        }
         Timer.Sample sample = Timer.start(meterRegistry);
         
         // Sample 1 in 100 for high-volume queries
@@ -245,7 +251,13 @@ public class ReactiveAuditService {
                             .flatMap(event -> {
                                 Mono<Void> mono;
                                 switch (event.getEventType()) {
-                                    case "COMPLEXITY" -> mono = logGraphQLComplexity(event.getQuery(), event.getScore());
+                                    case "COMPLEXITY" -> {
+                                        if (event.getQuery() != null) {
+                                            mono = logGraphQLComplexity(event.getQuery(), event.getScore());
+                                        } else {
+                                            mono = Mono.empty();
+                                        }
+                                    }
                                     case "CIRCUIT_BREAKER" -> mono = logCircuitBreakerEvent(event.getService(), event.getState());
                                     case "COMPRESSION" -> mono = logCompressionEvent(event.getAlgorithm(), event.getOriginalSize(), event.getCompressedSize());
                                     default -> mono = Mono.empty();
@@ -268,6 +280,7 @@ public class ReactiveAuditService {
      * 
      * @param query The GraphQL query string
      * @return Hex-encoded SHA-256 hash
+     * @throws IllegalArgumentException if query is null
      * @throws IllegalStateException if SHA-256 algorithm is not available (JVM configuration issue)
      */
     private String generateHash(String query) {

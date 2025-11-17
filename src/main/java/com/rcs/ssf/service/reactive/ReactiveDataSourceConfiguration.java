@@ -14,9 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.r2dbc.convert.MappingR2dbcConverter;
 import org.springframework.data.r2dbc.convert.R2dbcCustomConversions;
-import org.springframework.data.r2dbc.core.DefaultReactiveDataAccessStrategy;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
-import org.springframework.data.r2dbc.core.ReactiveDataAccessStrategy;
 import org.springframework.data.r2dbc.dialect.DialectResolver;
 import org.springframework.data.r2dbc.dialect.R2dbcDialect;
 import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
@@ -105,11 +103,26 @@ public class ReactiveDataSourceConfiguration {
      * 
      * @param props R2DBC properties to validate
      * @throws IllegalArgumentException if any required property is missing or empty
+     * @throws IllegalStateException if driver is invalid
      */
     private void validateR2dbcProperties(R2dbcProperties props) {
         if (props == null) {
             throw new IllegalArgumentException("R2dbcProperties cannot be null");
         }
+
+        // Validate driver
+        String driver = props.getDriver();
+        if (driver == null || driver.trim().isBlank()) {
+            throw new IllegalStateException("R2DBC driver is required and cannot be empty. Set app.r2dbc.driver to a supported value: oracle, postgresql, mysql, h2");
+        }
+        driver = driver.trim().toLowerCase();
+        java.util.Set<String> supportedDrivers = java.util.Set.of("oracle", "postgresql", "mysql", "h2", "mariadb", "mssql");
+        if (!supportedDrivers.contains(driver)) {
+            throw new IllegalStateException(
+                String.format("Unsupported R2DBC driver '%s'. Supported drivers: %s. Set app.r2dbc.driver to a valid value.",
+                    driver, supportedDrivers));
+        }
+
         if (props.getHost() == null || props.getHost().isBlank()) {
             throw new IllegalArgumentException("R2DBC host is required and cannot be empty");
         }
@@ -233,38 +246,21 @@ public class ReactiveDataSourceConfiguration {
     }
 
     @Bean
-    @SuppressWarnings("deprecation")
-    public ReactiveDataAccessStrategy reactiveDataAccessStrategy(
-            @NonNull R2dbcDialect dialect,
-            @NonNull MappingR2dbcConverter converter) {
-        
-        // Log the identifier processing to debug
-        log.info("Creating ReactiveDataAccessStrategy with dialect identifier processing: {}",
-                dialect.getIdentifierProcessing());
-        
-        return new DefaultReactiveDataAccessStrategy(
-                Objects.requireNonNull(dialect, "dialect must not be null"),
-                Objects.requireNonNull(converter, "converter must not be null"));
-    }
-
-    @Bean
     public DatabaseClient databaseClient(
             @Qualifier("connectionPool") @NonNull ConnectionFactory connectionPool,
             @NonNull R2dbcDialect dialect) {
         return DatabaseClient.builder()
-                .connectionFactory(Objects.requireNonNull(connectionPool, "connectionPool must not be null"))
-                .bindMarkers(Objects.requireNonNull(dialect, "dialect must not be null").getBindMarkersFactory())
+                .connectionFactory(connectionPool)
+                .bindMarkers(dialect.getBindMarkersFactory())
                 .build();
     }
 
     @Bean
-    @SuppressWarnings("deprecation")
     public R2dbcEntityTemplate r2dbcEntityTemplate(
             @NonNull DatabaseClient databaseClient,
-            @NonNull ReactiveDataAccessStrategy reactiveDataAccessStrategy) {
-        return new R2dbcEntityTemplate(
-                Objects.requireNonNull(databaseClient, "databaseClient must not be null"),
-                Objects.requireNonNull(reactiveDataAccessStrategy, "reactiveDataAccessStrategy must not be null"));
+            @NonNull R2dbcDialect dialect) {
+        log.info("Creating R2dbcEntityTemplate with DatabaseClient and R2dbcDialect");
+        return new R2dbcEntityTemplate(databaseClient, dialect);
     }
 
     /**

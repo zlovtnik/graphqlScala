@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -138,6 +139,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
      * @param actionTag audit tag indicating operation type
      * @throws Exception if persistence fails
      */
+    @Transactional
     private void persistBackupCodes(String userId, List<String> codes, String actionTag) throws Exception {
         // Hash each code
         List<String> hashedCodes = codes.stream()
@@ -161,20 +163,30 @@ public class DefaultBackupCodeService implements BackupCodeService {
             return false;
         }
 
-        // Hash the provided code
-        String hashedCode = BCrypt.hashpw(code, BCrypt.gensalt());
+        // Fetch all unused hashes for the user
+        List<String> hashes = jdbcTemplate.queryForList(
+            "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL",
+            String.class, userId);
 
-        // Perform atomic find-and-update
-        int rowsAffected = jdbcTemplate.update(
-            "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-            userId, hashedCode);
+        // Check each hash
+        for (String storedHash : hashes) {
+            if (BCrypt.checkpw(code, storedHash)) {
+                // Found a match, consume it atomically
+                int rowsAffected = jdbcTemplate.update(
+                    "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+                    userId, storedHash);
+                boolean success = rowsAffected == 1;
+                auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", success ? "SUCCESS" : "FAILURE",
+                    success ? "Backup code consumed" : "Invalid backup code", null, null);
+                log.info("Backup code verification for user: {} - {}", userId, success ? "SUCCESS" : "FAILURE");
+                return success;
+            }
+        }
 
-        boolean success = rowsAffected == 1;
-        auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", success ? "SUCCESS" : "FAILURE", 
-            success ? "Backup code consumed" : "Invalid backup code", null, null);
-
-        log.info("Backup code verification for user: {} - {}", userId, success ? "SUCCESS" : "FAILURE");
-        return success;
+        // No match found
+        auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Invalid backup code", null, null);
+        log.info("Backup code verification for user: {} - FAILURE", userId);
+        return false;
     }
 
     @Override
@@ -201,26 +213,27 @@ public class DefaultBackupCodeService implements BackupCodeService {
         }
 
         // Find the oldest unused code
-        String hash = jdbcTemplate.queryForObject(
-            "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL ORDER BY created_at ASC FETCH FIRST 1 ROWS ONLY FOR UPDATE",
-            String.class, userId);
-
-        if (hash != null) {
-            // Consume it
-            int rowsAffected = jdbcTemplate.update(
-                "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
-                userId, hash);
-            if (rowsAffected == 1) {
-                auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "SUCCESS", "Backup code consumed by admin", null, null);
-                log.info("Admin {} consumed backup code for user {}", adminId, userId);
-                return true;
-            } else {
-                auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Concurrent consumption detected", null, null);
-                return false;
-            }
-        } else {
+        String hash;
+        try {
+            hash = jdbcTemplate.queryForObject(
+                "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL ORDER BY created_at ASC FETCH FIRST 1 ROWS ONLY FOR UPDATE",
+                String.class, userId);
+        } catch (EmptyResultDataAccessException e) {
             auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "No unused backup codes available", null, null);
             log.warn("No unused backup codes available for admin consumption by {} for user {}", adminId, userId);
+            return false;
+        }
+
+        // Consume it
+        int rowsAffected = jdbcTemplate.update(
+            "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+            userId, hash);
+        if (rowsAffected == 1) {
+            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "SUCCESS", "Backup code consumed by admin", null, null);
+            log.info("Admin {} consumed backup code for user {}", adminId, userId);
+            return true;
+        } else {
+            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Concurrent consumption detected", null, null);
             return false;
         }
     }

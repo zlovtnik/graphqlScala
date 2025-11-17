@@ -23,7 +23,6 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -86,7 +85,7 @@ public class UserService {
                                 }
                             }));
         }
-        return blockOptional(userRepository.findByUsername(username));
+        return userRepository.findById(id);
     }
 
     public Optional<User> findByEmail(String email) {
@@ -109,7 +108,7 @@ public class UserService {
                                 }
                             }));
         }
-        return blockOptional(userRepository.findByEmail(email));
+        return userRepository.findByEmail(email);
     }
 
     public User createUser(User user) {
@@ -140,11 +139,17 @@ public class UserService {
             return user;
         }
 
-        User saved = userRepository.save(user).block(R2DBC_TIMEOUT);
-        return saved != null ? saved : user;
+        // Use blocking repository save - CrudRepository returns the saved entity directly
+        User saved = userRepository.save(user);
+        if (saved == null) {
+            throw new RuntimeException(
+                String.format("Failed to persist new user: email=%s, username=%s. Save returned null.",
+                    user.getEmail(), user.getUsername()));
+        }
+        return saved;
     }
 
-            public User updateUser(Long userId, Optional<String> newUsername, Optional<String> newEmail,
+    public User updateUser(Long userId, Optional<String> newUsername, Optional<String> newEmail,
             Optional<String> newPassword) {
         User existing = findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
@@ -186,11 +191,17 @@ public class UserService {
 
         if (hasJdbcSupport()) {
             dynamicCrudGateway.execute(request);
-        } else {
-            userRepository.save(existing).block(R2DBC_TIMEOUT);
+            return existing;
         }
 
-        return existing;
+        // Use blocking repository save - CrudRepository returns the saved entity directly
+        User saved = userRepository.save(existing);
+        if (saved == null) {
+            throw new RuntimeException(
+                String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
+                    userId, existing.getEmail()));
+        }
+        return saved;
     }
 
     public boolean deleteUser(Long userId) {
@@ -211,9 +222,9 @@ public class UserService {
             return response.affectedRows() > 0;
         }
 
-        Boolean exists = userRepository.existsById(userId).block(R2DBC_TIMEOUT);
-        if (Boolean.TRUE.equals(exists)) {
-            userRepository.deleteById(userId).block(R2DBC_TIMEOUT);
+        // Use blocking repository calls - CrudRepository methods are synchronous
+        if (userRepository.existsById(userId)) {
+            userRepository.deleteById(userId);
             return true;
         }
         return false;
@@ -242,7 +253,7 @@ public class UserService {
                                 }
                             }));
         }
-        return blockOptional(userRepository.findById(id));
+        return userRepository.findByEmail(email);
     }
 
     private void validateNewUser(User user) {
@@ -357,12 +368,6 @@ public class UserService {
         return jdbcTemplate.isPresent();
     }
 
-    private <T> Optional<T> blockOptional(Mono<T> mono) {
-        if (mono == null) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(mono.block(R2DBC_TIMEOUT));
-    }
 
     private Long parseId(String rawId) {
         if (rawId == null) {

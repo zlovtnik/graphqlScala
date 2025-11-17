@@ -5,9 +5,11 @@ import { ApolloLink, InMemoryCache } from '@apollo/client/core';
 import { setContext } from '@apollo/client/link/context';
 import { HttpHeaders } from '@angular/common/http';
 import { environment } from '../environments/environment';
+import { TokenStorageAdapter } from './core/services/token-storage.adapter';
 
 export const graphqlProvider = provideApollo(() => {
   const httpLink = inject(HttpLink);
+  const tokenStorage = inject(TokenStorageAdapter);
 
   const http = httpLink.create({
     uri: environment.graphqlEndpoint
@@ -19,7 +21,7 @@ export const graphqlProvider = provideApollo(() => {
       return {};
     }
 
-    const token = localStorage.getItem('auth_token');
+    const token = tokenStorage.getToken();
     if (!token) {
       return {};
     }

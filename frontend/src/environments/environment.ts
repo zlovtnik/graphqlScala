@@ -1,5 +1,6 @@
 export const environment = {
   production: false,
-  graphqlEndpoint: 'http://localhost:8080/graphql',
-  apiUrl: 'http://localhost:8080'
+  graphqlEndpoint: 'https://localhost:8443/graphql',
+  apiUrl: 'https://localhost:8443',
+  enableHydration: false
 };

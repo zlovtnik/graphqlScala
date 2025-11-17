@@ -387,7 +387,8 @@ class WebAuthnCredential {
     private long lastUsedAt;
     
     @NotBlank(message = "Public key is required")
-    private String publicKey; // Base64-encoded
+    @Size(max = 800, message = "Public key must be at most 800 characters")
+    private String publicKey; // Base64-encoded, max 800 chars (RSA-4096 + headroom)
 
     @JsonCreator
     public WebAuthnCredential(
@@ -420,4 +421,3 @@ class WebAuthnCredential {
     public String getPublicKey() { return publicKey; }
     public void setPublicKey(String publicKey) { this.publicKey = publicKey; }
 }
-

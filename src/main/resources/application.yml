@@ -56,10 +56,6 @@ spring:
       # table/column names in quotes. Oracle doesn't need quoted identifiers for lowercase
       # names since it treats them case-insensitively.
       naming-strategy: ANSI
-  r2dbc:
-    url: r2dbc:oracle://${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
-    username: ${ORACLE_USER:APP_USER}
-    password: ${ORACLE_PASSWORD:ssfpassword}
 
 # Cache Service Configuration
 # Configures individual cache behavior (query result cache and session cache)
@@ -115,22 +111,22 @@ app:
     access-key: ${MINIO_ACCESS_KEY}
     secret-key: ${MINIO_SECRET_KEY}
   r2dbc:
+    # ACTIVE R2DBC configuration: Read by custom ReactiveDataSourceConfiguration bean
+    # (Not Spring Boot's auto-configuration). These properties override any spring.r2dbc settings.
+    # To switch R2DBC drivers, update the 'driver' property below (e.g., "postgresql", "mysql", "h2").
     host: ${ORACLE_HOST:localhost}
     port: ${ORACLE_PORT:1521}
     database: ${ORACLE_DB:FREEPDB1}
     username: ${ORACLE_USER:APP_USER}
     password: ${ORACLE_PASSWORD:ssfpassword}
+    driver: oracle  # Set to "postgresql", "mysql", "h2", etc. to use a different R2DBC driver
     pool:
       min-idle: 10
       max-size: 80              # Keep aligned with Oracle capacity and <4x Hikari max
       queue-depth: 150          # Prevent deep backlog from exhausting DB sessions
       idle-timeout: PT30M
-    # If you prefer Spring's boot R2DBC auto-configuration, uncomment and set the following properties
-    # spring.r2dbc.url: r2dbc:oracle://${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
-    # spring.r2dbc.username: ${ORACLE_USER:APP_USER}
-    # spring.r2dbc.password: ${ORACLE_PASSWORD:ssfpassword}
-
-# Use this flag to enable the blocking JDBC DataSource (default: false)
+    # Reference only: Spring Boot's native r2dbc auto-config is NOT used; app.r2dbc takes precedence
+    # spring.r2dbc properties are ignored when app.r2dbc is configured.
   datasource:
     enabled: false
 

@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
 export interface DashboardStats {
   totalUsers: number;
@@ -17,7 +18,7 @@ export interface DashboardStats {
   providedIn: 'root'
 })
 export class DashboardService {
-  private readonly apiUrl = '/api/dashboard/stats';
+  private readonly statsEndpoint = `${environment.apiUrl}/api/dashboard/stats`;
   private http = inject(HttpClient);
 
   /**
@@ -26,7 +27,7 @@ export class DashboardService {
    * @returns Observable of dashboard stats with error handling
    */
   getStats(): Observable<DashboardStats> {
-    return this.http.get<DashboardStats>(this.apiUrl).pipe(
+    return this.http.get<DashboardStats>(this.statsEndpoint).pipe(
       catchError((error: HttpErrorResponse) => {
         console.error('Failed to fetch dashboard stats:', error.message);
         // Return mock/fallback data with default values
