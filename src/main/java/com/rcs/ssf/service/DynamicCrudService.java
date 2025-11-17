@@ -135,13 +135,13 @@ public class DynamicCrudService {
             countSql += " WHERE " + String.join(" AND ", whereClauses);
         }
 
-        Integer totalCount = jdbcTemplate.isEmpty() ? 0 : (
+        Integer totalCount = jdbcTemplate.isEmpty() ? null : (
             filterParams.isEmpty()
             ? jdbcTemplate.get().queryForObject(countSql, Integer.class)
             : jdbcTemplate.get().queryForObject(countSql, Integer.class, filterParams.toArray())
         );
 
-        return new DynamicCrudResponseDto(rows, totalCount != null ? totalCount : 0, columnMetadata);
+        return new DynamicCrudResponseDto(rows, totalCount, columnMetadata, !jdbcTemplate.isEmpty());
     }
 
     public DynamicCrudResponseDto executeMutation(DynamicCrudRequest request) {
@@ -178,7 +178,7 @@ public class DynamicCrudService {
         );
 
         DynamicCrudResponse response = dynamicCrudGateway.execute(crudRequest);
-        return new DynamicCrudResponseDto(List.of(), response.affectedRows(), List.of()); // No rows for mutations, but affected count
+        return new DynamicCrudResponseDto(List.of(), (Integer) response.affectedRows(), List.of(), true); // No rows for mutations, but affected count
     }
 
     public String[] getAvailableTables() {
@@ -195,7 +195,7 @@ public class DynamicCrudService {
 
     private List<DynamicCrudResponseDto.ColumnMeta> getColumnMetadata(String tableName) {
         if (jdbcTemplate.isEmpty()) {
-            return List.of();
+            throw new IllegalStateException("Dynamic CRUD metadata requires a JDBC DataSource/JdbcTemplate; check DB configuration");
         }
         final String sql = """
                 SELECT utc.column_name,

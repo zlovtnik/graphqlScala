@@ -32,11 +32,13 @@ END;
 -- Create audit_sessions table
 BEGIN
   EXECUTE IMMEDIATE 'CREATE TABLE audit_sessions (
-    id VARCHAR2(36) PRIMARY KEY,
-    user_id VARCHAR2(36) NOT NULL,
-    created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    last_activity TIMESTAMP DEFAULT SYSTIMESTAMP
+    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    user_id NUMBER(19) NOT NULL,
+    token_hash VARCHAR2(255) NOT NULL,
+    ip_address VARCHAR2(45),
+    user_agent VARCHAR2(2000),
+    created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT fk_audit_sessions_user_id FOREIGN KEY (user_id) REFERENCES users(id)
   )';
   DBMS_OUTPUT.PUT_LINE('Table audit_sessions created');
 EXCEPTION
@@ -52,10 +54,19 @@ END;
 -- Create audit_error_log table
 BEGIN
   EXECUTE IMMEDIATE 'CREATE TABLE audit_error_log (
-    id NUMBER GENERATED AS IDENTITY PRIMARY KEY,
-    error_message VARCHAR2(1000),
+    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    error_code VARCHAR2(50),
+    error_message VARCHAR2(4000),
+    context VARCHAR2(4000),
+    procedure_name VARCHAR2(128),
     stack_trace CLOB,
-    created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
+    user_id NUMBER(19),
+    session_id NUMBER(19),
+    error_level VARCHAR2(20),
+    created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
+    CONSTRAINT chk_audit_error_log_level CHECK (error_level IN (''INFO'', ''WARN'', ''ERROR'', ''CRITICAL'')),
+    CONSTRAINT fk_audit_error_log_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    CONSTRAINT fk_audit_error_log_session FOREIGN KEY (session_id) REFERENCES audit_sessions(id) ON DELETE SET NULL
   )';
   DBMS_OUTPUT.PUT_LINE('Table audit_error_log created');
 EXCEPTION
@@ -71,11 +82,11 @@ END;
 -- Create audit_dynamic_crud table
 BEGIN
   EXECUTE IMMEDIATE 'CREATE TABLE audit_dynamic_crud (
-    id VARCHAR2(36) PRIMARY KEY,
+    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     operation VARCHAR2(50) NOT NULL,
     entity_type VARCHAR2(255) NOT NULL,
-    entity_id VARCHAR2(36),
-    user_id VARCHAR2(36),
+    entity_id NUMBER(19),
+    user_id NUMBER(19),
     changes CLOB,
     created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
   )';

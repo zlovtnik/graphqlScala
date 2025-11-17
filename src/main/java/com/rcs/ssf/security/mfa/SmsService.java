@@ -64,7 +64,7 @@ public interface SmsService {
      * @param code 6-digit OTP code from SMS
      * @throws MfaVerificationException if code is invalid, expired, or rate-limit exceeded
      *         - "INVALID_CODE": code does not match current OTP
-     *         - "EXPIRED_CODE": code has expired (valid window: 5 minutes)
+     *         - "EXPIRED_CODE": code has expired (valid window: 15 minutes)
      *         - "RATE_LIMITED": too many verification attempts (>5 failed attempts)
      *         - "OTP_NOT_SENT": no OTP currently sent for user
      */

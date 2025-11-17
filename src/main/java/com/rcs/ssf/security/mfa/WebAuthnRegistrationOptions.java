@@ -8,6 +8,7 @@ import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import jakarta.validation.Payload;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -58,6 +59,7 @@ import java.util.Base64;
 /**
  * Validates that WebAuthn credential timestamps are temporally consistent.
  * Ensures createdAt ≤ lastUsedAt and prevents future-dated credentials.
+ * Note: lastUsedAt == 0 is treated as a sentinel value indicating the credential has never been used.
  */
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
@@ -115,6 +117,7 @@ public class WebAuthnRegistrationOptions {
     private String displayName; // User display name
     
     @Positive(message = "Timeout must be positive")
+    @Max(value = 300000, message = "Timeout must not exceed 5 minutes")
     private long timeout;      // Timeout in milliseconds (>0, typically 30_000-120_000 ms)
     
     @NotBlank(message = "Attestation is required")
@@ -248,6 +251,7 @@ class WebAuthnAuthenticationOptions {
     private String challenge;        // Base64-encoded challenge
     
     @Positive(message = "Timeout must be positive")
+    @Max(value = 300000, message = "Timeout must not exceed 5 minutes")
     private long timeout;           // Timeout in milliseconds
     
     @NotBlank(message = "User verification is required")
@@ -376,7 +380,7 @@ class WebAuthnCredential {
     @Size(max = 100)
     private String nickname;
     
-    @PositiveOrZero(message = "Created timestamp must be positive")
+    @Positive(message = "Created timestamp must be positive")
     private long createdAt;
     
     @PositiveOrZero(message = "Last used timestamp must be positive or zero")

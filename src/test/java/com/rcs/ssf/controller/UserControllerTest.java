@@ -19,7 +19,6 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
@@ -30,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
-@AutoConfigureMockMvc
+@AutoConfigureMockMvc(addFilters = false)
 @Import(TestDatabaseConfig.class)
 @ComponentScan(excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = com.rcs.ssf.config.MinioConfig.class))
 @TestPropertySource(properties = {
@@ -61,7 +60,7 @@ class UserControllerTest {
     @SuppressWarnings("null")
     void getUserById_WhenUserExists_ReturnsUser() throws Exception {
         User user = new User();
-        UUID userId = UUID.randomUUID();
+        Long userId = 42L;
         user.setId(userId);
         user.setUsername("testuser");
         user.setEmail("test@example.com");
@@ -73,7 +72,7 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.id").value(userId.intValue()))
                 .andExpect(jsonPath("$.username").value("testuser"))
                 .andExpect(jsonPath("$.email").value("test@example.com"));
     }
@@ -81,7 +80,7 @@ class UserControllerTest {
     @Test
     @SuppressWarnings("null")
     void getUserById_WhenUserDoesNotExist_ReturnsEmpty() throws Exception {
-        UUID userId = UUID.randomUUID();
+        Long userId = 104L;
         when(userService.findById(userId)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/users/" + userId)
@@ -99,7 +98,7 @@ class UserControllerTest {
         user.setPassword("password123");
 
         User savedUser = new User();
-        savedUser.setId(UUID.randomUUID());
+        savedUser.setId(501L);
         savedUser.setUsername(user.getUsername());
         savedUser.setEmail(user.getEmail());
         savedUser.setPassword(user.getPassword());
@@ -127,7 +126,7 @@ class UserControllerTest {
     @Test
     @SuppressWarnings("null")
     void updateUser_WithNullUsername_SkipsUsernameUpdate() throws Exception {
-        UUID userId = UUID.randomUUID();
+        Long userId = 610L;
         User existing = new User();
         existing.setId(userId);
         existing.setUsername("olduser");
@@ -149,7 +148,7 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.id").value(userId.intValue()))
                 .andExpect(jsonPath("$.username").value("olduser"))
                 .andExpect(jsonPath("$.email").value("new@example.com"));
     }
@@ -157,7 +156,7 @@ class UserControllerTest {
     @Test
     @SuppressWarnings("null")
     void updateUser_WithNullEmail_SkipsEmailUpdate() throws Exception {
-        UUID userId = UUID.randomUUID();
+        Long userId = 711L;
         User existing = new User();
         existing.setId(userId);
         existing.setUsername("olduser");
@@ -179,7 +178,7 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.id").value(userId.intValue()))
                 .andExpect(jsonPath("$.username").value("newuser"))
                 .andExpect(jsonPath("$.email").value("old@example.com"));
     }
@@ -187,7 +186,7 @@ class UserControllerTest {
     @Test
     @SuppressWarnings("null")
     void updateUser_WithAllNullFields_NoChanges() throws Exception {
-        UUID userId = UUID.randomUUID();
+        Long userId = 812L;
         User existing = new User();
         existing.setId(userId);
         existing.setUsername("olduser");
@@ -203,7 +202,7 @@ class UserControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(userId.toString()))
+                .andExpect(jsonPath("$.id").value(userId.intValue()))
                 .andExpect(jsonPath("$.username").value("olduser"))
                 .andExpect(jsonPath("$.email").value("old@example.com"));
     }

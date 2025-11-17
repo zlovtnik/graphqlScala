@@ -14,9 +14,9 @@ ENVIRONMENT=${ENVIRONMENT:-development}
 # to be explicitly set to a strong password; in non-production we fall back to APP_USER for
 # convenience.
 if [[ "${ENVIRONMENT,,}" == "production" ]]; then
-  DB_PASSWORD=${DB_USER_PASSWORD:ssfpassword}
+  DB_PASSWORD="${DB_USER_PASSWORD}"
 else
-  DB_PASSWORD=${DB_USER_PASSWORD:ssfpassword}
+  DB_PASSWORD="${DB_USER_PASSWORD:-APP_USER}"
 fi
 
 # Protect production environments from weak/no password.
@@ -69,7 +69,7 @@ sleep 2
 # initialization phase and is not persisted in the container after startup. The application
 # connects to Oracle using the same credentials stored in the application's runtime secrets.
 # For production deployments, ensure the host running this container has appropriate access
-# controls and secret management. See docs/ORACLE_CREDENTIAL_SECURITY.md for full details.
+# controls and secret management. See docs/SECURITY_ARCHITECTURE.md for full details.
 echo "=== Creating application user and tablespace ==="
 
 "$ORACLE_HOME/bin/sqlplus" -s / as sysdba > /tmp/init_user.log 2>&1 <<EOFUSER
@@ -169,6 +169,22 @@ BEGIN
 END;
 /
 
+DECLARE
+  v_seq_exists NUMBER := 0;
+BEGIN
+  SELECT COUNT(*) INTO v_seq_exists
+  FROM user_sequences
+  WHERE sequence_name = 'USER_ID_SEQ';
+
+  IF v_seq_exists = 0 THEN
+    EXECUTE IMMEDIATE 'CREATE SEQUENCE user_id_seq START WITH 1 INCREMENT BY 1 MINVALUE 1 NOCYCLE CACHE 50';
+    DBMS_OUTPUT.PUT_LINE('Sequence user_id_seq created');
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('Sequence user_id_seq already exists');
+  END IF;
+END;
+/
+
 -- Create users table if it doesn't exist
 DECLARE
   v_table_exists NUMBER := 0;
@@ -179,7 +195,7 @@ BEGIN
   
   IF v_table_exists = 0 THEN
     EXECUTE IMMEDIATE 'CREATE TABLE users (
-      id VARCHAR2(36) PRIMARY KEY,
+      id NUMBER(19) DEFAULT user_id_seq.NEXTVAL PRIMARY KEY,
       username VARCHAR2(255) NOT NULL UNIQUE,
       password VARCHAR2(255) NOT NULL,
       email VARCHAR2(255) NOT NULL UNIQUE,
@@ -202,7 +218,7 @@ BEGIN
   IF v_count = 0 THEN
     INSERT INTO users (id, username, password, email, created_at, updated_at)
     VALUES (
-      LOWER(SUBSTR(SYS_GUID(),1,8) || '-' || SUBSTR(SYS_GUID(),9,4) || '-' || SUBSTR(SYS_GUID(),13,4) || '-' || SUBSTR(SYS_GUID(),17,4) || '-' || SUBSTR(SYS_GUID(),21,12)),
+      user_id_seq.NEXTVAL,
       'admin',
       '$2a$12$K9Bd8ZBY6vQmJK8.5LZ/Oe9g.L7eKq5m3H9N2X4kR1vP8Q6tJ0gNm',
       'admin@example.com',

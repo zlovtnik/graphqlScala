@@ -7,17 +7,16 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
-
-import java.util.UUID;
 
 @Table("users")
 @Data
 @NoArgsConstructor
 public class User {
     @Id
-    private UUID id;
+    private Long id;
 
     @Column("username")
     @NotBlank(message = "Username is required and cannot be blank")
@@ -35,6 +34,14 @@ public class User {
     @Email(message = "Email should be valid")
     @Size(max = 254, message = "Email must not exceed 254 characters")
     private String email;
+
+    @PersistenceCreator
+    public User(Long id, String username, String password, String email) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+        this.email = email;
+    }
 
     // Custom constructor for convenient creation
     /**

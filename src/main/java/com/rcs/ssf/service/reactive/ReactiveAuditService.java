@@ -1,5 +1,6 @@
 package com.rcs.ssf.service.reactive;
 
+import com.rcs.ssf.util.HashUtils;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
@@ -10,10 +11,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
-
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeoutException;
@@ -108,7 +105,15 @@ public class ReactiveAuditService {
         return Mono.defer(() -> {
             log.debug("Recording circuit breaker {} transition to {}", serviceName, newState);
             
-            return Mono.<Void>empty()
+            return template.getDatabaseClient()
+                    .sql("INSERT INTO audit_circuit_breaker_events (breaker_name, service_name, state_transition, event_timestamp) VALUES (?, ?, ?, ?)")
+                    .bind(0, serviceName)
+                    .bind(1, serviceName)
+                    .bind(2, newState)
+                    .bind(3, LocalDateTime.now())
+                    .fetch()
+                    .rowsUpdated()
+                    .then()
                     .timeout(OPERATION_TIMEOUT, Mono.error(
                             new TimeoutException("Circuit breaker audit timeout")))
                     .onErrorResume(throwable -> {
@@ -147,7 +152,16 @@ public class ReactiveAuditService {
             log.debug("Recording {} compression: {} bytes -> {} bytes (ratio: {})", 
                     algorithm, originalSize, compressedSize, String.format("%.2f", compressionRatio));
             
-            return Mono.<Void>empty()
+            return template.getDatabaseClient()
+                    .sql("INSERT INTO audit_http_compression (compression_algorithm, original_size, compressed_size, compression_ratio, recorded_at) VALUES (?, ?, ?, ?, ?)")
+                    .bind(0, algorithm)
+                    .bind(1, originalSize)
+                    .bind(2, compressedSize)
+                    .bind(3, compressionRatio)
+                    .bind(4, LocalDateTime.now())
+                    .fetch()
+                    .rowsUpdated()
+                    .then()
                     .timeout(OPERATION_TIMEOUT, Mono.error(
                             new TimeoutException("Compression audit timeout")))
                     .onErrorResume(throwable -> {
@@ -184,10 +198,19 @@ public class ReactiveAuditService {
             return Mono.empty();
         }
         
+        String queryHash = generateHash(query);
+        
         return Mono.defer(() -> {
             log.debug("Recording execution plan for query (took {} ms)", executionTimeMs);
             
-            return Mono.<Void>empty()
+            return template.getDatabaseClient()
+                    .sql("INSERT INTO audit_graphql_execution_plans (query_hash, p50_time_ms, sampled_at) VALUES (?, ?, ?)")
+                    .bind(0, queryHash)
+                    .bind(1, executionTimeMs)
+                    .bind(2, LocalDateTime.now())
+                    .fetch()
+                    .rowsUpdated()
+                    .then()
                     .timeout(OPERATION_TIMEOUT, Mono.error(
                             new TimeoutException("Execution plan audit timeout")))
                     .onErrorResume(throwable -> {
@@ -248,28 +271,9 @@ public class ReactiveAuditService {
      * @throws IllegalStateException if SHA-256 algorithm is not available (JVM configuration issue)
      */
     private String generateHash(String query) {
-        if (query == null) {
-            throw new IllegalArgumentException("Query cannot be null");
-        }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(query.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(hash);
-        } catch (NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available in this JVM - this indicates a fatal JVM configuration issue", e);
-            throw new IllegalStateException("SHA-256 MessageDigest algorithm is required but not available in this JVM", e);
-        }
+        return HashUtils.sha256Hex(query);
     }
 
-    private String bytesToHex(byte[] hash) {
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : hash) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) hexString.append('0');
-            hexString.append(hex);
-        }
-        return hexString.toString();
-    }
     public static class AuditEvent {
         private String eventType; // COMPLEXITY, CIRCUIT_BREAKER, COMPRESSION
         private String query;

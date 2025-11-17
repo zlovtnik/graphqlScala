@@ -1,10 +1,10 @@
 -- Simplified definition that works on Oracle XE (no partitions/compression).
 CREATE TABLE audit_login_attempts (
-    id NUMBER PRIMARY KEY,
+    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     username VARCHAR2(255) NOT NULL,
     success NUMBER(1) NOT NULL, -- 0 or 1
     ip_address VARCHAR2(45),
-    user_agent VARCHAR2(500),
+    user_agent VARCHAR2(2000),
     failure_reason VARCHAR2(500),
     created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
     CONSTRAINT chk_login_success CHECK (success IN (0, 1))

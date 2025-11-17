@@ -5,13 +5,12 @@ import org.springframework.security.core.userdetails.User;
 
 import java.util.Collection;
 import java.util.Objects;
-import java.util.UUID;
 
 public class AuthenticatedUser extends User {
 
-    private final UUID id;
+    private final Long id;
 
-    public AuthenticatedUser(UUID id,
+    public AuthenticatedUser(Long id,
                              String username,
                              String password,
                              Collection<? extends GrantedAuthority> authorities) {
@@ -19,7 +18,7 @@ public class AuthenticatedUser extends User {
         this.id = Objects.requireNonNull(id, "id must not be null");
     }
 
-    public UUID getId() {
+    public Long getId() {
         return id;
     }
 }

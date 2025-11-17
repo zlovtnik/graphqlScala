@@ -25,9 +25,8 @@ BEGIN
     ensure_index('IDX_AUDIT_DYNAMIC_CRUD_STATUS_CREATED',
                  'CREATE INDEX idx_audit_dynamic_crud_status_created ON audit_dynamic_crud(status, created_at) LOCAL COMPRESS ADVANCED LOW');
 
-    -- Removed redundant single-column audit_login_attempts indexes (username|success|created_at)
-    -- They duplicate the leading columns of composite indexes: (username, created_at) and (success, created_at)
-    -- This reduces index maintenance cost without hurting the composite query access paths.
+    -- Note: Redundant single-column audit_login_attempts indexes (username, success, created_at)
+    -- will be removed in a later migration (V305) to reduce index maintenance cost without hurting query access paths.
 
     ensure_index('IDX_AUDIT_SESSIONS_USER_ID',
                  'CREATE INDEX idx_audit_sessions_user_id ON audit_sessions(user_id) LOCAL COMPRESS ADVANCED LOW');

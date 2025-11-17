@@ -126,12 +126,40 @@ public class GraphqlCachingAspect {
                                 keyPayload.append(arg.hashCode());
                             }
                         } catch (Exception e2) {
-                            // Ultimate fallback: include class name and toString() for best-effort stability
+                            // Fallback to stable content-based representation
                             try {
-                                keyPayload.append(arg.getClass().getName()).append("@").append(arg.toString());
+                                if (arg.getClass().isArray()) {
+                                    // handle common primitive arrays and object arrays with stable hashing
+                                    if (arg instanceof Object[]) {
+                                        keyPayload.append(Arrays.deepHashCode((Object[]) arg));
+                                    } else if (arg instanceof int[]) {
+                                        keyPayload.append(Arrays.hashCode((int[]) arg));
+                                    } else if (arg instanceof long[]) {
+                                        keyPayload.append(Arrays.hashCode((long[]) arg));
+                                    } else if (arg instanceof byte[]) {
+                                        keyPayload.append(Arrays.hashCode((byte[]) arg));
+                                    } else if (arg instanceof short[]) {
+                                        keyPayload.append(Arrays.hashCode((short[]) arg));
+                                    } else if (arg instanceof char[]) {
+                                        keyPayload.append(Arrays.hashCode((char[]) arg));
+                                    } else if (arg instanceof float[]) {
+                                        keyPayload.append(Arrays.hashCode((float[]) arg));
+                                    } else if (arg instanceof double[]) {
+                                        keyPayload.append(Arrays.hashCode((double[]) arg));
+                                    } else if (arg instanceof boolean[]) {
+                                        keyPayload.append(Arrays.hashCode((boolean[]) arg));
+                                    } else {
+                                        // generic fallback for any unknown array type
+                                        keyPayload.append(Arrays.deepHashCode(new Object[]{arg}));
+                                    }
+                                } else {
+                                    // Use a stable representation based on class and content
+                                    // Avoid toString() as it may include non-deterministic data
+                                    keyPayload.append(arg.getClass().getName()).append(":").append(arg.hashCode());
+                                }
                             } catch (Exception e3) {
-                                // As a very last resort, fall back to identity hash (shouldn't frequently happen)
-                                keyPayload.append(Integer.toHexString(System.identityHashCode(arg)));
+                                // Final fallback: use class name only for basic stability
+                                keyPayload.append(arg.getClass().getName()).append(":unhashable");
                             }
                         }
                     }

@@ -387,7 +387,7 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         @Override
         public PrintWriter getWriter() throws IOException {
             if (isOutputStreamCalled) {
-                return super.getWriter();
+                throw new IllegalStateException("Cannot call getWriter() after getOutputStream() has been called");
             }
             if (!isWriterCalled) {
                 isWriterCalled = true;
@@ -442,7 +442,7 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         @Override
         public jakarta.servlet.ServletOutputStream getOutputStream() throws IOException {
             if (isWriterCalled) {
-                return super.getOutputStream();
+                throw new IllegalStateException("Cannot call getOutputStream() after getWriter() has been called");
             }
             if (!isOutputStreamCalled) {
                 isOutputStreamCalled = true;

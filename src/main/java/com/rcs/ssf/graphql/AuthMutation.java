@@ -27,17 +27,21 @@ public class AuthMutation {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthMutation.class);
 
-    @Autowired
-    private AuthenticationManager authenticationManager;
+    private final AuthenticationManager authenticationManager;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final AuditService auditService;
+    private final ObjectProvider<HttpServletRequest> requestProvider;
 
     @Autowired
-    private JwtTokenProvider jwtTokenProvider;
-
-    @Autowired
-    private AuditService auditService;
-
-    @Autowired
-    private ObjectProvider<HttpServletRequest> requestProvider;
+    public AuthMutation(AuthenticationManager authenticationManager,
+                        JwtTokenProvider jwtTokenProvider,
+                        AuditService auditService,
+                        ObjectProvider<HttpServletRequest> requestProvider) {
+        this.authenticationManager = authenticationManager;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.auditService = auditService;
+        this.requestProvider = requestProvider;
+    }
 
     @MutationMapping
     public AuthResponse login(@Argument String username, @Argument String password) {

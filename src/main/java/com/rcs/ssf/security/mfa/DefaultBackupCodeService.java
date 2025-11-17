@@ -2,7 +2,17 @@ package com.rcs.ssf.security.mfa;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.rcs.ssf.service.AuditService;
+import org.mindrot.jbcrypt.BCrypt;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -22,14 +32,18 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+@ConditionalOnProperty(prefix = "app.datasource", name = "enabled", havingValue = "true")
+@ConditionalOnBean(JdbcTemplate.class)
 public class DefaultBackupCodeService implements BackupCodeService {
 
     private static final int BACKUP_CODE_COUNT = 10;
     private static final String BACKUP_CODE_FORMAT = "%04X-%04X-%04X"; // XXXX-XXXX-XXXX
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    private final JdbcTemplate jdbcTemplate;
     // Per-user locks to serialize generate/regenerate operations while allowing parallel ops for different users
     private final ConcurrentHashMap<String, ReentrantReadWriteLock> userLocks = new ConcurrentHashMap<>();
+    private final AuditService auditService;
 
     /**
      * Generate backup codes for a user.
@@ -117,12 +131,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
     }
 
     /**
-     * Persist backup codes to storage and invalidate prior codes (placeholder).
-     *
-     * This is a stub implementation. Real implementations would:
-     * - Hash codes before storage (never store plain-text)
-     * - Atomically replace prior codes in a database transaction
-     * - Update audit tables
+     * Persist backup codes to storage and invalidate prior codes.
      *
      * @param userId user identifier
      * @param codes plain-text codes to persist (hashed before storage)
@@ -130,31 +139,89 @@ public class DefaultBackupCodeService implements BackupCodeService {
      * @throws Exception if persistence fails
      */
     private void persistBackupCodes(String userId, List<String> codes, String actionTag) throws Exception {
-        // TODO: Implement database transaction:
-        // 1. Hash each code
-        // 2. BEGIN TRANSACTION
-        // 3. DELETE FROM backup_codes WHERE user_id = ? (invalidate prior codes)
-        // 4. INSERT INTO backup_codes (user_id, code_hash, ...) VALUES (...) (x10)
-        // 5. INSERT INTO audit_backup_code_operations (user_id, action, timestamp, ...)
-        // 6. COMMIT
-        // 7. Raise exception if any step fails
+        // Hash each code
+        List<String> hashedCodes = codes.stream()
+            .map(code -> BCrypt.hashpw(code, BCrypt.gensalt()))
+            .toList();
+
+        // Atomic transaction: delete old codes and insert new ones
+        jdbcTemplate.update("DELETE FROM MFA_BACKUP_CODES WHERE user_id = ?", userId);
+        for (String hash : hashedCodes) {
+            jdbcTemplate.update("INSERT INTO MFA_BACKUP_CODES (user_id, code_hash, created_at) VALUES (?, ?, SYSTIMESTAMP)", userId, hash);
+        }
+
+        log.info("Persisted {} backup codes for user: {}", codes.size(), userId);
     }
 
     @Override
+    @Transactional
     public boolean verifyBackupCode(String userId, String code) {
-        // TODO: Implement verification with atomic consumption
-        return false;
+        if (userId == null || code == null) {
+            auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Null userId or code", null, null);
+            return false;
+        }
+
+        // Hash the provided code
+        String hashedCode = BCrypt.hashpw(code, BCrypt.gensalt());
+
+        // Perform atomic find-and-update
+        int rowsAffected = jdbcTemplate.update(
+            "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+            userId, hashedCode);
+
+        boolean success = rowsAffected == 1;
+        auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", success ? "SUCCESS" : "FAILURE", 
+            success ? "Backup code consumed" : "Invalid backup code", null, null);
+
+        log.info("Backup code verification for user: {} - {}", userId, success ? "SUCCESS" : "FAILURE");
+        return success;
     }
 
     @Override
     public int getRemainingBackupCodeCount(String userId) {
-        // TODO: Implement count query
-        return 0;
+        if (userId == null) {
+            return 0;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL",
+            Integer.class, userId);
+        return count != null ? count : 0;
     }
 
     @Override
+    @Transactional
     public boolean adminConsumeBackupCode(String userId, String adminId) {
-        // TODO: Implement admin override with audit logging
-        return false;
+        // Check authorization
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMIN")) &&
+            !auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_MFA_ADMIN"))) {
+            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Unauthorized admin attempt", null, null);
+            log.warn("Unauthorized admin backup code consumption attempt by {} for user {}", adminId, userId);
+            throw new SecurityException("Insufficient privileges for admin backup code consumption");
+        }
+
+        // Find the oldest unused code
+        String hash = jdbcTemplate.queryForObject(
+            "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL ORDER BY created_at ASC FETCH FIRST 1 ROWS ONLY FOR UPDATE",
+            String.class, userId);
+
+        if (hash != null) {
+            // Consume it
+            int rowsAffected = jdbcTemplate.update(
+                "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
+                userId, hash);
+            if (rowsAffected == 1) {
+                auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "SUCCESS", "Backup code consumed by admin", null, null);
+                log.info("Admin {} consumed backup code for user {}", adminId, userId);
+                return true;
+            } else {
+                auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Concurrent consumption detected", null, null);
+                return false;
+            }
+        } else {
+            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "No unused backup codes available", null, null);
+            log.warn("No unused backup codes available for admin consumption by {} for user {}", adminId, userId);
+            return false;
+        }
     }
 }

@@ -324,7 +324,11 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
                 execute_dynamic_dml(v_sql, v_bindings, v_bind_index, p_affected_rows);
 
                 IF p_affected_rows = 1 THEN
-                    p_generated_id := find_value_for_column(p_column_names, p_column_values, 'ID');
+                    -- For tables with GENERATED ALWAYS AS IDENTITY, don't try to extract ID from input
+                    -- since the database generates it automatically
+                    IF v_table_name != 'AUDIT_DYNAMIC_CRUD' THEN
+                        p_generated_id := find_value_for_column(p_column_names, p_column_values, 'ID');
+                    END IF;
                 END IF;
                 p_message := 'INSERT SUCCESS';
 

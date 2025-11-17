@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.7'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.flywaydb.flyway' version '10.20.1'
 	id 'jacoco'
 }
 
@@ -26,6 +27,10 @@ sourceSets {
 	}
 }
 
+configurations {
+	create('flyway')
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-graphql'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -38,15 +43,13 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	
 	// Reactive Data Access
-	// NOTE: R2DBC versions must be compatible with Spring Boot 3.5.7's managed dependencies.
-	// Verified compatible: oracle-r2dbc:1.3.0 with Boot 3.5.7 (Reactor 3.5.7, r2dbc-spi:1.0.0.RELEASE)
-	// If upgrading Boot version, verify R2DBC compatibility via:
-	// https://github.com/spring-projects/spring-boot/blob/3.5.7/spring-boot-project/spring-boot-dependencies/build.gradle
+	// Spring Boot 3.5.7 BOM manages: oracle-r2dbc:1.1.1, r2dbc-pool:1.0.1
+	// Both are compatible with reactor-netty 1.1.x and micrometer in this Boot version.
+	// Do not pin versions here; let the BOM ensure consistency across the dependency tree.
 	implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
-	implementation 'com.oracle.database.r2dbc:oracle-r2dbc:1.3.0'
-	implementation 'io.r2dbc:r2dbc-pool:1.0.2.RELEASE'
+	implementation 'com.oracle.database.r2dbc:oracle-r2dbc'
+	implementation 'io.r2dbc:r2dbc-pool'
 	implementation 'io.projectreactor.netty:reactor-netty' // Use Spring Boot 3.5.7 managed version (1.1.8)
 	
 	// Resilience & Observability
@@ -60,12 +63,17 @@ dependencies {
 	
 	// Oracle Database Driver
 	implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
-	testImplementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
+	
+	// Flyway runtime dependencies
+	flyway 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
 	
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+	
+	// BCrypt
+	implementation 'org.mindrot:jbcrypt:0.4'
 	
 	// MinIO
 	implementation 'io.minio:minio:8.6.0'
@@ -115,8 +123,16 @@ jacocoTestCoverageVerification {
 	}
 }
 
+flyway {
+	url = System.getenv('ORACLE_URL') ?: 'jdbc:oracle:thin:@localhost:1521/FREEPDB1'
+	user = System.getenv('ORACLE_USER') ?: 'APP_USER'
+	password = System.getenv('ORACLE_PASSWORD') ?: 'ssfpassword'
+	locations = ['filesystem:db/migration']
+}
+
+
 configurations {
-    all {
+	all {
         exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
     }
 }

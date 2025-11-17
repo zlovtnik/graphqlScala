@@ -4,6 +4,7 @@
 
 -- Sequences (run as app user)
 @@sequences/audit_seq.sql
+@@sequences/user_id_seq.sql
 
 -- Types (run as app user)
 @@types/dynamic_types.sql

@@ -18,6 +18,8 @@
 --    SELECT * FROM audit_circuit_breaker_events WHERE slow_call_rate IS NULL OR slow_call_rate NOT BETWEEN 0 AND 100;
 --    SELECT * FROM audit_http_compression WHERE compression_ratio IS NULL OR compression_ratio NOT BETWEEN 0 AND 100;
 --
+--    Consider integrating these validation queries into CI/CD pipelines for automated pre-migration checks.
+--
 -- 2. User Permissions:
 --    Verify that the database user executing this migration (typically app_user) exists and matches
 --    the APP_USER convention in your environment. If using a different user name (e.g., ssfuser),
@@ -44,6 +46,8 @@ CREATE TABLE persisted_queries (
     created_by VARCHAR2(255),
     updated_by VARCHAR2(255)
 ) PARTITION BY RANGE (created_at) (
+    -- Note: Using a single default partition for simplicity. For production environments with high data volumes,
+    -- consider defining monthly or daily partitions to enable aging and maintenance policies.
     PARTITION p_default VALUES LESS THAN (MAXVALUE)
 );
 
@@ -61,11 +65,14 @@ CREATE TABLE audit_graphql_complexity (
     max_allowed NUMBER(10) NOT NULL,
     status VARCHAR2(20) NOT NULL, -- ACCEPTED, REJECTED
     client_ip VARCHAR2(45),
-    user_id VARCHAR2(255),
+    user_id NUMBER(19),
     attempted_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL,
     resolution_suggestion VARCHAR2(1000),
-    query_preview VARCHAR2(500)
+    query_preview VARCHAR2(500),
+    CONSTRAINT fk_audit_complexity_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) PARTITION BY RANGE (attempted_at) (
+    -- Note: Using a single default partition for simplicity. For production environments with high data volumes,
+    -- consider defining monthly or daily partitions to enable aging and maintenance policies.
     PARTITION p_default VALUES LESS THAN (MAXVALUE)
 );
 
@@ -92,6 +99,8 @@ CREATE TABLE audit_graphql_execution_plans (
     -- for traceability and integrity of historical data.
     -- (The application can optionally check for an existing persisted query by hash.)
 ) PARTITION BY RANGE (sampled_at) (
+    -- Note: Using a single default partition for simplicity. For production environments with high data volumes,
+    -- consider defining monthly or daily partitions to enable aging and maintenance policies.
     PARTITION p_default VALUES LESS THAN (MAXVALUE)
 );
 
@@ -109,6 +118,8 @@ CREATE TABLE audit_circuit_breaker_events (
     failure_reason CLOB,
     event_timestamp TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
 ) PARTITION BY RANGE (event_timestamp) (
+    -- Note: Using a single default partition for simplicity. For production environments with high data volumes,
+    -- consider defining monthly or daily partitions to enable aging and maintenance policies.
     PARTITION p_default VALUES LESS THAN (MAXVALUE)
 );
 
@@ -127,15 +138,13 @@ CREATE TABLE audit_http_compression (
     endpoint_path VARCHAR2(500),
     recorded_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL
 ) PARTITION BY RANGE (recorded_at) (
+    -- Note: Using a single default partition for simplicity. For production environments with high data volumes,
+    -- consider defining monthly or daily partitions to enable aging and maintenance policies.
     PARTITION p_default VALUES LESS THAN (MAXVALUE)
 );
 
 CREATE INDEX idx_http_compression_algo ON audit_http_compression(compression_algorithm, recorded_at DESC);
 CREATE INDEX idx_http_compression_endpoint ON audit_http_compression(endpoint_path, compression_algorithm);
-
--- Sequence for IDs
-CREATE SEQUENCE persisted_queries_seq START WITH 1 INCREMENT BY 1 NOCACHE;
-CREATE SEQUENCE audit_graphql_seq START WITH 1 INCREMENT BY 1 NOCACHE;
 
 -- Grant privileges
 GRANT SELECT, INSERT, UPDATE, DELETE ON persisted_queries TO app_user;

@@ -4,7 +4,7 @@
 
 CREATE TABLE MFA_SMS_ENROLLMENTS (
     id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    user_id NUMBER NOT NULL REFERENCES USERS(id) ON DELETE CASCADE,
+    user_id NUMBER(19) NOT NULL REFERENCES USERS(id) ON DELETE CASCADE,
     phone_number RAW(256) NOT NULL,  -- AES-256-GCM encrypted E.164 phone number
     is_verified NUMBER(1) DEFAULT 0,  -- 0 = pending, 1 = confirmed
     verification_code_hash VARCHAR2(128),  -- HMAC-SHA256 hash of verification code (plaintext never stored)

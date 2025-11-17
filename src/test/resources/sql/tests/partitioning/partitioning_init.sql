@@ -30,9 +30,9 @@ PARTITION BY RANGE (created_at)
 );
 
 CREATE TABLE audit_sessions (
-    id NUMBER PRIMARY KEY,
-    user_id VARCHAR2(36),
-    created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL
+  id NUMBER PRIMARY KEY,
+  user_id NUMBER(19),
+  created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL
 )
 ROW STORE COMPRESS ADVANCED
 PARTITION BY RANGE (created_at)
@@ -45,6 +45,8 @@ PARTITION BY RANGE (created_at)
 CREATE TABLE audit_error_log (
     id NUMBER PRIMARY KEY,
     error_code VARCHAR2(50),
+  user_id NUMBER(19),
+  session_id NUMBER(19),
     created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL
 )
 ROW STORE COMPRESS ADVANCED
@@ -72,7 +74,7 @@ SELECT audit_seq.NEXTVAL,
 
 INSERT INTO audit_sessions (id, user_id, created_at)
 SELECT audit_seq.NEXTVAL,
-       'usr-' || level,
+  level,
        ADD_MONTHS(TRUNC(SYSTIMESTAMP, 'MM'), -MOD(level, 6))
   FROM dual CONNECT BY level <= 100;
 

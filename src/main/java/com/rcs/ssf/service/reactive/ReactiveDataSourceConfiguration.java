@@ -2,20 +2,33 @@ package com.rcs.ssf.service.reactive;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.r2dbc.pool.ConnectionPool;
-import io.r2dbc.pool.PoolMetrics;
 import io.r2dbc.pool.ConnectionPoolConfiguration;
+import io.r2dbc.pool.PoolMetrics;
 import io.r2dbc.spi.ConnectionFactories;
 import io.r2dbc.spi.ConnectionFactory;
 import io.r2dbc.spi.ConnectionFactoryOptions;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.r2dbc.convert.MappingR2dbcConverter;
+import org.springframework.data.r2dbc.convert.R2dbcCustomConversions;
+import org.springframework.data.r2dbc.core.DefaultReactiveDataAccessStrategy;
 import org.springframework.data.r2dbc.core.R2dbcEntityTemplate;
+import org.springframework.data.r2dbc.core.ReactiveDataAccessStrategy;
+import org.springframework.data.r2dbc.dialect.DialectResolver;
+import org.springframework.data.r2dbc.dialect.R2dbcDialect;
 import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
+import org.springframework.data.relational.core.mapping.RelationalMappingContext;
+import org.springframework.data.relational.core.sql.IdentifierProcessing;
+import org.springframework.lang.NonNull;
+import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.netty.resources.ConnectionProvider;
 
 import java.time.Duration;
+import java.util.Collection;
+import java.util.Objects;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
 import static io.r2dbc.spi.ConnectionFactoryOptions.DRIVER;
@@ -43,7 +56,7 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
  * Production tune: Adjust based on actual traffic patterns and database connection limits.
  */
 @Configuration
-@EnableR2dbcRepositories(basePackages = "com.rcs.ssf")
+@EnableR2dbcRepositories(basePackages = "com.rcs.ssf", entityOperationsRef = "r2dbcEntityTemplate")
 @EnableConfigurationProperties(ReactiveDataSourceConfiguration.R2dbcProperties.class)
 @Slf4j
 public class ReactiveDataSourceConfiguration {
@@ -165,8 +178,93 @@ public class ReactiveDataSourceConfiguration {
     }
 
     @Bean
-    public R2dbcEntityTemplate r2dbcEntityTemplate(ConnectionPool connectionPool) {
-        return new R2dbcEntityTemplate(connectionPool);
+    public R2dbcDialect r2dbcDialect(
+            @Qualifier("r2dbcConnectionFactory") @NonNull ConnectionFactory connectionFactory) {
+        ConnectionFactory nonNullFactory = Objects.requireNonNull(connectionFactory,
+                "r2dbcConnectionFactory must not be null");
+        R2dbcDialect baseDialect = DialectResolver.getDialect(nonNullFactory);
+        
+        // Create a dynamic proxy that wraps the dialect and overrides getIdentifierProcessing()
+        // to return IdentifierProcessing.NONE (which keeps identifiers unquoted).
+        // This solves the ORA-00942 error caused by quoted identifiers like "APP_USER"."users"
+        return (R2dbcDialect) java.lang.reflect.Proxy.newProxyInstance(
+            R2dbcDialect.class.getClassLoader(),
+            new Class<?>[] { R2dbcDialect.class },
+            (proxy, method, args) -> {
+                if ("getIdentifierProcessing".equals(method.getName())) {
+                    log.debug("Returning IdentifierProcessing.NONE to disable quoting");
+                    return IdentifierProcessing.NONE;
+                }
+                // Delegate all other method calls to the base dialect
+                return method.invoke(baseDialect, args);
+            }
+        );
+    }
+
+    @Bean
+    public R2dbcCustomConversions r2dbcCustomConversions(@NonNull R2dbcDialect dialect) {
+        R2dbcDialect nonNullDialect = Objects.requireNonNull(dialect, "dialect must not be null");
+        Collection<?> converters = Objects.requireNonNull(R2dbcUuidConverters.getConverters(),
+                "UUID converters must not be null");
+        return R2dbcCustomConversions.of(nonNullDialect, converters);
+    }
+
+    @Bean
+    @org.springframework.context.annotation.Primary
+    public RelationalMappingContext relationalMappingContext(@NonNull R2dbcCustomConversions conversions) {
+        R2dbcCustomConversions nonNullConversions = Objects.requireNonNull(conversions,
+                "conversions must not be null");
+        RelationalMappingContext context = new RelationalMappingContext();
+        context.setSimpleTypeHolder(nonNullConversions.getSimpleTypeHolder());
+        return context;
+    }
+
+    @Bean
+    public MappingR2dbcConverter mappingR2dbcConverter(
+            @NonNull RelationalMappingContext context,
+            @NonNull R2dbcCustomConversions conversions) {
+        MappingR2dbcConverter converter = new MappingR2dbcConverter(
+                Objects.requireNonNull(context, "context must not be null"),
+                Objects.requireNonNull(conversions, "conversions must not be null"));
+        
+        // Converter inherits IdentifierProcessing.NONE from the dialect proxy, keeping identifiers unquoted
+        log.info("MappingR2dbcConverter configured; identifier quoting disabled via dialect override");
+        return converter;
+    }
+
+    @Bean
+    @SuppressWarnings("deprecation")
+    public ReactiveDataAccessStrategy reactiveDataAccessStrategy(
+            @NonNull R2dbcDialect dialect,
+            @NonNull MappingR2dbcConverter converter) {
+        
+        // Log the identifier processing to debug
+        log.info("Creating ReactiveDataAccessStrategy with dialect identifier processing: {}",
+                dialect.getIdentifierProcessing());
+        
+        return new DefaultReactiveDataAccessStrategy(
+                Objects.requireNonNull(dialect, "dialect must not be null"),
+                Objects.requireNonNull(converter, "converter must not be null"));
+    }
+
+    @Bean
+    public DatabaseClient databaseClient(
+            @Qualifier("connectionPool") @NonNull ConnectionFactory connectionPool,
+            @NonNull R2dbcDialect dialect) {
+        return DatabaseClient.builder()
+                .connectionFactory(Objects.requireNonNull(connectionPool, "connectionPool must not be null"))
+                .bindMarkers(Objects.requireNonNull(dialect, "dialect must not be null").getBindMarkersFactory())
+                .build();
+    }
+
+    @Bean
+    @SuppressWarnings("deprecation")
+    public R2dbcEntityTemplate r2dbcEntityTemplate(
+            @NonNull DatabaseClient databaseClient,
+            @NonNull ReactiveDataAccessStrategy reactiveDataAccessStrategy) {
+        return new R2dbcEntityTemplate(
+                Objects.requireNonNull(databaseClient, "databaseClient must not be null"),
+                Objects.requireNonNull(reactiveDataAccessStrategy, "reactiveDataAccessStrategy must not be null"));
     }
 
     /**
@@ -174,6 +272,8 @@ public class ReactiveDataSourceConfiguration {
      */
     @org.springframework.boot.context.properties.ConfigurationProperties(prefix = "app.r2dbc")
     public static class R2dbcProperties {
+        // Default driver is "oracle" for backward compatibility with existing deployments
+        // Set app.r2dbc.driver property to use a different R2DBC driver (e.g., "postgresql", "h2")
         private String driver = "oracle";
         private String host = "localhost";
         private Integer port = 1521;
@@ -227,3 +327,4 @@ public class ReactiveDataSourceConfiguration {
         public void setPool(Pool pool) { this.pool = pool; }
     }
 }
+

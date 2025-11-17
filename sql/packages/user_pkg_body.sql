@@ -1,19 +1,9 @@
 CREATE OR REPLACE PACKAGE BODY user_pkg AS
-    -- Helper function to generate UUID
-    FUNCTION generate_uuid RETURN VARCHAR2 IS
-        v_uuid RAW(16);
-        v_hex VARCHAR2(32);
-    BEGIN
-        v_uuid := SYS_GUID();
-        v_hex := RAWTOHEX(v_uuid);
-        RETURN LOWER(SUBSTR(v_hex, 1, 8) || '-' || SUBSTR(v_hex, 9, 4) || '-' || SUBSTR(v_hex, 13, 4) || '-' || SUBSTR(v_hex, 17, 4) || '-' || SUBSTR(v_hex, 21, 12));
-    END generate_uuid;
-
     PROCEDURE create_user(
         p_username IN VARCHAR2,
         p_password IN VARCHAR2,
         p_email IN VARCHAR2,
-        p_user_id OUT VARCHAR2
+        p_user_id OUT users.id%TYPE
     ) IS
         v_count NUMBER;
     BEGIN
@@ -37,12 +27,10 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             RAISE_APPLICATION_ERROR(-20002, 'Email already exists');
         END IF;
 
-        -- Generate UUID
-        p_user_id := generate_uuid();
-
         -- Insert user (password is already hashed by application)
-        INSERT INTO users (id, username, password, email, created_at, updated_at)
-        VALUES (p_user_id, p_username, p_password, p_email, SYSTIMESTAMP, SYSTIMESTAMP);
+        INSERT INTO users (username, password, email, created_at, updated_at)
+        VALUES (p_username, p_password, p_email, SYSTIMESTAMP, SYSTIMESTAMP)
+        RETURNING id INTO p_user_id;
 
         COMMIT;
     EXCEPTION
@@ -51,7 +39,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             RAISE;
     END create_user;
 
-    FUNCTION get_user_by_id(p_user_id IN VARCHAR2) RETURN SYS_REFCURSOR IS
+    FUNCTION get_user_by_id(p_user_id IN users.id%TYPE) RETURN SYS_REFCURSOR IS
         v_cursor SYS_REFCURSOR;
     BEGIN
         OPEN v_cursor FOR
@@ -82,7 +70,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
     END get_user_by_email;
 
     PROCEDURE update_user(
-        p_user_id IN VARCHAR2,
+        p_user_id IN users.id%TYPE,
         p_username IN VARCHAR2 DEFAULT NULL,
         p_email IN VARCHAR2 DEFAULT NULL,
         p_password IN VARCHAR2 DEFAULT NULL
@@ -118,7 +106,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             RAISE;
     END update_user;
 
-    FUNCTION delete_user(p_user_id IN VARCHAR2) RETURN NUMBER IS
+    FUNCTION delete_user(p_user_id IN users.id%TYPE) RETURN NUMBER IS
         v_count NUMBER;
         v_deleted NUMBER;
     BEGIN
@@ -159,7 +147,8 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_success IN NUMBER,
         p_error_code IN NUMBER,
         p_error_msg IN VARCHAR2,
-        p_procedure_name IN VARCHAR2 DEFAULT 'log_login_attempt'
+        p_procedure_name IN VARCHAR2 DEFAULT 'log_login_attempt',
+        p_error_level IN VARCHAR2 DEFAULT 'ERROR'
     ) IS
         PRAGMA AUTONOMOUS_TRANSACTION;
         v_context VARCHAR2(4000);
@@ -203,25 +192,26 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
     END log_login_attempt;
 
     PROCEDURE log_session_error(
-        p_user_id IN VARCHAR2,
+        p_user_id IN users.id%TYPE,
         p_token_hash IN VARCHAR2,
         p_error_code IN NUMBER,
         p_error_msg IN VARCHAR2,
-        p_procedure_name IN VARCHAR2 DEFAULT 'log_session_start'
+        p_procedure_name IN VARCHAR2 DEFAULT 'log_session_start',
+        p_error_level IN VARCHAR2 DEFAULT 'ERROR'
     ) IS
         PRAGMA AUTONOMOUS_TRANSACTION;
         v_context VARCHAR2(4000);
     BEGIN
-        v_context := 'Logging session start for user: ' || p_user_id || ', token_hash: ' || p_token_hash;
+        v_context := 'Logging session start for user: ' || NVL(TO_CHAR(p_user_id), 'N/A') || ', token_hash: ' || p_token_hash;
         -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
         -- id auto-generated via GENERATED ALWAYS AS IDENTITY
-        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name)
-        VALUES (p_error_code, p_error_msg, v_context, p_procedure_name);
+        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name, user_id)
+        VALUES (p_error_code, p_error_msg, v_context, p_procedure_name, p_user_id);
         COMMIT;
     END log_session_error;
 
     PROCEDURE log_session_start(
-        p_user_id IN VARCHAR2,
+        p_user_id IN users.id%TYPE,
         p_token_hash IN VARCHAR2,
         p_ip_address IN VARCHAR2 DEFAULT NULL,
         p_user_agent IN VARCHAR2 DEFAULT NULL
@@ -241,5 +231,40 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
                     NULL;  -- Guard logging itself to prevent propagation
             END;
     END log_session_start;
+
+    PROCEDURE log_mfa_event(
+        p_user_id IN users.id%TYPE,
+        p_admin_id IN users.id%TYPE DEFAULT NULL,
+        p_event_type IN VARCHAR2,
+        p_mfa_method IN VARCHAR2 DEFAULT NULL,
+        p_status IN VARCHAR2,
+        p_details IN VARCHAR2 DEFAULT NULL,
+        p_ip_address IN VARCHAR2 DEFAULT NULL,
+        p_user_agent IN VARCHAR2 DEFAULT NULL
+    ) IS
+    BEGIN
+        -- Log MFA events to audit_error_log with context containing all event details
+        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name, user_id)
+        VALUES ('MFA_EVENT', p_event_type,
+            'user_id=' || NVL(TO_CHAR(p_user_id), 'N/A') || ', admin_id=' || NVL(TO_CHAR(p_admin_id), 'N/A') ||
+            ', mfa_method=' || NVL(p_mfa_method, 'N/A') || ', status=' || p_status ||
+            ', details=' || NVL(p_details, 'N/A') || ', ip_address=' || NVL(p_ip_address, 'N/A') ||
+            ', user_agent=' || NVL(p_user_agent, 'N/A'),
+            'log_mfa_event', p_user_id);
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = -942 THEN  -- ORA-00942: table or view does not exist
+                NULL;  -- Swallow missing audit table error
+            ELSE
+                BEGIN
+                    log_session_error(p_user_id, 'N/A', SQLCODE, SUBSTR(SQLERRM, 1, 4000), 'log_mfa_event');
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        NULL;  -- Guard logging itself
+                END;
+                RAISE;
+            END IF;
+    END log_mfa_event;
 END user_pkg;
 /

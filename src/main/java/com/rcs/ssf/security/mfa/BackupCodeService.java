@@ -56,6 +56,7 @@ public interface BackupCodeService {
      *
      * @param userId user identifier (required, non-null)
      * @return list of 10 newly generated backup codes in plain-text format
+     * @throws IllegalArgumentException if userId is null or empty
      * @throws IllegalStateException if persistence fails and previous codes remain active
      * @throws ConcurrentModificationException if implementation uses conflict detection and concurrent generation is detected
      */

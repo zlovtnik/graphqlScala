@@ -17,7 +17,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.zip.GZIPOutputStream;
 import java.util.concurrent.TimeUnit;
 
@@ -209,20 +211,20 @@ public class CompressionFilter extends OncePerRequestFilter {
                 // Get the original response output stream
                 ServletOutputStream originalStream = super.getOutputStream();
                 
-                if ("gzip".equals(algorithm)) {
+                if (GZIP.equals(algorithm)) {
                     // Wrap with GZIP compression
                     gzipStream = new GZIPOutputStream(originalStream, true); // true = syncFlush mode
                     wrappedStream = new ServletOutputStreamWrapper(gzipStream);
                     
                     // Set Content-Encoding header now that we're wrapping with compression
-                    super.setHeader(HttpHeaders.CONTENT_ENCODING, "gzip");
+                    super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
                     log.debug("Initialized GZIP compression stream");
-                } else if ("br".equals(algorithm)) {
+                } else if (BROTLI.equals(algorithm)) {
                     // Brotli support: attempt to use if available, fall back to gzip
                     log.debug("Brotli requested but falling back to GZIP (Brotli4j not currently implemented)");
                     gzipStream = new GZIPOutputStream(originalStream, true);
                     wrappedStream = new ServletOutputStreamWrapper(gzipStream);
-                    super.setHeader(HttpHeaders.CONTENT_ENCODING, "gzip");
+                    super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
                 } else {
                     // Unknown algorithm, return original stream
                     wrappedStream = originalStream;
@@ -244,9 +246,9 @@ public class CompressionFilter extends OncePerRequestFilter {
                 // Ensure the output stream is initialized with compression
                 ServletOutputStream compressedStream = getOutputStream();
                 
-                // Create a PrintWriter that wraps the compressed output stream
+                // Create a PrintWriter that wraps the compressed output stream with UTF-8 encoding
                 OutputStream osDelegate = (gzipStream != null) ? gzipStream : compressedStream;
-                wrappedWriter = new PrintWriter(osDelegate, true);
+                wrappedWriter = new PrintWriter(new OutputStreamWriter(osDelegate, StandardCharsets.UTF_8), true);
             }
             return wrappedWriter;
         }

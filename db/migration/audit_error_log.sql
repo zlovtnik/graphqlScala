@@ -41,11 +41,13 @@ CREATE TABLE audit_error_log (
 	context VARCHAR2(4000),
 	procedure_name VARCHAR2(128),
 	stack_trace CLOB,
-	user_id VARCHAR2(128),
-	session_id VARCHAR2(128),
+	user_id NUMBER(19),
+	session_id NUMBER(19),
 	error_level VARCHAR2(20),
 	created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
-	CONSTRAINT chk_audit_error_log_level CHECK (error_level IN ('INFO', 'WARN', 'ERROR', 'CRITICAL'))
+	CONSTRAINT chk_audit_error_log_level CHECK (error_level IN ('INFO', 'WARN', 'ERROR', 'CRITICAL')),
+	CONSTRAINT fk_audit_error_log_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+	CONSTRAINT fk_audit_error_log_session FOREIGN KEY (session_id) REFERENCES audit_sessions(id) ON DELETE SET NULL
 );
 
 -- Primary retrieval indexes for filtering and time-range queries
