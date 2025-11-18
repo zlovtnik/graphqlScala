@@ -33,7 +33,7 @@ public interface WebAuthnService {
      * @throws MfaVerificationException if preconditions fail or options cannot be
      *                                  generated
      */
-    WebAuthnRegistrationOptions startRegistration(String userId, String username) throws MfaVerificationException;
+    WebAuthnRegistrationOptions startRegistration(Long userId, String username) throws MfaVerificationException;
 
     /**
      * Complete WebAuthn registration.
@@ -48,7 +48,7 @@ public interface WebAuthnService {
      * @return credential ID for reference
      * @throws MfaVerificationException if registration fails
      */
-    String completeRegistration(String userId, WebAuthnRegistrationResponse registrationResponse,
+    String completeRegistration(Long userId, WebAuthnRegistrationResponse registrationResponse,
             String credentialNickname) throws MfaVerificationException;
 
     /**
@@ -72,7 +72,7 @@ public interface WebAuthnService {
      * @param authenticationResponse response from device
      * @throws MfaVerificationException if verification fails
      */
-    void completeAuthentication(@Nullable String userId, WebAuthnAuthenticationResponse authenticationResponse)
+    void completeAuthentication(@Nullable Long userId, WebAuthnAuthenticationResponse authenticationResponse)
             throws MfaVerificationException;
 
     /**
@@ -90,7 +90,7 @@ public interface WebAuthnService {
      *               security context)
      * @return list of credentials with metadata (nickname, created date, last used)
      */
-    List<WebAuthnCredential> listCredentials(@Nullable String userId);
+    List<WebAuthnCredential> listCredentials(@Nullable Long userId);
 
     /**
      * Delete a WebAuthn credential owned by the current authenticated user.
@@ -175,7 +175,7 @@ public interface WebAuthnService {
      *                                                                   belong to
      *                                                                   userId
      */
-    void deleteAdminCredential(String userId, String credentialId);
+    void deleteAdminCredential(Long userId, String credentialId);
 
     /**
      * @deprecated Use {@link #deleteOwnCredential(String)} for user-owned deletions
@@ -221,7 +221,7 @@ public interface WebAuthnService {
      *             split methods for clearer intent and stricter type safety.
      */
     @Deprecated(since = "1.0", forRemoval = true)
-    void deleteCredential(@Nullable String userId, String credentialId);
+    void deleteCredential(@Nullable Long userId, String credentialId);
 
     /**
      * Disable WebAuthn MFA for a user (deletes all credentials).
@@ -229,7 +229,7 @@ public interface WebAuthnService {
      *
      * @param userId user identifier (required, non-null)
      */
-    void disableWebAuthnMfa(String userId);
+    void disableWebAuthnMfa(Long userId);
 
     /**
      * Administrative: disable WebAuthn for all users.

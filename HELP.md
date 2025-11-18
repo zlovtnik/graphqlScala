@@ -91,8 +91,8 @@ mc ls local
 | Problem | Root Cause | Fix |
 | --- | --- | --- |
 | `UsernameNotFoundException: User not found: <username>` | User doesn't exist in database | Create user first: `TEST_PASSWORD=pass ./create_test_user.sh username email` |
-| `GraphQL error: "User not found... Please create an account first"` | Login attempt with non-existent user | Use `createUser` mutation or REST endpoint to register first |
-| `GraphQL error: "Authentication failed" (INVALID_CREDENTIALS)` | User exists but password is wrong | Verify password is correct or reset via password recovery |
+| `GraphQL error: "Invalid username or password" (INVALID_CREDENTIALS)` | User doesn't exist or password is wrong | Verify username and password are correct (same generic message for both cases to prevent username enumeration) |
+| `GraphQL error: "Authentication failed" (INVALID_CREDENTIALS)` | User exists but authentication failed | Verify credentials are correct or reset via password recovery |
 | `IllegalStateException: JWT secret must be provided` | Missing or weak `JWT_SECRET` | Export a ≥32 char secret before starting the app |
 | HTTPS connection refused | Keystore not trusted | Import `src/main/resources/keystore.p12` into local trust store or use REST client with `--insecure` for dev |
 | Oracle connection fails (`ORA-01017`) | Bad credentials or DB offline | Verify env vars, confirm container/instance is healthy |
@@ -101,11 +101,12 @@ mc ls local
 
 ### Authentication Error Handling (v1.1+)
 
-The platform now provides clear, actionable error messages for authentication failures:
+The platform provides secure, consistent error messages for authentication failures:
 
-- **User not found**: Returns specific error code `USER_NOT_FOUND` with guidance to create an account
-- **Bad credentials**: Returns `INVALID_CREDENTIALS` error code when user exists but password is wrong
+- **Invalid credentials** (user not found or password wrong): Returns a single generic `INVALID_CREDENTIALS` error code for all failed logins, regardless of whether the user doesn't exist or the password is incorrect. This behavior is **deliberate and security-critical** to prevent username enumeration attacks.
 - **Token validation**: Invalid or expired tokens are silently ignored (graceful degradation)
+
+Note: `USER_NOT_FOUND` is an internal audit and server-side reason only; it is never exposed to clients. Clients always receive `INVALID_CREDENTIALS` for any login failure to prevent attackers from determining whether a username exists in the system.
 
 For debugging, enable verbose security logging:
 

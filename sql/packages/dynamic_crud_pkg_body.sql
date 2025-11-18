@@ -91,6 +91,22 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
         v_client_ip VARCHAR2(45);
         v_metadata  CLOB;
     BEGIN
+        -- Validate operation enum: allowed values are INSERT, UPDATE, DELETE, SELECT
+        IF p_operation NOT IN ('INSERT', 'UPDATE', 'DELETE', 'SELECT') THEN
+            RAISE_APPLICATION_ERROR(
+                -20930,
+                'Invalid operation: ' || p_operation || '. Allowed values: INSERT, UPDATE, DELETE, SELECT'
+            );
+        END IF;
+
+        -- Validate status enum: allowed values are SUCCESS, FAILURE, PENDING
+        IF p_status NOT IN ('SUCCESS', 'FAILURE', 'PENDING') THEN
+            RAISE_APPLICATION_ERROR(
+                -20931,
+                'Invalid status: ' || p_status || '. Allowed values: SUCCESS, FAILURE, PENDING'
+            );
+        END IF;
+
         IF p_audit IS NOT NULL THEN
             v_actor := p_audit.actor;
             v_trace_id := p_audit.trace_id;

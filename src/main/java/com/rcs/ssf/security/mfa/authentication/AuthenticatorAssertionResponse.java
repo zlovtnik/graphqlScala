@@ -22,7 +22,7 @@ import java.util.Objects;
  * authenticatorData
  * - userHandle: Optional user handle from the authenticator
  */
-public class AuthenticatorAssertionResponse {
+public final class AuthenticatorAssertionResponse {
     @NotNull(message = "Client data JSON is required")
     private final byte[] clientDataJSON; // ClientDataJSON in base64 format
 
@@ -72,5 +72,27 @@ public class AuthenticatorAssertionResponse {
 
     public byte[] getUserHandle() {
         return userHandle != null ? userHandle.clone() : null;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        
+        AuthenticatorAssertionResponse other = (AuthenticatorAssertionResponse) obj;
+        return java.util.Arrays.equals(clientDataJSON, other.clientDataJSON)
+                && java.util.Arrays.equals(authenticatorData, other.authenticatorData)
+                && java.util.Arrays.equals(signature, other.signature)
+                && java.util.Arrays.equals(userHandle, other.userHandle);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(
+                java.util.Arrays.hashCode(clientDataJSON),
+                java.util.Arrays.hashCode(authenticatorData),
+                java.util.Arrays.hashCode(signature),
+                java.util.Arrays.hashCode(userHandle)
+        );
     }
 }

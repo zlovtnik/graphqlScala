@@ -65,7 +65,7 @@ public class AuthMutation {
             LOGGER.error("Login attempt without HttpServletRequest context. " +
                     "This indicates a misconfiguration or non-HTTP invocation in production.");
             throw new IllegalStateException("Authentication context not available. " +
-                    "Login must be invoked through HTTP endpoint. Endpoint: /graphql, Principal: {}");
+                    "Login must be invoked through HTTP endpoint: /graphql");
         }
         
         // For non-production/test environments, log a warning but allow fallback to "unknown" values

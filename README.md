@@ -159,7 +159,7 @@ export KEYSTORE_PASSWORD=changeit
 
 > 🔐 **Remember:** `JWT_SECRET` must be at least 32 characters long and include at least `min(20, length/2)` distinct characters. For example, a 32-character secret must contain 16 distinct characters. The application enforces this requirement at startup.
 
-> ⚠️ **Database Password Warning:** For production deployments, DO NOT use the default database password `APP_USER`. Set `DB_USER_PASSWORD` (or `ORACLE_PASSWORD`) to a strong, unique value in your deployment environment. See `docs/SECURITY_ARCHITECTURE.md` for guidance on secrets management.
+> ⚠️ **Database Password Warning:** For production deployments, DO NOT use the default database password `APP_USER` or any development-only value like `DevOnly_Password123!`. Set `DB_USER_PASSWORD` (or `ORACLE_PASSWORD`) to a strong, unique value in your deployment environment. See `docs/SECURITY_ARCHITECTURE.md` for guidance on secrets management.
 
 ### Required Environment Variables
 
@@ -275,10 +275,10 @@ The application uses a self-signed certificate in the bundled keystore for local
 ### 4. Optional: Start Dependencies with Docker
 
 ```bash
-# Oracle Database XE (example)
+# Oracle Database XE (example - development only, replace password before production)
 docker run -d --name oracle-xe \
   -p 1521:1521 -p 5500:5500 \
-  -e ORACLE_PASSWORD=APP_USER \
+  -e ORACLE_PASSWORD=DevOnly_Password123! \
   gvenzl/oracle-xe:21-slim
 
 # MinIO

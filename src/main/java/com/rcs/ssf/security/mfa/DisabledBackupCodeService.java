@@ -25,27 +25,27 @@ public class DisabledBackupCodeService implements BackupCodeService {
             "Set app.datasource.enabled=true (and configure spring.datasource.*) to activate backup codes.";
 
     @Override
-    public List<String> generateBackupCodes(String userId) {
+    public List<String> generateBackupCodes(Long userId) {
         throw unsupported("generateBackupCodes");
     }
 
     @Override
-    public boolean verifyBackupCode(String userId, String code) {
+    public boolean verifyBackupCode(Long userId, String code) {
         throw unsupported("verifyBackupCode");
     }
 
     @Override
-    public int getRemainingBackupCodeCount(String userId) {
+    public int getRemainingBackupCodeCount(Long userId) {
         throw unsupported("getRemainingBackupCodeCount");
     }
 
     @Override
-    public List<String> regenerateBackupCodes(String userId) {
+    public List<String> regenerateBackupCodes(Long userId) {
         throw unsupported("regenerateBackupCodes");
     }
 
     @Override
-    public boolean adminConsumeBackupCode(String userId, String adminId) {
+    public boolean adminConsumeBackupCode(Long userId, String adminId) {
         throw unsupported("adminConsumeBackupCode");
     }
 

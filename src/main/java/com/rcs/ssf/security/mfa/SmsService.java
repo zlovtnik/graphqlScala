@@ -22,7 +22,7 @@ public interface SmsService {
      * @param phoneNumber phone number in E.164 format (e.g., +14155552671)
      * @throws MfaProviderException if SMS delivery fails
      */
-    void enrollPhoneNumber(String userId, String phoneNumber) throws MfaProviderException;
+    void enrollPhoneNumber(Long userId, String phoneNumber) throws MfaProviderException;
 
     /**
      * Verify the enrollment code sent via SMS.
@@ -38,7 +38,7 @@ public interface SmsService {
      *         - "RATE_LIMITED": too many verification attempts (>5 failed attempts)
      *         - "NO_ENROLLMENT_PENDING": no enrollment in progress for user
     */
-    void verifyEnrollmentCode(String userId, String code) throws MfaVerificationException;
+    void verifyEnrollmentCode(Long userId, String code) throws MfaVerificationException;
 
     /**
      * Send an SMS OTP code for authentication.
@@ -46,7 +46,7 @@ public interface SmsService {
      * @param userId user identifier
      * @throws MfaProviderException if SMS delivery fails
      */
-    void sendOtpCode(String userId) throws MfaProviderException;
+    void sendOtpCode(Long userId) throws MfaProviderException;
 
     /**
      * Verify an OTP code received via SMS.
@@ -68,14 +68,14 @@ public interface SmsService {
      *         - "RATE_LIMITED": too many verification attempts (>5 failed attempts)
      *         - "OTP_NOT_SENT": no OTP currently sent for user
      */
-    void verifyOtpCode(String userId, String code) throws MfaVerificationException;
+    void verifyOtpCode(Long userId, String code) throws MfaVerificationException;
 
     /**
      * Disable SMS MFA for a user.
      *
      * @param userId user identifier
      */
-    void disableSmsMfa(String userId);
+    void disableSmsMfa(Long userId);
 
     /**
      * Get enrolled phone number for a user (masked).
@@ -83,5 +83,5 @@ public interface SmsService {
      * @param userId user identifier
      * @return optional containing masked phone number (e.g., +1-415-***-2671)
      */
-    Optional<String> getEnrolledPhoneNumber(String userId);
+    Optional<String> getEnrolledPhoneNumber(Long userId);
 }

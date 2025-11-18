@@ -54,13 +54,13 @@ public interface BackupCodeService {
      * code display UIs) depends on this contract being honored. Violations may result in
      * users receiving stale/invalid codes, locked-out accounts, or inconsistent MFA state.</p>
      *
-     * @param userId user identifier (required, non-null)
+     * @param userId user identifier (Long, non-null)
      * @return list of 10 newly generated backup codes in plain-text format
      * @throws IllegalArgumentException if userId is null or empty
      * @throws IllegalStateException if persistence fails and previous codes remain active
      * @throws ConcurrentModificationException if implementation uses conflict detection and concurrent generation is detected
      */
-    List<String> generateBackupCodes(String userId);
+    List<String> generateBackupCodes(Long userId);
 
     /**
      * Verify a backup code and consume it.
@@ -71,7 +71,7 @@ public interface BackupCodeService {
      * @param code backup code
      * @return true if code is valid and unused, false otherwise
      */
-    boolean verifyBackupCode(String userId, String code);
+    boolean verifyBackupCode(Long userId, String code);
 
     /**
      * Get count of remaining backup codes for a user.
@@ -79,7 +79,7 @@ public interface BackupCodeService {
      * @param userId user identifier
      * @return number of unused backup codes (0-10)
      */
-    int getRemainingBackupCodeCount(String userId);
+    int getRemainingBackupCodeCount(Long userId);
 
     /**
      * Regenerate backup codes (invalidates old codes).
@@ -98,7 +98,7 @@ public interface BackupCodeService {
      * @throws IllegalStateException if persistence fails (prior codes remain active)
      * @throws ConcurrentModificationException if the user's backup codes are being regenerated concurrently
      */
-    List<String> regenerateBackupCodes(String userId);
+    List<String> regenerateBackupCodes(Long userId);
 
     /**
      * Admin override: consume a backup code on behalf of user.
@@ -128,5 +128,5 @@ public interface BackupCodeService {
      * @return true if a code was successfully consumed, false if none were available
      * @throws SecurityException if the caller is not authorized to perform admin overrides
      */
-    boolean adminConsumeBackupCode(String userId, String adminId);
+    boolean adminConsumeBackupCode(Long userId, String adminId);
 }

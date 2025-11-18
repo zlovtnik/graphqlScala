@@ -63,9 +63,11 @@ spring:
       timeout: 2000ms
       database: 0
     relational:
-      # Disable automatic identifier quoting to prevent Spring Data R2DBC from wrapping
-      # table/column names in quotes. Oracle doesn't need quoted identifiers for lowercase
-      # names since it treats them case-insensitively.
+      # ANSI enables ANSI SQL identifier processing (which includes double-quote quoting for identifiers).
+      # If you need to disable automatic identifier quoting entirely, use a custom R2DBC dialect decorator
+      # that overrides getIdentifierProcessing() to return IdentifierProcessing.NONE.
+      # See the r2dbcDialect() method in ReactiveDataSourceConfiguration.java for the decorator pattern.
+      # Oracle treats lowercase identifiers as case-insensitive by default.
       naming-strategy: ANSI
 
 # Cache Service Configuration
@@ -136,8 +138,6 @@ app:
       max-size: 80              # Keep aligned with Oracle capacity and <4x Hikari max
       queue-depth: 150          # Prevent deep backlog from exhausting DB sessions
       idle-timeout: PT30M
-    # Reference only: Spring Boot's native r2dbc auto-config is NOT used; app.r2dbc takes precedence
-    # spring.r2dbc properties are ignored when app.r2dbc is configured.
   datasource:
     enabled: true  # Enable JDBC DataSource for AuditService and other blocking operations
 

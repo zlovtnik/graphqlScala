@@ -60,23 +60,23 @@ public class DefaultBackupCodeService implements BackupCodeService {
     /**
      * Generate backup codes for a user.
      *
-     * Delegates to {@link #generateCodesInternal(String, String)} with action tag "GENERATE"
-     * to ensure consistent logic with {@link #regenerateBackupCodes(String)}.
+     * Delegates to {@link #generateCodesInternal(Long, String)} with action tag "GENERATE"
+     * to ensure consistent logic with {@link #regenerateBackupCodes(Long)}.
      *
-     * @param userId user identifier
+     * @param userId user identifier (Long, non-null)
      * @return list of 10 newly generated backup codes
      * @throws IllegalStateException if persistence fails
      */
     @Override
-    public List<String> generateBackupCodes(String userId) {
+    public List<String> generateBackupCodes(Long userId) {
         return generateCodesInternal(userId, "GENERATE");
     }
 
     /**
      * Regenerate backup codes (invalidates old codes).
      *
-     * Delegates to {@link #generateCodesInternal(String, String)} with action tag "REGENERATE"
-     * to ensure identical semantics with {@link #generateBackupCodes(String)}.
+     * Delegates to {@link #generateCodesInternal(Long, String)} with action tag "REGENERATE"
+     * to ensure identical semantics with {@link #generateBackupCodes(Long)}.
      * Both methods use the same underlying rotate-and-replace logic.
      *
      * @param userId user identifier
@@ -84,7 +84,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
      * @throws IllegalStateException if persistence fails
      */
     @Override
-    public List<String> regenerateBackupCodes(String userId) {
+    public List<String> regenerateBackupCodes(Long userId) {
         return generateCodesInternal(userId, "REGENERATE");
     }
 
@@ -104,13 +104,14 @@ public class DefaultBackupCodeService implements BackupCodeService {
      * prior codes are invalidated and new codes are persisted in a single transaction
      * before this method returns. Callers cannot observe intermediate states.</p>
      *
-     * @param userId user identifier (required, non-null)
+     * @param userId user identifier (Long, non-null)
      * @param actionTag audit/logging tag ("GENERATE" or "REGENERATE") to track operation type
      * @return list of 10 newly generated backup codes in plain-text format
      * @throws IllegalStateException if persistence fails (prior codes remain active)
      */
-    private List<String> generateCodesInternal(String userId, String actionTag) {
-        ReentrantReadWriteLock lock = userLocks.get(userId, k -> new ReentrantReadWriteLock());
+    private List<String> generateCodesInternal(Long userId, String actionTag) {
+        String userIdStr = userId.toString();
+        ReentrantReadWriteLock lock = userLocks.get(userIdStr, k -> new ReentrantReadWriteLock());
         lock.writeLock().lock();
         try {
             // Generate fresh codes
@@ -148,13 +149,13 @@ public class DefaultBackupCodeService implements BackupCodeService {
     /**
      * Persist backup codes to storage and invalidate prior codes.
      *
-     * @param userId user identifier
+     * @param userId user identifier (Long)
      * @param codes plain-text codes to persist (hashed before storage)
      * @param actionTag audit tag indicating operation type
      * @throws Exception if persistence fails
      */
     @Transactional
-    private void persistBackupCodes(String userId, List<String> codes, String actionTag) throws Exception {
+    private void persistBackupCodes(Long userId, List<String> codes, String actionTag) throws Exception {
         // Hash each code
         List<String> hashedCodes = codes.stream()
             .map(code -> BCrypt.hashpw(code, BCrypt.gensalt()))
@@ -171,9 +172,9 @@ public class DefaultBackupCodeService implements BackupCodeService {
 
     @Override
     @Transactional
-    public boolean verifyBackupCode(String userId, String code) {
+    public boolean verifyBackupCode(Long userId, String code) {
         if (userId == null || code == null) {
-            auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Null userId or code", null, null);
+            auditService.logMfaEvent(userId != null ? userId.toString() : "unknown", null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Null userId or code", null, null);
             return false;
         }
 
@@ -190,7 +191,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
                     "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
                     userId, storedHash);
                 boolean success = rowsAffected == 1;
-                auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", success ? "SUCCESS" : "FAILURE",
+                auditService.logMfaEvent(userId.toString(), null, "USE_BACKUP_CODE", "BACKUP_CODE", success ? "SUCCESS" : "FAILURE",
                     success ? "Backup code consumed" : "Invalid backup code", null, null);
                 log.info("Backup code verification for user: {} - {}", userId, success ? "SUCCESS" : "FAILURE");
                 return success;
@@ -198,13 +199,13 @@ public class DefaultBackupCodeService implements BackupCodeService {
         }
 
         // No match found
-        auditService.logMfaEvent(userId, null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Invalid backup code", null, null);
+        auditService.logMfaEvent(userId.toString(), null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Invalid backup code", null, null);
         log.info("Backup code verification for user: {} - FAILURE", userId);
         return false;
     }
 
     @Override
-    public int getRemainingBackupCodeCount(String userId) {
+    public int getRemainingBackupCodeCount(Long userId) {
         if (userId == null) {
             return 0;
         }
@@ -216,12 +217,12 @@ public class DefaultBackupCodeService implements BackupCodeService {
 
     @Override
     @Transactional
-    public boolean adminConsumeBackupCode(String userId, String adminId) {
+    public boolean adminConsumeBackupCode(Long userId, String adminId) {
         // Check authorization
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMIN")) &&
             !auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_MFA_ADMIN"))) {
-            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Unauthorized admin attempt", null, null);
+            auditService.logMfaEvent(userId.toString(), adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Unauthorized admin attempt", null, null);
             log.warn("Unauthorized admin backup code consumption attempt by {} for user {}", adminId, userId);
             throw new SecurityException("Insufficient privileges for admin backup code consumption");
         }
@@ -233,7 +234,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
                 "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL ORDER BY created_at ASC FETCH FIRST 1 ROWS ONLY",
                 String.class, userId);
         } catch (EmptyResultDataAccessException e) {
-            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "No unused backup codes available", null, null);
+            auditService.logMfaEvent(userId.toString(), adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "No unused backup codes available", null, null);
             log.warn("No unused backup codes available for admin consumption by {} for user {}", adminId, userId);
             return false;
         }
@@ -243,11 +244,11 @@ public class DefaultBackupCodeService implements BackupCodeService {
             "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
             userId, hash);
         if (rowsAffected == 1) {
-            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "SUCCESS", "Backup code consumed by admin", null, null);
+            auditService.logMfaEvent(userId.toString(), adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "SUCCESS", "Backup code consumed by admin", null, null);
             log.info("Admin {} consumed backup code for user {}", adminId, userId);
             return true;
         } else {
-            auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Concurrent consumption detected", null, null);
+            auditService.logMfaEvent(userId.toString(), adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "Concurrent consumption detected", null, null);
             return false;
         }
     }

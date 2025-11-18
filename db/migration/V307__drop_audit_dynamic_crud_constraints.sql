@@ -1,5 +1,7 @@
--- Drop any existing check constraints on audit_dynamic_crud if they exist
--- These constraints are too restrictive and conflict with the operations being used
+-- Note: V306 intentionally omitted CHECK constraints from audit_dynamic_crud table recreation.
+-- Validation of operation (INSERT|UPDATE|DELETE|SELECT) and status (SUCCESS|FAILURE|PENDING) is
+-- enforced at the procedure level in record_audit, not at table constraints.
+-- This migration attempts to clean up any legacy constraints that may have existed before V306.
 BEGIN
     DECLARE
         v_constraint_name VARCHAR2(30);
@@ -11,7 +13,7 @@ BEGIN
         AND table_name = 'AUDIT_DYNAMIC_CRUD';
         
         BEGIN
-            EXECUTE IMMEDIATE 'ALTER TABLE audit_dynamic_crud DROP CONSTRAINT "' || v_constraint_name || '"';
+            EXECUTE IMMEDIATE 'ALTER TABLE audit_dynamic_crud DROP CONSTRAINT ' || v_constraint_name;
             DBMS_OUTPUT.PUT_LINE('Dropped constraint ' || v_constraint_name);
         EXCEPTION
             WHEN OTHERS THEN
@@ -33,7 +35,7 @@ BEGIN
         AND table_name = 'AUDIT_DYNAMIC_CRUD';
         
         BEGIN
-            EXECUTE IMMEDIATE 'ALTER TABLE audit_dynamic_crud DROP CONSTRAINT "' || v_constraint_name || '"';
+            EXECUTE IMMEDIATE 'ALTER TABLE audit_dynamic_crud DROP CONSTRAINT ' || v_constraint_name;
             DBMS_OUTPUT.PUT_LINE('Dropped constraint ' || v_constraint_name);
         EXCEPTION
             WHEN OTHERS THEN
