@@ -2,13 +2,12 @@ package com.rcs.ssf.entity;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
-import java.util.UUID;
 
 class UserTest {
 
     @Test
     void testEqualsAndHashCode() {
-        UUID id = UUID.randomUUID();
+        Long id = 10L;
         User user1 = new User();
         user1.setId(id);
         user1.setUsername("testuser");
@@ -22,7 +21,7 @@ class UserTest {
         user2.setPassword("password123");
 
         User differentUser = new User();
-        differentUser.setId(UUID.randomUUID());
+        differentUser.setId(25L);
         differentUser.setUsername("otheruser");
         differentUser.setEmail("other@example.com");
         differentUser.setPassword("password456");
@@ -35,7 +34,7 @@ class UserTest {
     @Test
     void testToString() {
         User user = new User();
-        user.setId(UUID.randomUUID());
+        user.setId(99L);
         user.setUsername("testuser");
         user.setEmail("test@example.com");
         user.setPassword("password123");
@@ -44,7 +43,7 @@ class UserTest {
         
         assertTrue(toString.contains("testuser"));
         assertTrue(toString.contains("test@example.com"));
-        assertTrue(toString.contains(user.getId().toString()));
+        assertTrue(toString.contains(String.valueOf(user.getId())));
     }
 
     @Test

@@ -1,37 +1,69 @@
 package com.rcs.ssf.config;
 
+import com.rcs.ssf.http.filter.RegistrationRateLimitingFilter;
+import com.rcs.ssf.security.CspHeaderFilter;
+import com.rcs.ssf.security.GraphQLRequestLoggingFilter;
 import com.rcs.ssf.security.JwtAuthenticationFilter;
+import com.rcs.ssf.security.JwtTokenProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Spring Security Configuration for JWT-based authentication.
  *
  * Authentication Flow:
- * 1. JwtAuthenticationFilter (servlet filter) - extracts JWT from Authorization header
- *    and populates SecurityContext if token is valid
+ * 1. JwtAuthenticationFilter (servlet filter) - extracts JWT from Authorization
+ * header
+ * and populates SecurityContext if token is valid
  * 2. SecurityFilterChain - enforces authorization rules on HTTP endpoints
- * 3. GraphQLAuthorizationInstrumentation - enforces authentication for GraphQL operations
- * 4. GraphQLSecurityHandler - translates Spring Security exceptions to GraphQL errors
+ * 3. GraphQLAuthorizationInstrumentation - enforces authentication for GraphQL
+ * operations
+ * 4. GraphQLSecurityHandler - translates Spring Security exceptions to GraphQL
+ * errors
  *
- * Protected Endpoints:
- * - POST /graphql - requires valid JWT token
- * - All other endpoints except /api/auth/**, /graphiql, /actuator/**
+ * Protected Endpoints (HTTP-level):
+ * - Most endpoints except listed public endpoints below
  *
- * Public Endpoints:
- * - POST /api/auth/login - login to get JWT token
- * - POST /api/auth/validate - validate token (can be public or protected)
- * - GET /graphiql - GraphQL IDE
- * - /actuator/** - health checks and metrics
+ * Public Endpoints (HTTP-level):
+ * - POST /api/auth/** - login to get JWT token
+ * - POST /api/users - user creation (rate limited by
+ * RegistrationRateLimitingFilter)
+ * - /actuator/health, /actuator/prometheus - readiness and Prometheus scrape
+ * targets
+ * - POST /graphql - GraphQL endpoint (operation-level authorization enforced by
+ * GraphQLAuthorizationInstrumentation; GET is not exposed)
+ *
+ * Protected Endpoints requiring authentication:
+ * - /graphiql/** - GraphQL IDE (requires authenticated operators in production)
+ * - All remaining /actuator/** endpoints
+ * - Any other HTTP endpoints not explicitly listed above
+ *
+ * Note: /graphql does not require authentication at the HTTP layer; instead,
+ * authentication
+ * and authorization are enforced by GraphQLAuthorizationInstrumentation for
+ * each GraphQL
+ * operation. This allows public mutations (login, createUser) while denying
+ * access to
+ * authenticated-only queries and mutations without valid JWT tokens.
  */
 @Configuration
 @EnableWebSecurity
@@ -39,17 +71,38 @@ public class SecurityConfig {
 
     private final UserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final List<String> corsAllowedOriginPatterns;
 
-    public SecurityConfig(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder, JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(UserDetailsService userDetailsService,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            @Value("${app.cors.allowed-origins:http://localhost:4200}") String corsAllowedOrigins) {
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.corsAllowedOriginPatterns = parseAllowedOrigins(corsAllowedOrigins);
+    }
+
+    @Bean
+    public CspHeaderFilter cspHeaderFilter() {
+        return new CspHeaderFilter();
+    }
+
+    @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter() {
+        return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService);
+    }
+
+    @Bean
+    public GraphQLRequestLoggingFilter graphQLRequestLoggingFilter() {
+        return new GraphQLRequestLoggingFilter();
     }
 
     @Bean
     public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
-        AuthenticationManagerBuilder authenticationManagerBuilder = http.getSharedObject(AuthenticationManagerBuilder.class);
+        AuthenticationManagerBuilder authenticationManagerBuilder = http
+                .getSharedObject(AuthenticationManagerBuilder.class);
         authenticationManagerBuilder
                 .userDetailsService(userDetailsService)
                 .passwordEncoder(passwordEncoder);
@@ -57,36 +110,79 @@ public class SecurityConfig {
     }
 
     /**
-     * Configures HTTP security with JWT authentication.
+     * Configures HTTP security with JWT authentication and CSP headers.
      *
-     * The JwtAuthenticationFilter is registered here to run before Spring Security's
-     * default UsernamePasswordAuthenticationFilter, allowing JWT tokens to be extracted
-     * and validated before the standard authentication flow.
+     * Filter order (from first to last):
+     * 1. GraphQLRequestLoggingFilter (highest precedence) - logs GraphQL requests
+     * early
+     * 2. CspHeaderFilter - Generates nonce and sets strict CSP headers
+     * 3. Spring Security SecurityContextHolderFilter - central context population
+     * 4. JwtAuthenticationFilter - Extracts and validates JWT tokens
+     *
+     * The GraphQLRequestLoggingFilter and CspHeaderFilter are added before the
+     * Spring Security filter chain (SecurityContextHolderFilter) so that request
+     * logging and the response nonce are available early in the request lifecycle.
+     * The JwtAuthenticationFilter runs after the SecurityContextHolderFilter and
+     * populates the SecurityContext for downstream filter processing.
      *
      * @param http HttpSecurity configuration
      * @return configured SecurityFilterChain
      * @throws Exception if configuration fails
      */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, CspHeaderFilter cspHeaderFilter,
+            JwtAuthenticationFilter jwtAuthenticationFilter, GraphQLRequestLoggingFilter graphQLRequestLoggingFilter,
+            RegistrationRateLimitingFilter registrationRateLimitingFilter)
+            throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
                         // Public endpoints for authentication
                         .requestMatchers("/api/auth/**").permitAll()
-                        // GraphQL IDE is public (authentication enforced by GraphQLAuthorizationInstrumentation)
-                        .requestMatchers("/graphiql/**").permitAll()
-                        // GraphQL endpoint requires authentication before instrumentation enforces field-level checks
-                        .requestMatchers("/graphql").authenticated()
-                        // Health and metrics
-                        .requestMatchers("/actuator/**").permitAll()
+                        // Allow user creation for bootstrap
+                        .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
+                        // GraphQL IDE requires authentication in production
+                        .requestMatchers(HttpMethod.GET, "/graphiql/**").authenticated()
+                        // Limit GraphQL HTTP exposure to POST requests; instrumentation enforces public
+                        // vs protected operations
+                        .requestMatchers(HttpMethod.POST, "/graphql").permitAll()
+                        // Health and Prometheus metrics remain publicly accessible
+                        .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
+                        // Remaining actuator endpoints require authentication
+                        .requestMatchers("/actuator/**").authenticated()
                         // All other endpoints require authentication
-                        .anyRequest().authenticated()
-                )
+                        .anyRequest().authenticated())
+                // GraphQL request logging filter (highest precedence)
+                .addFilterBefore(registrationRateLimitingFilter, SecurityContextHolderFilter.class)
+                .addFilterBefore(graphQLRequestLoggingFilter, SecurityContextHolderFilter.class)
+                // CSP filter runs after GraphQL logging (generates nonce for every response)
+                .addFilterBefore(cspHeaderFilter, SecurityContextHolderFilter.class)
                 // JWT filter extracts token and populates SecurityContext
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterAfter(jwtAuthenticationFilter, SecurityContextHolderFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration configuration = new CorsConfiguration();
+        if (!corsAllowedOriginPatterns.isEmpty()) {
+            configuration.setAllowedOriginPatterns(corsAllowedOriginPatterns);
+        }
+        configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With"));
+        configuration.setAllowCredentials(false);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
+    }
+
+    private List<String> parseAllowedOrigins(String origins) {
+        return Arrays.stream(origins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .collect(Collectors.toList());
     }
 }

@@ -13,7 +13,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.util.Optional;
-import java.util.UUID;
 
 @Controller
 @Validated
@@ -32,13 +31,13 @@ public class UserMutation {
     }
 
     @MutationMapping
-    public User updateUser(@Argument UUID id, @Argument UpdateUserInput input) {
+    public User updateUser(@Argument Long id, @Argument UpdateUserInput input) {
         return userService.updateUser(id, Optional.ofNullable(input.username()), Optional.ofNullable(input.email()),
                 Optional.ofNullable(input.password()));
     }
 
     @MutationMapping
-    public Boolean deleteUser(@Argument UUID id) {
+    public Boolean deleteUser(@Argument Long id) {
         return userService.deleteUser(id);
     }
 

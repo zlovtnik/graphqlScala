@@ -22,7 +22,7 @@ import java.util.NoSuchElementException;
 import java.util.Spliterator;
 import java.util.Spliterators;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -34,15 +34,19 @@ import java.util.stream.StreamSupport;
 @RequiredArgsConstructor
 public class QueryStreamingService {
 
-    private final DataSource dataSource;
+    private final Optional<DataSource> dataSource;
     private final QueryStreamingProperties properties;
     private final MeterRegistry meterRegistry;
 
     public <T> Stream<T> stream(String sql, List<Object> parameters, RowMapper<T> rowMapper, QueryStreamOptions options) {
+        if (dataSource.isEmpty()) {
+            return Stream.empty();
+        }
+        DataSource ds = dataSource.get();
         QueryStreamOptions effectiveOptions = normalize(options);
         int fetchSize = Math.min(Math.max(effectiveOptions.fetchSize(), properties.getFetchSize()), properties.getMaxFetchSize());
 
-        Connection connection = DataSourceUtils.getConnection(Objects.requireNonNull(dataSource, "DataSource must not be null"));
+        Connection connection = DataSourceUtils.getConnection(ds);
         PreparedStatement statement = null;
         ResultSet resultSet = null;
         try {
@@ -61,7 +65,7 @@ public class QueryStreamingService {
         } catch (SQLException e) {
             JdbcUtils.closeResultSet(resultSet);
             JdbcUtils.closeStatement(statement);
-            DataSourceUtils.releaseConnection(connection, dataSource);
+            DataSourceUtils.releaseConnection(connection, ds);
             throw new DataAccessResourceFailureException("Unable to open streaming cursor", e);
         }
 
@@ -79,7 +83,7 @@ public class QueryStreamingService {
         return stream.onClose(() -> {
             if (closed.compareAndSet(false, true)) {
                 sample.stop(timer);
-                closeQuietly(streamingResultSet, streamingStatement, connection);
+                closeQuietly(streamingResultSet, streamingStatement, connection, ds);
                 if (log.isDebugEnabled()) {
                     log.debug("Closed streaming cursor '{}' after {} rows", effectiveOptions.streamName(),
                             String.format(Locale.ROOT, "%d", iterator.rowCount()));
@@ -95,10 +99,10 @@ public class QueryStreamingService {
         return new QueryStreamOptions("default-stream", properties.getFetchSize());
     }
 
-    private void closeQuietly(ResultSet resultSet, PreparedStatement statement, Connection connection) {
+    private void closeQuietly(ResultSet resultSet, PreparedStatement statement, Connection connection, DataSource ds) {
         JdbcUtils.closeResultSet(resultSet);
         JdbcUtils.closeStatement(statement);
-        DataSourceUtils.releaseConnection(connection, dataSource);
+        DataSourceUtils.releaseConnection(connection, ds);
     }
 
     private static final class ResultSetIterator<T> implements java.util.Iterator<T> {

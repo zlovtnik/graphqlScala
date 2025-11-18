@@ -5,19 +5,22 @@ import java.util.Map;
 
 public class DynamicCrudResponseDto {
     private List<Map<String, Object>> rows;
-    private int totalCount;
+    private Integer totalCount;
     private List<ColumnMeta> columns;
+    private boolean isAvailable;
 
-    public DynamicCrudResponseDto(List<Map<String, Object>> rows, int totalCount, List<ColumnMeta> columns) {
+    public DynamicCrudResponseDto(List<Map<String, Object>> rows, Integer totalCount, List<ColumnMeta> columns, boolean isAvailable) {
         this.rows = rows;
         this.totalCount = totalCount;
         this.columns = columns;
+        this.isAvailable = isAvailable;
     }
 
     // Getters
     public List<Map<String, Object>> getRows() { return rows; }
-    public int getTotalCount() { return totalCount; }
+    public Integer getTotalCount() { return totalCount; }
     public List<ColumnMeta> getColumns() { return columns; }
+    public boolean isAvailable() { return isAvailable; }
 
     public static class ColumnMeta {
         private String name;

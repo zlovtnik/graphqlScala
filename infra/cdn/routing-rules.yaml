@@ -12,7 +12,7 @@ cdn:
 
   # Origin server configuration
   origin:
-    host: "api.example.com"
+    host: "${API_DOMAIN}"
     port: 8443
     protocol: "https"
     path: "/graphql"
@@ -85,11 +85,26 @@ cdn:
   # CORS and security headers
   security_headers:
     strict_transport_security: "max-age=31536000; includeSubDomains"
-    content_security_policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-    x_content_type_options: "nosniff"
-    x_frame_options: "DENY"
-    x_xss_protection: "1; mode=block"
-    referrer_policy: "strict-origin-when-cross-origin"
+    # Content Security Policy (CSP): Strict policy without 'unsafe-inline'
+    # IMPORTANT: Nonces are generated server-side (CspHeaderFilter) for each request
+    # and cannot be set at the CDN edge (which does not see per-request data).
+    # The CDN should NOT set CSP headers; let the application handle them via CspHeaderFilter.
+    # This ensures nonce values are unique per request and properly synchronized.
+    # If CSP must be set at CDN level, use a static nonce-free policy (stars only for CSP):
+    # content_security_policy: |
+    #   default-src 'self';
+    #   script-src 'self' https://cdn.jsdelivr.net;
+    #   style-src 'self' https://fonts.googleapis.com;
+    #   img-src 'self' data: https://${TRUSTED_CDN_DOMAIN};
+    #   font-src 'self' https://fonts.gstatic.com;
+    #   connect-src 'self' https://${API_DOMAIN} ${REALTIME_DOMAIN};
+    #   frame-ancestors 'none';
+    #   base-uri 'self';
+    #   form-action 'self';
+    # Security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection,
+    # Referrer-Policy, Permissions-Policy, Content-Security-Policy) are managed by 
+    # the application (CspHeaderFilter) to maintain a single source-of-truth.
+    # The application generates nonces server-side and applies them to CSP headers for every request.
 
   # Rate limiting at CDN edge
   rate_limiting:
@@ -106,11 +121,11 @@ cdn:
     enabled: false
     rules:
       - region: "us-east"
-        origin: "api-us-east.example.com"
+        origin: "${API_DOMAIN_US_EAST}"
       - region: "eu-west"
-        origin: "api-eu-west.example.com"
+        origin: "${API_DOMAIN_EU_WEST}"
       - region: "ap-southeast"
-        origin: "api-ap.example.com"
+        origin: "${API_DOMAIN_AP_SOUTHEAST}"
 
   # Monitoring and metrics
   monitoring:
@@ -165,10 +180,10 @@ cdn:
     api_token: "${CLOUDFLARE_API_TOKEN}"
     rules:
       - action: "cache"
-        expression: '(http.host eq "api.example.com" and http.request.uri.path contains "graphql")'
+        expression: '(http.host eq "${API_DOMAIN}" and http.request.uri.path contains "graphql")'
         cache_ttl: 300
       - action: "compress"
-        expression: '(http.host eq "api.example.com")'
+        expression: '(http.host eq "${API_DOMAIN}")'
         compression_level: 6
 
   # Expected performance improvements

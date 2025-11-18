@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 
 @Component
 public class DynamicCrudGateway {
@@ -28,20 +29,24 @@ public class DynamicCrudGateway {
     private static final String TYPE_ROW_OP = "DYN_ROW_OP_NT";
     private static final String TYPE_ROW_OP_REC = "DYN_ROW_OP_REC";
 
-    private final JdbcTemplate jdbcTemplate;
+    private final Optional<JdbcTemplate> jdbcTemplate;
     private final ArrayChunkingPolicy chunkingPolicy;
     private final PlsqlInstrumentationSupport instrumentationSupport;
 
-    public DynamicCrudGateway(@NonNull DataSource dataSource,
+    public DynamicCrudGateway(Optional<DataSource> dataSource,
                               @NonNull ArrayChunkingPolicy chunkingPolicy,
                               @NonNull PlsqlInstrumentationSupport instrumentationSupport) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource);
+        this.jdbcTemplate = dataSource.map(JdbcTemplate::new);
         this.chunkingPolicy = chunkingPolicy;
         this.instrumentationSupport = instrumentationSupport;
     }
 
     public DynamicCrudResponse execute(DynamicCrudRequest request) {
         Objects.requireNonNull(request, "request is required");
+
+        if (jdbcTemplate.isEmpty()) {
+            return new DynamicCrudResponse(0, "No database connection available", null);
+        }
 
         if (request.optionalBulkRows().filter(list -> !list.isEmpty()).isPresent()) {
             return executeBulkWithChunking(request);
@@ -50,7 +55,8 @@ public class DynamicCrudGateway {
     }
 
     private DynamicCrudResponse executeSingle(DynamicCrudRequest request) {
-        return jdbcTemplate.execute((Connection connection) ->
+        JdbcTemplate jt = jdbcTemplate.get();
+        return jt.execute((Connection connection) ->
             instrumentationSupport.withAction(connection, "dynamic_crud_pkg", request.operation().name(),
                 () -> executeSingleInternal(connection, request))
         );
@@ -124,8 +130,9 @@ public class DynamicCrudGateway {
         ArrayChunkingPolicy.ChunkDecision decision = chunkingPolicy.evaluate(totalRows);
         int chunkSize = decision.chunkSize() > 0 ? decision.chunkSize() : totalRows;
 
+        JdbcTemplate jt = jdbcTemplate.get();
         if (totalRows == 0 || totalRows <= chunkSize) {
-            return jdbcTemplate.execute((Connection connection) ->
+            return jt.execute((Connection connection) ->
                 instrumentationSupport.withAction(connection, "dynamic_crud_pkg", request.operation().name(),
                     () -> executeBulkInternal(connection, request))
             );
@@ -146,7 +153,7 @@ public class DynamicCrudGateway {
                     chunkRows
             );
 
-            DynamicCrudResponse response = jdbcTemplate.execute((Connection connection) ->
+            DynamicCrudResponse response = jt.execute((Connection connection) ->
                 instrumentationSupport.withAction(connection, "dynamic_crud_pkg", request.operation().name(),
                     () -> executeBulkInternal(connection, chunkRequest))
             );

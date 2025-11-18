@@ -4,5 +4,6 @@
 export const environment = {
   production: true,
   graphqlEndpoint: process.env['GRAPHQL_ENDPOINT'] || 'https://your-production-domain.com/graphql',
-  apiUrl: process.env['API_URL'] || 'https://your-production-domain.com'
+  apiUrl: process.env['API_URL'] || 'https://your-production-domain.com',
+  enableHydration: true
 };

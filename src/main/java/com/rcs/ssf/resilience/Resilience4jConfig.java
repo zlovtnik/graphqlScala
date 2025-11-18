@@ -61,7 +61,6 @@ public class Resilience4jConfig {
                         .waitDurationInOpenState(Duration.ofSeconds(30))
                         .permittedNumberOfCallsInHalfOpenState(3)
                         .minimumNumberOfCalls(50) // Need 50 calls before calculating rate
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -82,7 +81,6 @@ public class Resilience4jConfig {
                         .waitDurationInOpenState(Duration.ofSeconds(30))
                         .permittedNumberOfCallsInHalfOpenState(3)
                         .minimumNumberOfCalls(50)
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -103,7 +101,6 @@ public class Resilience4jConfig {
                         .waitDurationInOpenState(Duration.ofSeconds(60))
                         .permittedNumberOfCallsInHalfOpenState(3)
                         .minimumNumberOfCalls(50)
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -124,7 +121,6 @@ public class Resilience4jConfig {
                         .waitDurationInOpenState(Duration.ofSeconds(15))
                         .permittedNumberOfCallsInHalfOpenState(2) // Conservative recovery
                         .minimumNumberOfCalls(50)
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -145,7 +141,6 @@ public class Resilience4jConfig {
                         .waitDurationInOpenState(Duration.ofSeconds(45))
                         .permittedNumberOfCallsInHalfOpenState(3)
                         .minimumNumberOfCalls(50)
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -168,7 +163,6 @@ public class Resilience4jConfig {
                         .intervalFunction(
                                 io.github.resilience4j.core.IntervalFunction
                                         .ofExponentialBackoff(100, 2, 1000))
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -183,7 +177,6 @@ public class Resilience4jConfig {
                         .intervalFunction(
                                 io.github.resilience4j.core.IntervalFunction
                                         .ofExponentialBackoff(50, 2, 500))
-                        .recordException(this::isRetryableException)
                         .build());
     }
 
@@ -198,7 +191,6 @@ public class Resilience4jConfig {
                         .intervalFunction(
                                 io.github.resilience4j.core.IntervalFunction
                                         .ofExponentialBackoff(200, 2, 2000))
-                        .recordException(this::isRetryableException)
                         .build());
     }
 

@@ -1,19 +1,9 @@
 CREATE OR REPLACE PACKAGE BODY user_pkg AS
-    -- Helper function to generate UUID
-    FUNCTION generate_uuid RETURN VARCHAR2 IS
-        v_uuid RAW(16);
-        v_hex VARCHAR2(32);
-    BEGIN
-        v_uuid := SYS_GUID();
-        v_hex := RAWTOHEX(v_uuid);
-        RETURN LOWER(SUBSTR(v_hex, 1, 8) || '-' || SUBSTR(v_hex, 9, 4) || '-' || SUBSTR(v_hex, 13, 4) || '-' || SUBSTR(v_hex, 17, 4) || '-' || SUBSTR(v_hex, 21, 12));
-    END generate_uuid;
-
     PROCEDURE create_user(
         p_username IN VARCHAR2,
         p_password IN VARCHAR2,
         p_email IN VARCHAR2,
-        p_user_id OUT VARCHAR2
+        p_user_id OUT users.id%TYPE
     ) IS
         v_count NUMBER;
     BEGIN
@@ -37,12 +27,10 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             RAISE_APPLICATION_ERROR(-20002, 'Email already exists');
         END IF;
 
-        -- Generate UUID
-        p_user_id := generate_uuid();
-
         -- Insert user (password is already hashed by application)
-        INSERT INTO users (id, username, password, email, created_at, updated_at)
-        VALUES (p_user_id, p_username, p_password, p_email, SYSTIMESTAMP, SYSTIMESTAMP);
+        INSERT INTO users (username, password, email, created_at, updated_at)
+        VALUES (p_username, p_password, p_email, SYSTIMESTAMP, SYSTIMESTAMP)
+        RETURNING id INTO p_user_id;
 
         COMMIT;
     EXCEPTION
@@ -51,7 +39,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             RAISE;
     END create_user;
 
-    FUNCTION get_user_by_id(p_user_id IN VARCHAR2) RETURN SYS_REFCURSOR IS
+    FUNCTION get_user_by_id(p_user_id IN users.id%TYPE) RETURN SYS_REFCURSOR IS
         v_cursor SYS_REFCURSOR;
     BEGIN
         OPEN v_cursor FOR
@@ -82,7 +70,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
     END get_user_by_email;
 
     PROCEDURE update_user(
-        p_user_id IN VARCHAR2,
+        p_user_id IN users.id%TYPE,
         p_username IN VARCHAR2 DEFAULT NULL,
         p_email IN VARCHAR2 DEFAULT NULL,
         p_password IN VARCHAR2 DEFAULT NULL
@@ -118,7 +106,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             RAISE;
     END update_user;
 
-    FUNCTION delete_user(p_user_id IN VARCHAR2) RETURN NUMBER IS
+    FUNCTION delete_user(p_user_id IN users.id%TYPE) RETURN NUMBER IS
         v_count NUMBER;
         v_deleted NUMBER;
     BEGIN
@@ -154,6 +142,25 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         RETURN v_count > 0;
     END email_exists;
 
+    PROCEDURE log_login_error(
+        p_username IN VARCHAR2,
+        p_success IN NUMBER,
+        p_error_code IN NUMBER,
+        p_error_msg IN VARCHAR2,
+        p_procedure_name IN VARCHAR2 DEFAULT 'log_login_attempt',
+        p_error_level IN VARCHAR2 DEFAULT 'ERROR'
+    ) IS
+        PRAGMA AUTONOMOUS_TRANSACTION;
+        v_context VARCHAR2(4000);
+    BEGIN
+        v_context := 'Logging login attempt for user: ' || p_username || ', success: ' || TO_CHAR(p_success);
+        -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name)
+        VALUES (p_error_code, p_error_msg, v_context, p_procedure_name);
+        COMMIT;
+    END log_login_error;
+
     PROCEDURE log_login_attempt(
         p_username IN VARCHAR2,
         p_success IN NUMBER,
@@ -161,9 +168,11 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_user_agent IN VARCHAR2 DEFAULT NULL,
         p_failure_reason IN VARCHAR2 DEFAULT NULL
     ) IS
+        PRAGMA AUTONOMOUS_TRANSACTION;
     BEGIN
-        INSERT INTO audit_login_attempts (id, username, success, ip_address, user_agent, failure_reason)
-        VALUES (audit_seq.NEXTVAL, p_username, p_success, p_ip_address, p_user_agent, p_failure_reason);
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_login_attempts (username, success, ip_address, user_agent, failure_reason)
+        VALUES (p_username, p_success, p_ip_address, p_user_agent, p_failure_reason);
         COMMIT;
     EXCEPTION
         -- Targeted exception handling: swallow only benign errors (e.g., missing audit table ORA-00942)
@@ -173,13 +182,8 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
                 NULL;  -- Swallow missing audit table error to avoid failing login process
             ELSE
                 -- Log unexpected errors and re-raise
-                DECLARE
-                    PRAGMA AUTONOMOUS_TRANSACTION;
                 BEGIN
-                    INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
-                    VALUES (audit_seq.NEXTVAL, TO_CHAR(SQLCODE), SUBSTR(SQLERRM, 1, 4000),
-                            'Logging login attempt for user: ' || p_username || ', success: ' || p_success, 'log_login_attempt');
-                    COMMIT;
+                    log_login_error(p_username, p_success, SQLCODE, SUBSTR(SQLERRM, 1, 4000));
                 EXCEPTION
                     WHEN OTHERS THEN
                         NULL;  -- Guard logging itself to prevent propagation
@@ -188,30 +192,76 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
             END IF;
     END log_login_attempt;
 
+    PROCEDURE log_session_error(
+        p_user_id IN users.id%TYPE,
+        p_token_hash IN VARCHAR2,
+        p_error_code IN NUMBER,
+        p_error_msg IN VARCHAR2,
+        p_procedure_name IN VARCHAR2 DEFAULT 'log_session_start',
+        p_error_level IN VARCHAR2 DEFAULT 'ERROR'
+    ) IS
+        PRAGMA AUTONOMOUS_TRANSACTION;
+        v_context VARCHAR2(4000);
+    BEGIN
+        v_context := 'Logging session start for user: ' || NVL(TO_CHAR(p_user_id), 'N/A') || ', token_hash: ' || p_token_hash;
+        -- Use direct static INSERT instead of EXECUTE IMMEDIATE for better performance, readability, and safety
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_error_log (error_code, error_message, context, procedure_name, user_id)
+        VALUES (p_error_code, p_error_msg, v_context, p_procedure_name, p_user_id);
+        COMMIT;
+    END log_session_error;
+
     PROCEDURE log_session_start(
-        p_user_id IN VARCHAR2,
+        p_user_id IN users.id%TYPE,
         p_token_hash IN VARCHAR2,
         p_ip_address IN VARCHAR2 DEFAULT NULL,
         p_user_agent IN VARCHAR2 DEFAULT NULL
     ) IS
     BEGIN
-        INSERT INTO audit_sessions (id, user_id, token_hash, ip_address, user_agent)
-        VALUES (audit_seq.NEXTVAL, p_user_id, p_token_hash, p_ip_address, p_user_agent);
+        -- id auto-generated via GENERATED ALWAYS AS IDENTITY
+        INSERT INTO audit_sessions (user_id, token_hash, ip_address, user_agent)
+        VALUES (p_user_id, p_token_hash, p_ip_address, p_user_agent);
         COMMIT;
     EXCEPTION
         WHEN OTHERS THEN
             -- Log unexpected errors to audit_error_log while preserving session flow
-            DECLARE
-                PRAGMA AUTONOMOUS_TRANSACTION;
             BEGIN
-                INSERT INTO audit_error_log (id, error_code, error_message, context, procedure_name)
-                VALUES (audit_seq.NEXTVAL, TO_CHAR(SQLCODE), SUBSTR(SQLERRM, 1, 4000),
-                        'Logging session start for user: ' || p_user_id || ', token_hash: ' || p_token_hash, 'log_session_start');
-                COMMIT;
+                log_session_error(p_user_id, p_token_hash, SQLCODE, SUBSTR(SQLERRM, 1, 4000));
             EXCEPTION
                 WHEN OTHERS THEN
                     NULL;  -- Guard logging itself to prevent propagation
             END;
     END log_session_start;
+
+    PROCEDURE log_mfa_event(
+        p_user_id IN users.id%TYPE,
+        p_admin_id IN users.id%TYPE DEFAULT NULL,
+        p_event_type IN VARCHAR2,
+        p_mfa_method IN VARCHAR2 DEFAULT NULL,
+        p_status IN VARCHAR2,
+        p_details IN VARCHAR2 DEFAULT NULL,
+        p_ip_address IN VARCHAR2 DEFAULT NULL,
+        p_user_agent IN VARCHAR2 DEFAULT NULL
+    ) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    BEGIN
+        -- Log MFA events to dedicated audit_mfa_events table with structured columns
+        INSERT INTO AUDIT_MFA_EVENTS (user_id, admin_id, event_type, mfa_method, status, details, ip_address, user_agent, created_at)
+        VALUES (p_user_id, p_admin_id, p_event_type, p_mfa_method, p_status, p_details, p_ip_address, p_user_agent, SYSTIMESTAMP);
+        COMMIT;
+    EXCEPTION
+        WHEN OTHERS THEN
+            IF SQLCODE = -942 THEN  -- ORA-00942: table or view does not exist
+                NULL;  -- Swallow missing audit table error
+            ELSE
+                BEGIN
+                    log_session_error(p_user_id, 'N/A', SQLCODE, SUBSTR(SQLERRM, 1, 4000), 'log_mfa_event');
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        NULL;  -- Guard logging itself to prevent propagation
+                END;
+                RAISE;
+            END IF;
+    END log_mfa_event;
 END user_pkg;
 /

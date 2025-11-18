@@ -10,7 +10,12 @@ DECLARE
         'AUDIT_DYNAMIC_CRUD',
         'AUDIT_LOGIN_ATTEMPTS',
         'AUDIT_SESSIONS',
-        'AUDIT_ERROR_LOG'
+        'AUDIT_ERROR_LOG',
+        'AUDIT_GRAPHQL_COMPLEXITY',
+        'AUDIT_GRAPHQL_EXECUTION_PLANS',
+        'AUDIT_CIRCUIT_BREAKER_EVENTS',
+        'AUDIT_HTTP_COMPRESSION',
+        'AUDIT_MFA_EVENTS'
     );
     c_future_months CONSTANT PLS_INTEGER := 3;
     c_archive_threshold_months CONSTANT PLS_INTEGER := 12;

@@ -2,10 +2,12 @@ package com.rcs.ssf.service;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Expiry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
@@ -32,6 +34,11 @@ public class CacheService {
     private final Cache<String, Object> queryResultCache;
     private final Cache<String, Object> sessionCache;
     private final CacheConfiguration cacheConfiguration;
+    
+    // Maps to store per-entry TTL durations in nanoseconds (not absolute expiration times)
+    // Entry not present = use default cache TTL; Long.MAX_VALUE = never expire
+    private final ConcurrentHashMap<String, Long> queryResultCacheExpirations = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> sessionCacheExpirations = new ConcurrentHashMap<>();
 
     /**
      * Constructor that initializes caches with configuration from application.yml.
@@ -43,23 +50,81 @@ public class CacheService {
 
         // Query result cache: configured via application.yml (cache.config.query-result-cache)
         CacheConfiguration.CacheProperties queryConfig = cacheConfiguration.getQueryResultCache();
+        long queryTtlMinutes = queryConfig.getTtlMinutes();
         this.queryResultCache = Caffeine.newBuilder()
             .maximumSize(queryConfig.getMaxSize())
-            .expireAfterWrite(queryConfig.getTtlMinutes(), TimeUnit.MINUTES)
+            .expireAfter(new Expiry<String, Object>() {
+                @Override
+                public long expireAfterCreate(String key, Object value, long now) {
+                    Long customExpiration = queryResultCacheExpirations.get(key);
+                    if (customExpiration != null && customExpiration == Long.MAX_VALUE) {
+                        // No expiration
+                        return Long.MAX_VALUE;
+                    } else if (customExpiration != null) {
+                        // Custom per-entry TTL
+                        return customExpiration;
+                    }
+                    // Use default TTL
+                    return TimeUnit.MINUTES.toNanos(queryTtlMinutes);
+                }
+                
+                @Override
+                public long expireAfterUpdate(String key, Object value, long now, long currentDurationNanos) {
+                    return expireAfterCreate(key, value, now);
+                }
+                
+                @Override
+                public long expireAfterRead(String key, Object value, long now, long currentDurationNanos) {
+                    return currentDurationNanos;
+                }
+            })
+            .removalListener((key, value, cause) -> {
+                // Clean up the expiration map when entry is removed
+                queryResultCacheExpirations.remove((String) key);
+            })
             .recordStats()
             .build();
 
         // Session cache: configured via application.yml (cache.config.session-cache)
         CacheConfiguration.CacheProperties sessionConfig = cacheConfiguration.getSessionCache();
+        long sessionTtlMinutes = sessionConfig.getTtlMinutes();
         this.sessionCache = Caffeine.newBuilder()
             .maximumSize(sessionConfig.getMaxSize())
-            .expireAfterWrite(sessionConfig.getTtlMinutes(), TimeUnit.MINUTES)
+            .expireAfter(new Expiry<String, Object>() {
+                @Override
+                public long expireAfterCreate(String key, Object value, long now) {
+                    Long customExpiration = sessionCacheExpirations.get(key);
+                    if (customExpiration != null && customExpiration == Long.MAX_VALUE) {
+                        // No expiration
+                        return Long.MAX_VALUE;
+                    } else if (customExpiration != null) {
+                        // Custom per-entry TTL
+                        return customExpiration;
+                    }
+                    // Use default TTL
+                    return TimeUnit.MINUTES.toNanos(sessionTtlMinutes);
+                }
+                
+                @Override
+                public long expireAfterUpdate(String key, Object value, long now, long currentDurationNanos) {
+                    return expireAfterCreate(key, value, now);
+                }
+                
+                @Override
+                public long expireAfterRead(String key, Object value, long now, long currentDurationNanos) {
+                    return currentDurationNanos;
+                }
+            })
+            .removalListener((key, value, cause) -> {
+                // Clean up the expiration map when entry is removed
+                sessionCacheExpirations.remove((String) key);
+            })
             .recordStats()
             .build();
 
         log.info("CacheService initialized - Query result cache: maxSize={}, ttlMinutes={}; Session cache: maxSize={}, ttlMinutes={}",
-            queryConfig.getMaxSize(), queryConfig.getTtlMinutes(),
-            sessionConfig.getMaxSize(), sessionConfig.getTtlMinutes());
+            queryConfig.getMaxSize(), queryTtlMinutes,
+            sessionConfig.getMaxSize(), sessionTtlMinutes);
     }
 
 
@@ -191,13 +256,68 @@ public class CacheService {
      * Put a value into cache explicitly.
      */
     public void put(String cacheKey, Object value, String cacheName) {
+        putWithTtl(cacheKey, value, cacheName, 0);
+    }
+
+    /**
+     * Put a value into cache with custom TTL.
+     * 
+     * @param cacheKey the cache key
+     * @param value the value to cache
+     * @param cacheName the cache name
+     * @param ttlSeconds TTL in seconds: 0 = use default, -1 = no expiration, >0 = custom TTL
+     * @throws IllegalArgumentException if ttlSeconds is invalid (< -1) or would overflow TimeUnit conversion
+     */
+    public void putWithTtl(String cacheKey, Object value, String cacheName, long ttlSeconds) {
         Objects.requireNonNull(cacheKey, "Cache key cannot be null");
         Objects.requireNonNull(value, "Value cannot be null");
         Objects.requireNonNull(cacheName, "Cache name cannot be null");
 
+        // Fail fast for obviously invalid TTL values
+        if (ttlSeconds < -1) {
+            throw new IllegalArgumentException("Invalid ttlSeconds: " + ttlSeconds + " (must be 0, -1, or positive)");
+        }
+
+        // Prevent overflow when converting to nanoseconds (Long.MAX_VALUE / 1e9 ≈ 292 years)
+        if (ttlSeconds > 0 && ttlSeconds > TimeUnit.SECONDS.convert(Long.MAX_VALUE, TimeUnit.NANOSECONDS)) {
+            throw new IllegalArgumentException("ttlSeconds " + ttlSeconds + " would overflow when converted to nanoseconds");
+        }
+
         Cache<String, Object> cache = getCacheByName(cacheName);
-        cache.put(cacheKey, value);
-        log.debug("Cached value for key: {} in cache: {}", cacheKey, cacheName);
+        ConcurrentHashMap<String, Long> expirationMap = getExpirationMapForCache(cacheName);
+        
+        if (ttlSeconds == 0) {
+            // Use default TTL - remove from expiration map if present
+            expirationMap.remove(cacheKey);
+            cache.put(cacheKey, value);
+        } else if (ttlSeconds == -1) {
+            // No expiration - store sentinel value
+            expirationMap.put(cacheKey, Long.MAX_VALUE);
+            cache.put(cacheKey, value);
+        } else {
+            // Custom TTL - store duration in nanoseconds
+            long expirationNanos = TimeUnit.SECONDS.toNanos(ttlSeconds);
+            expirationMap.put(cacheKey, expirationNanos);
+            cache.put(cacheKey, value);
+        }
+        
+        log.debug("Cached value for key: {} in cache: {} with ttlSeconds: {}", cacheKey, cacheName, ttlSeconds);
+    }
+
+    /**
+     * Get the expiration map for a given cache name.
+     * 
+     * @param cacheName the cache name
+     * @return the expiration map for the cache
+     */
+    private ConcurrentHashMap<String, Long> getExpirationMapForCache(String cacheName) {
+        if (QUERY_RESULT_CACHE.equals(cacheName)) {
+            return queryResultCacheExpirations;
+        } else if (SESSION_CACHE.equals(cacheName)) {
+            return sessionCacheExpirations;
+        } else {
+            throw new IllegalArgumentException("Unknown cache name: " + cacheName);
+        }
     }
 
     /**
@@ -266,19 +386,31 @@ public class CacheService {
      * 
      * @param cacheName the name of the cache (e.g., {@link #QUERY_RESULT_CACHE}, {@link #SESSION_CACHE})
      * @return the configured maximum size from application.yml
+     * @throws IllegalArgumentException if cacheName is unknown (fail-fast behavior)
      */
     private long getConfiguredMaxSize(String cacheName) {
-        if (QUERY_RESULT_CACHE.equals(cacheName)) {
-            return cacheConfiguration.getQueryResultCache().getMaxSize();
-        } else if (SESSION_CACHE.equals(cacheName)) {
-            return cacheConfiguration.getSessionCache().getMaxSize();
-        } else {
-            // Default fallback for unknown cache names
-            log.warn("Unknown cache name: {}, using default max size of 1000", cacheName);
-            return 1000;
-        }
+        return switch (cacheName) {
+            case QUERY_RESULT_CACHE -> cacheConfiguration.getQueryResultCache().getMaxSize();
+            case SESSION_CACHE -> cacheConfiguration.getSessionCache().getMaxSize();
+            default -> throw new IllegalArgumentException("Unknown cache name: " + cacheName);
+        };
     }
 
+    /**
+     * Get the configured maximum size for a cache (public variant for consistency and fail-fast behavior).
+     *
+     * @param cacheName the cache name (must be a known cache constant)
+     * @return the maximum size in entries
+     * @throws IllegalArgumentException if cacheName is unknown
+     */
+    public long getConfiguredMaxSizePublic(String cacheName) {
+        Objects.requireNonNull(cacheName, "Cache name cannot be null");
+        return switch (cacheName) {
+            case QUERY_RESULT_CACHE -> cacheConfiguration.getQueryResultCache().getMaxSize();
+            case SESSION_CACHE -> cacheConfiguration.getSessionCache().getMaxSize();
+            default -> throw new IllegalArgumentException("Unknown cache name: " + cacheName);
+        };
+    }
 
     /**
      * Helper method to get the appropriate cache instance.
@@ -290,10 +422,7 @@ public class CacheService {
         return switch (cacheName) {
             case SESSION_CACHE -> sessionCache;
             case QUERY_RESULT_CACHE -> queryResultCache;
-            default -> {
-                log.warn("Unknown cache name: {}, defaulting to query result cache", cacheName);
-                yield queryResultCache;
-            }
+            default -> throw new IllegalArgumentException("Unknown cache name: " + cacheName);
         };
     }
 

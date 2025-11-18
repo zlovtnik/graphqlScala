@@ -1,10 +1,20 @@
 spring:
   application:
     name: ssf
+  # DataSourceAutoConfiguration is required for JDBC DataSource creation (used by AuditService).
+  # R2DBC configuration is handled separately via custom ReactiveDataSourceConfiguration bean.
+  # Both JDBC and R2DBC are used: JDBC for blocking audit operations, R2DBC for reactive GraphQL endpoints.
+  
+  # ============================================================================
+  # ACTIVE - JDBC MODE: Spring DataSource is configured for JDBC operations
+  # (AuditService and synchronous repository access).
+  # R2DBC is configured separately via custom ReactiveDataSourceConfiguration bean
+  # for reactive GraphQL endpoints. Both coexist in the application.
+  # ============================================================================
   datasource:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
     driver-class-name: oracle.jdbc.OracleDriver
-    username: ${ORACLE_USER:ssfuser}
+    username: ${ORACLE_USER:APP_USER}
     password: ${ORACLE_PASSWORD:ssfpassword}
     hikari:
       connection-timeout: 30000
@@ -23,6 +33,12 @@ spring:
         oracle.net.READ_TIMEOUT: 60000
         oracle.jdbc.implicitStatementCacheSize: 25
         oracle.jdbc.maxCachedBufferSize: 65536
+  
+  # ============================================================================
+  # HIBERNATION/JPA CONFIGURATION: Only used if JDBC operations require JPA/Hibernate.
+  # Currently R2DBC (reactive) is the primary data access layer for GraphQL endpoints.
+  # This configuration is kept for potential JDBC-based JPA operations.
+  # ============================================================================
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
     hibernate:
@@ -46,6 +62,13 @@ spring:
       password: ${REDIS_PASSWORD}
       timeout: 2000ms
       database: 0
+    relational:
+      # ANSI enables ANSI SQL identifier processing (which includes double-quote quoting for identifiers).
+      # If you need to disable automatic identifier quoting entirely, use a custom R2DBC dialect decorator
+      # that overrides getIdentifierProcessing() to return IdentifierProcessing.NONE.
+      # See the r2dbcDialect() method in ReactiveDataSourceConfiguration.java for the decorator pattern.
+      # Oracle treats lowercase identifiers as case-insensitive by default.
+      naming-strategy: ANSI
 
 # Cache Service Configuration
 # Configures individual cache behavior (query result cache and session cache)
@@ -100,6 +123,23 @@ app:
     url: http://localhost:9000
     access-key: ${MINIO_ACCESS_KEY}
     secret-key: ${MINIO_SECRET_KEY}
+  r2dbc:
+    # ACTIVE R2DBC configuration: Read by custom ReactiveDataSourceConfiguration bean
+    # (Not Spring Boot's auto-configuration). These properties override any spring.r2dbc settings.
+    # To switch R2DBC drivers, update the 'driver' property below (e.g., "postgresql", "mysql", "h2").
+    host: ${ORACLE_HOST:localhost}
+    port: ${ORACLE_PORT:1521}
+    database: ${ORACLE_DB:FREEPDB1}
+    username: ${ORACLE_USER:APP_USER}
+    password: ${ORACLE_PASSWORD:ssfpassword}
+    driver: oracle  # Set to "postgresql", "mysql", "h2", etc. to use a different R2DBC driver
+    pool:
+      min-idle: 10
+      max-size: 80              # Keep aligned with Oracle capacity and <4x Hikari max
+      queue-depth: 150          # Prevent deep backlog from exhausting DB sessions
+      idle-timeout: PT30M
+  datasource:
+    enabled: true  # Enable JDBC DataSource for AuditService and other blocking operations
 
 ssf:
   cache:

@@ -1,8 +1,9 @@
 -- The XE build that powers local development does not expose partitioning or
 -- advanced compression. Keep the table definition simple so bootstrap can run
 -- everywhere while higher editions can layer features via regular migrations.
+-- Oracle 12c+ supports GENERATED AS IDENTITY for automatic PK generation.
 CREATE TABLE audit_dynamic_crud (
-    id NUMBER PRIMARY KEY,
+    id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     table_name VARCHAR2(128) NOT NULL,
     operation VARCHAR2(10) NOT NULL,
     actor VARCHAR2(128),

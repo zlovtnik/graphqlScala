@@ -1,8 +1,32 @@
 #!/bin/bash
 
+# WARNING: Do NOT use default credentials in production.
+# The APP_USER and DB_USER_PASSWORD must be set to a strong, unique password
+# for production deployments. This script enforces a runtime safeguard that
+# prevents starting in production when a default or missing password is detected.
+
 echo "=== Starting Oracle Database Initialization ==="
 
-DB_PASSWORD=${DB_USER_PASSWORD:-ssfuser}
+# Set ENVIRONMENT default before any conditional check to prevent undefined variable issues
+ENVIRONMENT=${ENVIRONMENT:-development}
+
+# Use DB_USER_PASSWORD for the application user. In production, we require DB_USER_PASSWORD
+# to be explicitly set to a strong password; in non-production we fall back to APP_USER for
+# convenience.
+if [[ "${ENVIRONMENT,,}" == "production" ]]; then
+  DB_PASSWORD="${DB_USER_PASSWORD}"
+else
+  DB_PASSWORD="${DB_USER_PASSWORD:-APP_USER}"
+fi
+
+# Protect production environments from weak/no password.
+if [[ "${ENVIRONMENT,,}" == "production" ]]; then
+  if [[ -z "${DB_USER_PASSWORD}" || "${DB_USER_PASSWORD}" == "APP_USER" || "${DB_USER_PASSWORD}" == "app_user" ]]; then
+    echo "ERROR: DB_USER_PASSWORD must be set to a strong, unique value in production."
+    echo "Set DB_USER_PASSWORD to a secure value (do not use 'APP_USER')."
+    exit 1
+  fi
+fi
 RETRIES=0
 MAX_RETRIES=60
 
@@ -19,7 +43,6 @@ if [[ "$DB_PASSWORD" == *"'"* ]]; then
 fi
 
 # Password is used as-is; validation above ensures no problematic characters
-ESCAPED_PASSWORD=${DB_PASSWORD}
 
 # Wait for Oracle to be fully ready
 echo "Waiting for Oracle database to start..."
@@ -41,6 +64,12 @@ fi
 sleep 2
 
 # Create application user and tablespace with proper error handling
+# SECURITY NOTE: This script runs during container initialization in a controlled environment.
+# The password is passed via environment variable and is ephemeral—it exists only in this
+# initialization phase and is not persisted in the container after startup. The application
+# connects to Oracle using the same credentials stored in the application's runtime secrets.
+# For production deployments, ensure the host running this container has appropriate access
+# controls and secret management. See docs/SECURITY_ARCHITECTURE.md for full details.
 echo "=== Creating application user and tablespace ==="
 
 "$ORACLE_HOME/bin/sqlplus" -s / as sysdba > /tmp/init_user.log 2>&1 <<EOFUSER
@@ -69,29 +98,29 @@ DECLARE
 BEGIN
   SELECT COUNT(*) INTO v_user_exists 
   FROM dba_users 
-  WHERE username = 'SSFUSER';
+  WHERE username = 'APP_USER';
   
   IF v_user_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE USER ssfuser IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
-    DBMS_OUTPUT.PUT_LINE('User ssfuser created');
+    EXECUTE IMMEDIATE 'CREATE USER APP_USER IDENTIFIED BY ' || CHR(34) || '${DB_PASSWORD}' || CHR(34) || ' DEFAULT TABLESPACE ssfspace';
+    DBMS_OUTPUT.PUT_LINE('User APP_USER created');
   ELSE
-    DBMS_OUTPUT.PUT_LINE('User ssfuser already exists');
+    DBMS_OUTPUT.PUT_LINE('User APP_USER already exists');
   END IF;
 
-  EXECUTE IMMEDIATE 'ALTER USER ssfuser IDENTIFIED BY ' || CHR(34) || '${ESCAPED_PASSWORD}' || CHR(34);
-  DBMS_OUTPUT.PUT_LINE('User ssfuser password synchronized with DB_USER_PASSWORD');
+  EXECUTE IMMEDIATE 'ALTER USER APP_USER IDENTIFIED BY ' || CHR(34) || '${DB_PASSWORD}' || CHR(34);
+  DBMS_OUTPUT.PUT_LINE('User APP_USER password synchronized with DB_USER_PASSWORD');
 END;
 /
 
 -- Grant privileges (execute unconditionally as they may be revoked)
 DECLARE
 BEGIN
-  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT CREATE TABLE TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT CREATE SEQUENCE TO ssfuser';
-  EXECUTE IMMEDIATE 'GRANT CREATE INDEX TO ssfuser';
-  EXECUTE IMMEDIATE 'ALTER USER ssfuser QUOTA UNLIMITED ON ssfspace';
-  DBMS_OUTPUT.PUT_LINE('Privileges granted to ssfuser');
+  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO APP_USER';
+  EXECUTE IMMEDIATE 'GRANT CREATE TABLE TO APP_USER';
+  EXECUTE IMMEDIATE 'GRANT CREATE SEQUENCE TO APP_USER';
+  EXECUTE IMMEDIATE 'GRANT CREATE INDEX TO APP_USER';
+  EXECUTE IMMEDIATE 'ALTER USER APP_USER QUOTA UNLIMITED ON ssfspace';
+  DBMS_OUTPUT.PUT_LINE('Privileges granted to APP_USER');
 EXCEPTION
   WHEN OTHERS THEN
     IF SQLCODE = -1931 OR SQLCODE = -4042 THEN
@@ -115,7 +144,17 @@ sleep 2
 # Initialize schema and create default user if none exists
 echo "=== Initializing database schema ==="
 
-"$ORACLE_HOME/bin/sqlplus" -s ssfuser/"$DB_PASSWORD"@FREEPDB1 > /tmp/init_schema.log 2>&1 <<'EOFSCHEMA'
+# Create a secure temporary password file to avoid password exposure in process listings
+TEMP_PWD_FILE=$(mktemp)
+chmod 600 "$TEMP_PWD_FILE"
+printf '%s' "$DB_PASSWORD" > "$TEMP_PWD_FILE"
+
+# Read password from temp file into shell variable to avoid exposing it in process args
+read -r DB_PASSWORD_TEMP < "$TEMP_PWD_FILE"
+
+"$ORACLE_HOME/bin/sqlplus" -s /nolog > /tmp/init_schema.log 2>&1 <<EOFSCHEMA
+CONNECT APP_USER/$DB_PASSWORD_TEMP@FREEPDB1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 -- Create sequences
 DECLARE
   v_seq_exists NUMBER := 0;
@@ -143,7 +182,7 @@ BEGIN
   
   IF v_table_exists = 0 THEN
     EXECUTE IMMEDIATE 'CREATE TABLE users (
-      id VARCHAR2(36) PRIMARY KEY,
+      id NUMBER(19) GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
       username VARCHAR2(255) NOT NULL UNIQUE,
       password VARCHAR2(255) NOT NULL,
       email VARCHAR2(255) NOT NULL UNIQUE,
@@ -164,11 +203,10 @@ BEGIN
   SELECT COUNT(*) INTO v_count FROM users;
   
   IF v_count = 0 THEN
-    INSERT INTO users (id, username, password, email, created_at, updated_at)
+    INSERT INTO users (username, password, email, created_at, updated_at)
     VALUES (
-      SUBSTR(SYS_GUID(), 1, 36),
       'admin',
-      '$2a$10$W9r82p/yEdCEXXx/5i5qDOPTJWvEoB8nLvZN3MfZ7H/pZH8cI7Z0u',
+      '$2a$12$K9Bd8ZBY6vQmJK8.5LZ/Oe9g.L7eKq5m3H9N2X4kR1vP8Q6tJ0gNm',
       'admin@example.com',
       SYSTIMESTAMP,
       SYSTIMESTAMP
@@ -191,4 +229,10 @@ if [ $? -ne 0 ]; then
 fi
 
 cat /tmp/init_schema.log
+
+# Securely clean up temporary password file and sensitive variables
+rm -f "$TEMP_PWD_FILE"
+unset DB_PASSWORD_TEMP
+unset DB_PASSWORD
+
 echo "=== Database initialization completed successfully ==="

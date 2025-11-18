@@ -7,8 +7,6 @@ import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.stereotype.Controller;
 
-import java.util.UUID;
-
 @Controller
 public class UserQuery {
 
@@ -16,7 +14,7 @@ public class UserQuery {
     private UserService userService;
 
     @QueryMapping
-    public User getUserById(@Argument UUID id) {
+    public User getUserById(@Argument Long id) {
         return userService.findById(id).orElse(null);
     }
 

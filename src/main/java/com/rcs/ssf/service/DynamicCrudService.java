@@ -5,10 +5,10 @@ import com.rcs.ssf.dto.DynamicCrudResponseDto;
 import com.rcs.ssf.dynamic.*;
 import com.rcs.ssf.dynamic.streaming.QueryStreamOptions;
 import com.rcs.ssf.dynamic.streaming.QueryStreamingService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.lang.NonNull;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -21,31 +21,29 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+@Slf4j
 @Service
 public class DynamicCrudService {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final Optional<JdbcTemplate> jdbcTemplate;
     private final DynamicCrudGateway dynamicCrudGateway;
     private final QueryStreamingService queryStreamingService;
     private final String requiredRole;
 
     private static final Set<String> ALLOWED_TABLES = Set.of(
-        "audit_login_attempts", "audit_sessions", "audit_dynamic_crud", "audit_error_log"
-    );
+            "audit_login_attempts", "audit_sessions", "audit_dynamic_crud", "audit_error_log");
 
     private static final Set<String> SENSITIVE_COLUMN_NAMES = Set.of(
-        "PASSWORD", "PASSWORD_HASH", "SECRET", "SECRET_KEY", "ACCESS_KEY", "API_KEY", "TOKEN", "REFRESH_TOKEN"
-    );
+            "PASSWORD", "PASSWORD_HASH", "SECRET", "SECRET_KEY", "ACCESS_KEY", "API_KEY", "TOKEN", "REFRESH_TOKEN");
 
     private static final int STREAM_FETCH_SIZE = 250;
 
     public DynamicCrudService(
-        @NonNull DataSource dataSource,
-        DynamicCrudGateway dynamicCrudGateway,
-        QueryStreamingService queryStreamingService,
-        @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole
-    ) {
-        this.jdbcTemplate = new JdbcTemplate(dataSource);
+            Optional<DataSource> dataSource,
+            DynamicCrudGateway dynamicCrudGateway,
+            QueryStreamingService queryStreamingService,
+            @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole) {
+        this.jdbcTemplate = dataSource.map(JdbcTemplate::new);
         this.dynamicCrudGateway = dynamicCrudGateway;
         this.queryStreamingService = queryStreamingService;
         this.requiredRole = requiredRole;
@@ -60,11 +58,12 @@ public class DynamicCrudService {
 
         // Build explicit SELECT list, excluding sensitive columns
         String selectList = columnMetadata.stream()
-            .filter(col -> !SENSITIVE_COLUMN_NAMES.contains(col.getName().toUpperCase(Locale.ROOT)))
-            .map(col -> "\"" + col.getName() + "\"")
-            .collect(Collectors.joining(", "));
+                .filter(col -> !SENSITIVE_COLUMN_NAMES.contains(col.getName().toUpperCase(Locale.ROOT)))
+                .map(col -> "\"" + col.getName() + "\"")
+                .collect(Collectors.joining(", "));
 
-        StringBuilder sql = new StringBuilder("SELECT ").append(selectList).append(" FROM ").append(request.getTableName());
+        StringBuilder sql = new StringBuilder("SELECT ").append(selectList).append(" FROM ")
+                .append(request.getTableName());
         List<String> whereClauses = new ArrayList<>();
         List<Object> filterParams = new ArrayList<>();
 
@@ -72,12 +71,13 @@ public class DynamicCrudService {
             for (DynamicCrudRequest.Filter filter : request.getFilters()) {
                 String columnName = resolveColumnName(columnLookup, filter.getColumn());
                 DynamicCrudRequest.Operator operator = filter.getOperator();
-                
-                // Validate operator is not null (should not happen with @NotNull but be defensive)
+
+                // Validate operator is not null (should not happen with @NotNull but be
+                // defensive)
                 if (operator == null) {
                     throw new IllegalArgumentException("Operator cannot be null in filter");
                 }
-                
+
                 whereClauses.add(columnName + " " + operator.getSymbol() + " ?");
                 filterParams.add(filter.getValue());
             }
@@ -120,8 +120,8 @@ public class DynamicCrudService {
 
         List<Map<String, Object>> rows;
         QueryStreamOptions streamOptions = request.getLimit() != null
-            ? new QueryStreamOptions("dynamic-crud-" + request.getTableName(), STREAM_FETCH_SIZE)
-            : null;
+                ? new QueryStreamOptions("dynamic-crud-" + request.getTableName(), STREAM_FETCH_SIZE)
+                : null;
 
         try (Stream<Map<String, Object>> stream = queryStreamingService.stream(
                 sql.toString(),
@@ -136,11 +136,12 @@ public class DynamicCrudService {
             countSql += " WHERE " + String.join(" AND ", whereClauses);
         }
 
-        Integer totalCount = filterParams.isEmpty()
-            ? jdbcTemplate.queryForObject(countSql, Integer.class)
-            : jdbcTemplate.queryForObject(countSql, Integer.class, filterParams.toArray());
+        Integer totalCount = jdbcTemplate.isEmpty() ? null
+                : (filterParams.isEmpty()
+                        ? jdbcTemplate.get().queryForObject(countSql, Integer.class)
+                        : jdbcTemplate.get().queryForObject(countSql, Integer.class, filterParams.toArray()));
 
-        return new DynamicCrudResponseDto(rows, totalCount != null ? totalCount : 0, columnMetadata);
+        return new DynamicCrudResponseDto(rows, totalCount, columnMetadata, !jdbcTemplate.isEmpty());
     }
 
     public DynamicCrudResponseDto executeMutation(DynamicCrudRequest request) {
@@ -150,14 +151,13 @@ public class DynamicCrudService {
         List<DynamicCrudResponseDto.ColumnMeta> columnMetadata = getColumnMetadata(request.getTableName());
         Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup = buildColumnLookup(columnMetadata);
 
-        List<DynamicCrudColumnValue> columns = request.getColumns() != null ?
-            request.getColumns().stream()
+        List<DynamicCrudColumnValue> columns = request.getColumns() != null ? request.getColumns().stream()
                 .map(c -> new DynamicCrudColumnValue(resolveColumnName(columnLookup, c.getName()), c.getValue()))
                 .toList() : List.of();
 
-        List<DynamicCrudFilter> filters = request.getFilters() != null ?
-            request.getFilters().stream()
-                .map(f -> new DynamicCrudFilter(resolveColumnName(columnLookup, f.getColumn()), f.getOperator().getSymbol(), f.getValue()))
+        List<DynamicCrudFilter> filters = request.getFilters() != null ? request.getFilters().stream()
+                .map(f -> new DynamicCrudFilter(resolveColumnName(columnLookup, f.getColumn()),
+                        f.getOperator().getSymbol(), f.getValue()))
                 .toList() : List.of();
 
         DynamicCrudOperation op = switch (request.getOperation()) {
@@ -168,22 +168,36 @@ public class DynamicCrudService {
         };
 
         com.rcs.ssf.dynamic.DynamicCrudRequest crudRequest = new com.rcs.ssf.dynamic.DynamicCrudRequest(
-            request.getTableName(),
-            op,
-            columns,
-            filters,
-            null,  // audit context set by gateway layer
-            null   // bulkRows
+                request.getTableName(),
+                op,
+                columns,
+                filters,
+                null, // audit context set by gateway layer
+                null // bulkRows
         );
 
         DynamicCrudResponse response = dynamicCrudGateway.execute(crudRequest);
-        return new DynamicCrudResponseDto(List.of(), response.affectedRows(), List.of()); // No rows for mutations, but affected count
+        long affectedRowsLong = response.affectedRows();
+        int affectedRowsInt;
+        try {
+            affectedRowsInt = Math.toIntExact(affectedRowsLong);
+        } catch (ArithmeticException e) {
+            // Log and cap at Integer.MAX_VALUE if overflow occurs
+            affectedRowsInt = Integer.MAX_VALUE;
+            log.warn("Affected rows count {} exceeds Integer.MAX_VALUE, capping at {}", affectedRowsLong,
+                    Integer.MAX_VALUE);
+        }
+        return new DynamicCrudResponseDto(List.of(), affectedRowsInt, List.of(), !jdbcTemplate.isEmpty()); // No rows
+                                                                                                           // for
+                                                                                                           // mutations,
+                                                                                                           // but
+        // affected count
     }
 
     public String[] getAvailableTables() {
         return ALLOWED_TABLES.stream()
-            .sorted()
-            .toArray(String[]::new);
+                .sorted()
+                .toArray(String[]::new);
     }
 
     private void validateTable(String tableName) {
@@ -193,6 +207,10 @@ public class DynamicCrudService {
     }
 
     private List<DynamicCrudResponseDto.ColumnMeta> getColumnMetadata(String tableName) {
+        if (jdbcTemplate.isEmpty()) {
+            throw new IllegalStateException(
+                    "Dynamic CRUD metadata requires a JDBC DataSource/JdbcTemplate; check DB configuration");
+        }
         final String sql = """
                 SELECT utc.column_name,
                        utc.data_type,
@@ -211,31 +229,30 @@ public class DynamicCrudService {
                 ORDER BY utc.column_id
                 """;
 
-        List<DynamicCrudResponseDto.ColumnMeta> columns = jdbcTemplate.query(
-            sql,
-            (rs, rowNum) -> new DynamicCrudResponseDto.ColumnMeta(
-                rs.getString("column_name"),
-                rs.getString("data_type"),
-                "Y".equals(rs.getString("nullable")),
-                "Y".equals(rs.getString("is_primary_key"))
-            ),
-            tableName
-        );
+        List<DynamicCrudResponseDto.ColumnMeta> columns = jdbcTemplate.get().query(
+                sql,
+                (rs, rowNum) -> new DynamicCrudResponseDto.ColumnMeta(
+                        rs.getString("column_name"),
+                        rs.getString("data_type"),
+                        "Y".equals(rs.getString("nullable")),
+                        "Y".equals(rs.getString("is_primary_key"))),
+                tableName);
 
         return columns.stream()
                 .filter(meta -> !isSensitiveColumn(meta.getName()))
                 .collect(Collectors.toList());
     }
 
-    private Map<String, DynamicCrudResponseDto.ColumnMeta> buildColumnLookup(List<DynamicCrudResponseDto.ColumnMeta> columnMetadata) {
+    private Map<String, DynamicCrudResponseDto.ColumnMeta> buildColumnLookup(
+            List<DynamicCrudResponseDto.ColumnMeta> columnMetadata) {
         return columnMetadata.stream()
                 .collect(Collectors.toMap(
                         meta -> meta.getName().toUpperCase(Locale.ROOT),
-                        meta -> meta
-                ));
+                        meta -> meta));
     }
 
-    private String resolveColumnName(Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup, String requestedColumn) {
+    private String resolveColumnName(Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup,
+            String requestedColumn) {
         String normalized = requestedColumn == null ? null : requestedColumn.toUpperCase(Locale.ROOT);
         if (normalized == null || !columnLookup.containsKey(normalized)) {
             throw new IllegalArgumentException("Column not allowed: " + requestedColumn);

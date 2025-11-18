@@ -1,0 +1,360 @@
+{
+  "info": {
+    "name": "SSF GraphQL API",
+    "description": "Comprehensive GraphQL API collection for SSF (Spring GraphQL Scala) project with authentication, user management, and audit operations",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.data && response.data.login && response.data.login.token) {",
+                  "    pm.environment.set('jwt_token', response.data.login.token);",
+                  "    pm.test('Login successful', function () {",
+                  "        pm.expect(response.data.login.token).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"mutation Login($username: String!, $password: String!) { login(username: $username, password: $password) { token } }\", \"variables\": {\"username\": \"{{username}}\", \"password\": \"{{password}}\"}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"mutation { logout }\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Validate Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"query ValidateToken($token: String!) { validateToken(token: $token) }\", \"variables\": {\"token\": \"{{jwt_token}}\"}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Queries",
+      "item": [
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"query { getCurrentUser { id username email } }\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"query GetUserById($id: Long!) { getUserById(id: $id) { id username email } }\", \"variables\": {\"id\": {{user_id}}}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get User by Username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"query GetUserByUsername($username: String!) { getUserByUsername(username: $username) { id username email } }\", \"variables\": {\"username\": \"{{username}}\"}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Mutations",
+      "item": [
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const response = pm.response.json();",
+                  "if (response.data && response.data.createUser && response.data.createUser.id) {",
+                  "    pm.environment.set('user_id', response.data.createUser.id);",
+                  "    pm.test('User created successfully', function () {",
+                  "        pm.expect(response.data.createUser.id).to.be.a('number');",
+                  "        pm.expect(response.data.createUser.username).to.be.a('string');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { id username email } }\", \"variables\": {\"input\": {\"username\": \"newuser_{{$timestamp}}\", \"email\": \"user_{{$timestamp}}@example.com\", \"password\": \"{{user_password}}\"}}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"mutation UpdateUser($id: Long!, $input: UpdateUserInput!) { updateUser(id: $id, input: $input) { id username email } }\", \"variables\": {\"id\": {{user_id}}, \"input\": {\"username\": \"updateduser_{{$timestamp}}\", \"email\": \"updated_{{$timestamp}}@example.com\"}}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"query\": \"mutation DeleteUser($id: Long!) { deleteUser(id: $id) }\", \"variables\": {\"id\": {{user_id}}}}"
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://localhost:8443",
+      "type": "string",
+      "description": "GraphQL endpoint base URL"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "JWT token from login - auto-populated after successful login"
+    },
+    {
+      "key": "user_password",
+      "value": "",
+      "type": "string",
+      "description": "Password for creating users - set to a secure value per developer environment (e.g., MySecurePass123!). Empty by default for security."
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "number",
+      "description": "User ID for operations - auto-populated after successful user creation"
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string",
+      "description": "Username for login/operations - must be set per developer environment for testing"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string",
+      "description": "Password for login - must be set per developer environment for testing"
+    },
+    {
+      "key": "email",
+      "value": "",
+      "type": "string",
+      "description": "Email for user operations - must be set per developer environment for testing"
+    }
+  ],
+  "protocolProfileBehavior": {
+    "disableBodyPruning": false,
+    "strictSSL": true
+  }
+}

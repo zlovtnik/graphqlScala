@@ -1,7 +1,10 @@
+# Custom scalars
+scalar Long
+
 type Query {
     validateToken(token: String!): Boolean!
     getCurrentUser: User
-    getUserById(id: ID!): User
+    getUserById(id: Long!): User
     getUserByUsername(username: String!): User
 }
 
@@ -9,8 +12,8 @@ type Mutation {
     login(username: String!, password: String!): AuthResponse!
     logout: Boolean!
     createUser(input: CreateUserInput!): User!
-    updateUser(id: ID!, input: UpdateUserInput!): User!
-    deleteUser(id: ID!): Boolean!
+    updateUser(id: Long!, input: UpdateUserInput!): User!
+    deleteUser(id: Long!): Boolean!
 }
 
 type AuthResponse {
@@ -18,7 +21,7 @@ type AuthResponse {
 }
 
 type User {
-    id: ID!
+    id: Long!
     username: String!
     email: String
 }

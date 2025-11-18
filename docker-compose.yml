@@ -8,7 +8,7 @@ services:
     environment:
       ORACLE_PWD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
       ORACLE_CHARACTERSET: AL32UTF8
-      DB_USER_PASSWORD: ${ORACLE_PASSWORD:-ssfuser}
+      DB_USER_PASSWORD: ${DB_USER_PASSWORD:-ssfpassword}
     ports:
       - "1521:1521"
       - "5500:5500"
@@ -20,10 +20,10 @@ services:
       - ssf-network
     healthcheck:
       test: ["CMD", "/opt/oracle/healthcheck.sh"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 10
-      start_period: 180s
+      retries: 3
+      start_period: 120s
     shm_size: 2gb
 
   # MinIO Object Storage
@@ -44,7 +44,7 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
-      timeout: 20s
+      timeout: 5s
       retries: 3
 
   # Redis Cache
@@ -60,12 +60,12 @@ services:
       - ssf-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
 
   # Spring Boot Application
-  app:
+  app: 
     build:
       context: .
       dockerfile: Dockerfile
@@ -81,7 +81,7 @@ services:
       ORACLE_HOST: oracle
       ORACLE_PORT: 1521
       ORACLE_DB: FREEPDB1
-      ORACLE_USER: ${ORACLE_USER:-ssfuser}
+      ORACLE_USER: ${ORACLE_USER:-APP_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD:-ssfpassword}
       ORACLE_ADMIN_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-o-cara-esta-pedindo-uma-chave-de-acesso}
@@ -99,8 +99,8 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "https://localhost:8443/actuator/health", "-k"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 5s
+      retries: 3
       start_period: 120s
 
 volumes:

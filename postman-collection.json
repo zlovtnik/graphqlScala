@@ -1,0 +1,449 @@
+{
+  "info": {
+    "name": "SSF GraphQL API",
+    "description": "GraphQL API collection for SSF with authentication, user queries, and mutations.\n\n**IMPORTANT - SECURITY NOTICE:**\nThis collection contains PLACEHOLDER values for credentials (username, password, email, user_id, jwt_token).\nPlease set these values per your developer environment before running requests.\nNever commit real credentials to this collection.\n\n**SSL/TLS for Local Development:**\nIf using a self-signed certificate on localhost, disable SSL verification in Postman:\n1. Go to Settings → SSL certificate verification → OFF\nOR\n2. Import your CA certificate into Postman (Settings → Certificates → CA Certificates)\n\nFor production, always use valid certificates and enable SSL verification.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "protocolProfileBehavior": {
+    "disableBodyPruning": false,
+    "disableUrlEncoding": false,
+    "disableCookies": false,
+    "strictSSL": false
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.login && jsonData.data.login.token) {",
+                  "    pm.environment.set('jwt_token', jsonData.data.login.token);",
+                  "    pm.test('Login successful and token captured', function() {",
+                  "        pm.expect(jsonData.data.login.user).to.have.property('id');",
+                  "        pm.expect(jsonData.data.login.user).to.have.property('username');",
+                  "        pm.expect(jsonData.data.login.token).to.be.a('string');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Login failed - no token in response', function() {",
+                  "        pm.expect(false).to.be.true;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Login($username: String!, $password: String!) {\n  login(username: $username, password: $password) {\n    token\n    user {\n      id\n      username\n      email\n    }\n  }\n}",
+                "variables": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Logout successful', function() {",
+                  "    pm.expect(jsonData.data.logout.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation Logout {\n  logout {\n    success\n    message\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        },
+        {
+          "name": "Validate Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Token is valid', function() {",
+                  "    pm.expect(jsonData.data.validateToken.valid).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query ValidateToken {\n  validateToken {\n    valid\n    expiresAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Queries",
+      "item": [
+        {
+          "name": "Get Current User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('Current user retrieved successfully', function() {",
+                  "    pm.expect(jsonData.data.currentUser).to.have.property('id');",
+                  "    pm.expect(jsonData.data.currentUser).to.have.property('username');",
+                  "    pm.expect(jsonData.data.currentUser).to.have.property('email');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetCurrentUser {\n  currentUser {\n    id\n    username\n    email\n    firstName\n    lastName\n    createdAt\n    updatedAt\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        },
+        {
+          "name": "Get User by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('User retrieved by ID', function() {",
+                  "    pm.expect(jsonData.data.user).to.have.property('id');",
+                  "    pm.expect(String(jsonData.data.user.id)).to.equal(pm.environment.get('user_id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUserById($id: ID!) {\n  user(id: $id) {\n    id\n    username\n    email\n    firstName\n    lastName\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{user_id}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        },
+        {
+          "name": "Get User by Username",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('User retrieved by username', function() {",
+                  "    pm.expect(jsonData.data.userByUsername).to.have.property('username');",
+                  "    pm.expect(jsonData.data.userByUsername.username).to.equal(pm.environment.get('username'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query GetUserByUsername($username: String!) {\n  userByUsername(username: $username) {\n    id\n    username\n    email\n    firstName\n    lastName\n    createdAt\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"username\": \"{{username}}\"\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Mutations",
+      "item": [
+        {
+          "name": "Create User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.data && jsonData.data.createUser && jsonData.data.createUser.id) {",
+                  "    pm.environment.set('user_id', jsonData.data.createUser.id);",
+                  "    pm.test('User created successfully and user_id captured', function() {",
+                  "        pm.expect(jsonData.data.createUser).to.have.property('id');",
+                  "        pm.expect(jsonData.data.createUser).to.have.property('username');",
+                  "        pm.expect(jsonData.data.createUser.username).to.equal(pm.environment.get('username'));",
+                  "        pm.expect(jsonData.data.createUser).to.have.property('email');",
+                  "    });",
+                  "} else if (jsonData.errors) {",
+                  "    pm.test('Create user returned error', function() {",
+                  "        pm.expect(jsonData.errors[0]).to.have.property('message');",
+                  "    });",
+                  "} else {",
+                  "    pm.test('Create user failed - no user in response', function() {",
+                  "        pm.expect(false).to.be.true;",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}",
+                "description": "Admin user token required for user creation. If self-service registration is enabled, this header can be omitted or an unauthenticated endpoint should be used instead."
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation CreateUser($input: CreateUserInput!) {\n  createUser(input: $input) {\n    id\n    username\n    email\n    firstName\n    lastName\n    createdAt\n  }\n}",
+                "variables": "{\n  \"input\": {\n    \"username\": \"{{username}}\",\n    \"email\": \"{{email}}\",\n    \"password\": \"{{password}}\",\n    \"firstName\": \"Test\",\n    \"lastName\": \"User\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('User updated successfully', function() {",
+                  "    pm.expect(jsonData.data.updateUser).to.have.property('id');",
+                  "    pm.expect(jsonData.data.updateUser).to.have.property('firstName');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {\n  updateUser(id: $id, input: $input) {\n    id\n    username\n    email\n    firstName\n    lastName\n    updatedAt\n  }\n}",
+                "variables": "{\n  \"id\": \"{{user_id}}\",\n  \"input\": {\n    \"firstName\": \"UpdatedFirst\",\n    \"lastName\": \"UpdatedLast\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.test('User deleted successfully', function() {",
+                  "    pm.expect(jsonData.data.deleteUser.success).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwt_token}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "mutation DeleteUser($id: ID!) {\n  deleteUser(id: $id) {\n    success\n    message\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/graphql"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://localhost:8443",
+      "type": "string",
+      "description": "Base URL for the SSF GraphQL API"
+    },
+    {
+      "key": "jwt_token",
+      "value": "",
+      "type": "string",
+      "description": "{{jwt_token}} - PLACEHOLDER: Set after successful login. Empty by default."
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string",
+      "description": "{{user_id}} - PLACEHOLDER: Auto-populated from Create User response. Start with empty value."
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string",
+      "description": "{{username}} - PLACEHOLDER: Set this to an actual username per developer environment. Empty by default for security."
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string",
+      "description": "{{password}} - PLACEHOLDER: Set this to an actual password per developer environment. Empty by default for security."
+    },
+    {
+      "key": "email",
+      "value": "",
+      "type": "string",
+      "description": "{{email}} - PLACEHOLDER: Set this to an actual email per developer environment. Empty by default for security."
+    }
+  ]
+}

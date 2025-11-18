@@ -13,6 +13,7 @@ import { provideHttpClient, withFetch } from '@angular/common/http';
 import { HttpLink } from 'apollo-angular/http';
 import { graphqlProvider } from './graphql.config';
 import { provideServiceWorker } from '@angular/service-worker';
+import { environment } from '../environments/environment';
 
 registerLocaleData(en);
 
@@ -20,7 +21,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
-    provideClientHydration(),
+    ...(environment.enableHydration ? [provideClientHydration()] : []),
     provideNzIcons(icons),
     provideNzI18n(en_US),
     provideAnimationsAsync(),
