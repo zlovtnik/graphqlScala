@@ -75,7 +75,7 @@
           "refId": "A"
         }
       ],
-      "title": "[Phase 1 Placeholder] MFA Enrollment Rate",
+      "title": "MFA Enrollment Rate",
       "type": "gauge"
     },
     {
@@ -130,11 +130,11 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "label_replace(ssf_audit_log_completeness, \"__label_name__\", \"placeholder\")",
+          "expr": "ssf_audit_log_completeness",
           "refId": "A"
         }
       ],
-      "title": "[Phase 2 Placeholder] Audit Log Completeness",
+      "title": "Audit Log Completeness",
       "type": "gauge"
     },
     {
@@ -189,11 +189,11 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "label_replace(ssf_encryption_coverage, \"__label_name__\", \"placeholder\")",
+          "expr": "ssf_encryption_coverage",
           "refId": "A"
         }
       ],
-      "title": "[Phase 3 Placeholder] Encryption Coverage",
+      "title": "Encryption Coverage",
       "type": "gauge"
     },
     {
@@ -248,11 +248,11 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "label_replace(ssf_sox_control_status, \"__label_name__\", \"placeholder\")",
+          "expr": "ssf_sox_control_status",
           "refId": "A"
         }
       ],
-      "title": "[Phase 0-4] SOX Control Status",
+      "title": "SOX Control Status",
       "type": "gauge"
     }
   ],
@@ -274,7 +274,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "[Phase 0 Placeholder] Security & Compliance Dashboard",
+  "title": "SSF Compliance Dashboard",
   "uid": "ssf-compliance",
   "version": 1
 }

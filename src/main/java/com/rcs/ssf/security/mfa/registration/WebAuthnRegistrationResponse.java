@@ -47,7 +47,7 @@ public class WebAuthnRegistrationResponse {
             @JsonProperty("response") AuthenticatorAttestationResponse response,
             @JsonProperty("type") String type) {
         this.id = id;
-        this.rawId = rawId;
+        this.rawId = rawId != null ? rawId.clone() : null;
         this.response = response;
         this.type = type;
     }

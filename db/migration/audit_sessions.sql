@@ -8,7 +8,7 @@ CREATE TABLE audit_sessions (
     ip_address VARCHAR2(45),
     user_agent VARCHAR2(2000),
     created_at TIMESTAMP(6) WITH TIME ZONE DEFAULT SYSTIMESTAMP NOT NULL,
-    CONSTRAINT fk_audit_sessions_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT
+    CONSTRAINT fk_audit_sessions_user_id FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
 -- Indexes for audit_sessions

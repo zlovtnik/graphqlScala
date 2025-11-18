@@ -22,8 +22,10 @@ import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -31,7 +33,7 @@ import java.util.regex.Pattern;
 public class UserService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$",
             Pattern.CASE_INSENSITIVE);
-
+    private static final Duration OPERATION_TIMEOUT = Duration.ofSeconds(5);
 
     private final Optional<JdbcTemplate> jdbcTemplate;
     private final PasswordEncoder passwordEncoder;
@@ -83,7 +85,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findByUsername(username).blockOptional();
+        return userRepository.findByUsername(username).blockOptional(OPERATION_TIMEOUT);
     }
 
     public Optional<User> findByEmail(String email) {
@@ -106,7 +108,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findByEmail(email).blockOptional();
+        return userRepository.findByEmail(email).blockOptional(OPERATION_TIMEOUT);
     }
 
     public User createUser(User user) {
@@ -130,19 +132,19 @@ public class UserService {
                 null);
 
         if (hasJdbcSupport()) {
-                DynamicCrudResponse response = dynamicCrudGateway.execute(request);
-                response.optionalGeneratedId()
+            DynamicCrudResponse response = dynamicCrudGateway.execute(request);
+            response.optionalGeneratedId()
                     .map(this::parseId)
                     .ifPresent(user::setId);
             return user;
         }
 
         // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
-        User saved = userRepository.save(user).block();
+        User saved = userRepository.save(user).block(OPERATION_TIMEOUT);
         if (saved == null) {
             throw new RuntimeException(
-                String.format("Failed to persist new user: email=%s, username=%s. Save returned null.",
-                    user.getEmail(), user.getUsername()));
+                    String.format("Failed to persist new user: email=%s, username=%s. Save returned null.",
+                            user.getEmail(), user.getUsername()));
         }
         return saved;
     }
@@ -193,11 +195,11 @@ public class UserService {
         }
 
         // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
-        User saved = userRepository.save(existing).block();
+        User saved = userRepository.save(existing).block(OPERATION_TIMEOUT);
         if (saved == null) {
             throw new RuntimeException(
-                String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
-                    userId, existing.getEmail()));
+                    String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
+                            userId, existing.getEmail()));
         }
         return saved;
     }
@@ -221,11 +223,14 @@ public class UserService {
         }
 
         // Use blocking repository calls - R2dbcRepository returns Mono, block it
-        // IMPORTANT: Block the deleteById() call to ensure deletion completes before returning.
-        // Without block(), the delete operation is not guaranteed to have completed when the method returns,
-        // creating a race condition where callers may check for deletion before it actually finishes.
-        if (userRepository.existsById(userId).block()) {
-            userRepository.deleteById(userId).block();
+        // IMPORTANT: Block the deleteById() call to ensure deletion completes before
+        // returning.
+        // Without block(), the delete operation is not guaranteed to have completed
+        // when the method returns,
+        // creating a race condition where callers may check for deletion before it
+        // actually finishes.
+        if (userRepository.existsById(userId).block(OPERATION_TIMEOUT)) {
+            userRepository.deleteById(userId).block(OPERATION_TIMEOUT);
             return true;
         }
         return false;
@@ -254,7 +259,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findById(id).blockOptional();
+        return userRepository.findById(id).blockOptional(OPERATION_TIMEOUT);
     }
 
     private void validateNewUser(User user) {
@@ -287,13 +292,14 @@ public class UserService {
     }
 
     private void ensureUsernameAvailable(String username, Long currentUserId) {
-        // Fetch the user by username once to avoid TOCTOU (Time-of-Check-Time-of-Use) races
+        // Fetch the user by username once to avoid TOCTOU (Time-of-Check-Time-of-Use)
+        // races
         Optional<User> existingUser = findByUsername(username);
-        
+
         if (existingUser.isPresent()) {
             User found = existingUser.get();
             // If a user with this username exists and is NOT the current user, it's in use
-            if (currentUserId == null || !found.getId().equals(currentUserId)) {
+            if (!Objects.equals(found.getId(), currentUserId)) {
                 throw new IllegalArgumentException("USERNAME_IN_USE");
             }
         }
@@ -318,7 +324,7 @@ public class UserService {
                 // Check if it's the current user
                 if (currentUserId != null) {
                     Optional<User> existingUser = findByEmail(email);
-                    if (existingUser.isPresent() && !existingUser.get().getId().equals(currentUserId)) {
+                    if (existingUser.isPresent() && !Objects.equals(existingUser.get().getId(), currentUserId)) {
                         throw new IllegalArgumentException("EMAIL_IN_USE");
                     }
                 } else {
@@ -329,7 +335,7 @@ public class UserService {
         }
 
         Optional<User> existingUser = findByEmail(email);
-        if (existingUser.isPresent() && (currentUserId == null || !existingUser.get().getId().equals(currentUserId))) {
+        if (existingUser.isPresent() && !Objects.equals(existingUser.get().getId(), currentUserId)) {
             throw new IllegalArgumentException("EMAIL_IN_USE");
         }
     }
@@ -345,7 +351,6 @@ public class UserService {
     private boolean hasJdbcSupport() {
         return jdbcTemplate.isPresent();
     }
-
 
     private Long parseId(String rawId) {
         if (rawId == null) {

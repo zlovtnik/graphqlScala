@@ -127,16 +127,19 @@ jacocoTestCoverageVerification {
 flyway {
     url = System.getenv('ORACLE_URL') ?: 'jdbc:oracle:thin:@localhost:1521/FREE'
     user = System.getenv('ORACLE_USER') ?: 'ssf_admin'
-    password = {
-        String pwd = System.getenv('ORACLE_PASSWORD')
-        if (pwd == null || pwd.isEmpty()) {
-            throw new GradleException(
-                "ORACLE_PASSWORD environment variable is required and cannot be empty. " +
-                "Set it before running migrations: export ORACLE_PASSWORD='your_password'"
-            )
+    def pwd = System.getenv('ORACLE_PASSWORD')
+    // Only enforce for Flyway tasks; other Gradle tasks can run without DB credentials
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.allTasks.any { it.name.toLowerCase().startsWith('flyway') }) {
+            if (pwd == null || pwd.isEmpty()) {
+                throw new GradleException(
+                    "ORACLE_PASSWORD must be set before running Flyway migrations " +
+                    "(export ORACLE_PASSWORD='your_password')."
+                )
+            }
         }
-        pwd
-    }()
+    }
+    password = pwd
     locations = ['filesystem:./db/migration']
     failOnMissingLocations = true
 }

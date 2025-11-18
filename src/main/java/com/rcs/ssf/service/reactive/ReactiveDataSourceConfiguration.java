@@ -146,10 +146,11 @@ public class ReactiveDataSourceConfiguration {
                         props.getHost(), props.getPort(), props.getDatabase(), sslMode);
             }
             case "mysql", "mariadb" -> {
-                // MySQL/MariaDB: r2dbc:mysql://host:port/database?useSSL=true&requireSSL=true
+                // MySQL/MariaDB:
+                // r2dbc:{driver}://host:port/database?useSSL=true&requireSSL=true
                 String sslParam = useSsl ? "true" : "false";
-                baseUrl = String.format("r2dbc:mysql://%s:%d/%s?useSSL=%s&requireSSL=%s",
-                        props.getHost(), props.getPort(), props.getDatabase(), sslParam, sslParam);
+                baseUrl = String.format("r2dbc:%s://%s:%d/%s?useSSL=%s&requireSSL=%s",
+                        driver, props.getHost(), props.getPort(), props.getDatabase(), sslParam, sslParam);
             }
             case "mssql" -> {
                 // MSSQL: r2dbc:mssql://host:port;database=dbname;encrypt=true

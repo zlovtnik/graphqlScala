@@ -12,7 +12,8 @@ import jakarta.validation.constraints.Size;
  * WebAuthn authentication response from the client.
  * Contains the credential ID, raw ID, assertion response, and credential type.
  *
- * This is the complete response returned by navigator.credentials.get() on the client side,
+ * This is the complete response returned by navigator.credentials.get() on the
+ * client side,
  * and should be sent to the server for verification.
  *
  * Per WebAuthn spec (https://www.w3.org/TR/webauthn-2/#dictionary-response):
@@ -23,19 +24,19 @@ import jakarta.validation.constraints.Size;
  */
 public class WebAuthnAuthenticationResponse {
     @NotBlank(message = "ID is required")
-    private String id;              // Credential ID
-    
+    private String id; // Credential ID
+
     @NotNull(message = "Raw ID is required")
     @Size(min = 1, message = "Raw ID must not be empty")
-    private byte[] rawId;           // Raw credential ID (binary)
-    
+    private byte[] rawId; // Raw credential ID (binary)
+
     @NotNull(message = "Authenticator response is required")
     @Valid
-    private AuthenticatorAssertionResponse response;  // Authenticator assertion
-    
+    private AuthenticatorAssertionResponse response; // Authenticator assertion
+
     @NotBlank(message = "Type is required")
     @Pattern(regexp = "^public-key$", message = "Type must be 'public-key'")
-    private String type;            // Type ("public-key")
+    private String type; // Type ("public-key")
 
     @JsonCreator
     public WebAuthnAuthenticationResponse(
@@ -44,22 +45,43 @@ public class WebAuthnAuthenticationResponse {
             @JsonProperty("response") AuthenticatorAssertionResponse response,
             @JsonProperty("type") String type) {
         this.id = id;
-        this.rawId = rawId;
+        this.rawId = rawId != null ? rawId.clone() : null;
         this.response = response;
         this.type = type;
     }
 
-    public WebAuthnAuthenticationResponse() {}
+    public WebAuthnAuthenticationResponse() {
+    }
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public String getId() {
+        return id;
+    }
 
-    public byte[] getRawId() { return rawId; }
-    public void setRawId(byte[] rawId) { this.rawId = rawId; }
+    public void setId(String id) {
+        this.id = id;
+    }
 
-    public AuthenticatorAssertionResponse getResponse() { return response; }
-    public void setResponse(AuthenticatorAssertionResponse response) { this.response = response; }
+    public byte[] getRawId() {
+        return rawId != null ? rawId.clone() : null;
+    }
 
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
+    public void setRawId(byte[] rawId) {
+        this.rawId = rawId != null ? rawId.clone() : null;
+    }
+
+    public AuthenticatorAssertionResponse getResponse() {
+        return response;
+    }
+
+    public void setResponse(AuthenticatorAssertionResponse response) {
+        this.response = response;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
 }

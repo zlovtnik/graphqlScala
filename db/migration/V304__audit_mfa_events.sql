@@ -73,15 +73,17 @@ BEGIN
                     l_error_msg := SQLERRM;
                     BEGIN
                         INSERT INTO AUDIT_ERROR_LOG (
-                            error_context,
+                            error_code,
                             error_message,
-                            additional_info,
-                            created_at
+                            context,
+                            procedure_name,
+                            error_level
                         ) VALUES (
-                            'PRC_DROP_OLD_AUDIT_MFA_PARTITIONS - DROP PARTITION',
+                            'MFA_PARTITION_DROP_ERROR',
                             l_error_msg,
                             'partition=' || r.partition_name || '|attempted_sql=' || l_sql,
-                            SYSTIMESTAMP
+                            'PRC_DROP_OLD_AUDIT_MFA_PARTITIONS',
+                            'ERROR'
                         );
                         COMMIT;
                     EXCEPTION WHEN OTHERS THEN
@@ -95,15 +97,17 @@ BEGIN
             l_error_msg := SQLERRM;
             BEGIN
                 INSERT INTO AUDIT_ERROR_LOG (
-                    error_context,
+                    error_code,
                     error_message,
-                    additional_info,
-                    created_at
+                    context,
+                    procedure_name,
+                    error_level
                 ) VALUES (
-                    'PRC_DROP_OLD_AUDIT_MFA_PARTITIONS - HIGH_VALUE EVALUATION',
+                    'MFA_PARTITION_EVAL_ERROR',
                     l_error_msg,
                     'partition=' || r.partition_name || '|high_value_expr=' || r.high_value,
-                    SYSTIMESTAMP
+                    'PRC_DROP_OLD_AUDIT_MFA_PARTITIONS',
+                    'ERROR'
                 );
                 COMMIT;
             EXCEPTION WHEN OTHERS THEN

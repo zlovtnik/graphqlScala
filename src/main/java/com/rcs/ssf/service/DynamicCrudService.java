@@ -187,8 +187,11 @@ public class DynamicCrudService {
             log.warn("Affected rows count {} exceeds Integer.MAX_VALUE, capping at {}", affectedRowsLong,
                     Integer.MAX_VALUE);
         }
-        return new DynamicCrudResponseDto(List.of(), affectedRowsInt, List.of(), true); // No rows for mutations, but
-                                                                                        // affected count
+        return new DynamicCrudResponseDto(List.of(), affectedRowsInt, List.of(), !jdbcTemplate.isEmpty()); // No rows
+                                                                                                           // for
+                                                                                                           // mutations,
+                                                                                                           // but
+        // affected count
     }
 
     public String[] getAvailableTables() {

@@ -21,7 +21,7 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
 
     private static final long DEFAULT_MAX_BODY_SIZE = 1_000_000L; // 1MB default
 
-    private final String body;
+    private final byte[] cachedBytes;
     private final Charset bodyCharset;
 
     public CachedBodyHttpServletRequest(HttpServletRequest request) throws IOException {
@@ -76,17 +76,17 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
             }
         }
 
-        // Convert collected bytes to String using the resolved charset
-        body = byteBuffer.toString(bodyCharset);
+        // Cache the raw bytes
+        cachedBytes = byteBuffer.toByteArray();
     }
 
     public String getBody() {
-        return body;
+        return new String(cachedBytes, bodyCharset);
     }
 
     @Override
     public ServletInputStream getInputStream() throws IOException {
-        final ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(body.getBytes(bodyCharset));
+        final ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(cachedBytes);
         return new ServletInputStream() {
             @Override
             public boolean isFinished() {
@@ -114,6 +114,6 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
 
     @Override
     public BufferedReader getReader() throws IOException {
-        return new BufferedReader(new StringReader(body));
+        return new BufferedReader(new StringReader(getBody()));
     }
 }

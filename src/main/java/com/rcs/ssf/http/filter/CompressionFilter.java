@@ -231,12 +231,46 @@ public class CompressionFilter extends OncePerRequestFilter {
         private GZIPOutputStream gzipStream;
         private ServletOutputStream wrappedStream;
         private PrintWriter wrappedWriter;
-        private boolean streamObtained = false;
-        private boolean writerObtained = false;
 
         public CompressingResponseWrapper(HttpServletResponse response, String algorithm) {
             super(response);
             this.algorithm = algorithm;
+        }
+
+        /**
+         * Initialize the compressed stream if not already done.
+         */
+        private void initCompressedStream() throws IOException {
+            if (gzipStream != null) {
+                return; // Already initialized
+            }
+
+            // Get the original response output stream
+            ServletOutputStream originalStream = super.getOutputStream();
+
+            if (GZIP.equals(algorithm)) {
+                // Wrap with GZIP compression
+                gzipStream = new GZIPOutputStream(originalStream, true); // true = syncFlush mode
+                wrappedStream = new ServletOutputStreamWrapper(gzipStream);
+
+                // Set Content-Encoding header now that we're wrapping with compression
+                super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
+                log.debug("Initialized GZIP compression stream");
+            } else if (BROTLI.equals(algorithm)) {
+                // Brotli is not currently implemented/available.
+                // If selectCompressionAlgorithm() correctly gates BROTLI selection,
+                // this branch should never be reached. Throwing here detects configuration
+                // issues early.
+                throw new IllegalStateException(
+                        "Brotli (br) compression was selected but is not implemented. " +
+                                "This indicates a configuration error in selectCompressionAlgorithm(). " +
+                                "isBrotliAvailable() must return false to prevent this path.");
+            } else {
+                // Unknown algorithm - fail fast instead of silently falling back
+                throw new IllegalStateException(
+                        "Unknown compression algorithm: " + algorithm + ". " +
+                                "selectCompressionAlgorithm() should only return 'gzip', 'br', or null.");
+            }
         }
 
         /**
@@ -261,39 +295,10 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         @Override
         public ServletOutputStream getOutputStream() throws IOException {
-            if (writerObtained) {
+            if (wrappedWriter != null) {
                 throw new IllegalStateException("getWriter() has already been called; cannot call getOutputStream()");
             }
-            if (!streamObtained) {
-                streamObtained = true;
-
-                // Get the original response output stream
-                ServletOutputStream originalStream = super.getOutputStream();
-
-                if (GZIP.equals(algorithm)) {
-                    // Wrap with GZIP compression
-                    gzipStream = new GZIPOutputStream(originalStream, true); // true = syncFlush mode
-                    wrappedStream = new ServletOutputStreamWrapper(gzipStream);
-
-                    // Set Content-Encoding header now that we're wrapping with compression
-                    super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
-                    log.debug("Initialized GZIP compression stream");
-                } else if (BROTLI.equals(algorithm)) {
-                    // Brotli is not currently implemented/available.
-                    // If selectCompressionAlgorithm() correctly gates BROTLI selection,
-                    // this branch should never be reached. Throwing here detects configuration
-                    // issues early.
-                    throw new IllegalStateException(
-                            "Brotli (br) compression was selected but is not implemented. " +
-                                    "This indicates a configuration error in selectCompressionAlgorithm(). " +
-                                    "isBrotliAvailable() must return false to prevent this path.");
-                } else {
-                    // Unknown algorithm - fail fast instead of silently falling back
-                    throw new IllegalStateException(
-                            "Unknown compression algorithm: " + algorithm + ". " +
-                                    "selectCompressionAlgorithm() should only return 'gzip', 'br', or null.");
-                }
-            }
+            initCompressedStream();
             return wrappedStream;
         }
 
@@ -304,18 +309,14 @@ public class CompressionFilter extends OncePerRequestFilter {
          */
         @Override
         public PrintWriter getWriter() throws IOException {
-            if (streamObtained) {
+            if (wrappedStream != null) {
                 throw new IllegalStateException("getOutputStream() has already been called; cannot call getWriter()");
             }
-            if (!writerObtained) {
-                writerObtained = true;
-
-                // Ensure the output stream is initialized with compression
-                ServletOutputStream compressedStream = getOutputStream();
-
+            initCompressedStream();
+            if (wrappedWriter == null) {
                 // Create a PrintWriter that wraps the compressed output stream with UTF-8
                 // encoding
-                wrappedWriter = new PrintWriter(new OutputStreamWriter(compressedStream, StandardCharsets.UTF_8), true);
+                wrappedWriter = new PrintWriter(new OutputStreamWriter(wrappedStream, StandardCharsets.UTF_8), true);
             }
             return wrappedWriter;
         }
@@ -356,8 +357,8 @@ public class CompressionFilter extends OncePerRequestFilter {
      * <strong>Async I/O Not Supported:</strong> This wrapper is designed for
      * blocking (synchronous) servlet
      * responses only and does not support Servlet 3.1 non-blocking I/O semantics.
-     * The {@link #isReady()} method
-     * always returns true, and {@link #setWriteListener(WriteListener)} is a no-op.
+     * The {@link #isReady()} method always returns true, and
+     * {@link #setWriteListener(WriteListener)} is a no-op.
      * If this filter is applied
      * to endpoints that use async responses (e.g., CompletableFuture-backed
      * handlers), the response may be
@@ -369,6 +370,13 @@ public class CompressionFilter extends OncePerRequestFilter {
      * application uses async responses, configure a separate compression strategy
      * (e.g., at the reverse proxy
      * or load balancer level) rather than applying this filter.
+     *
+     * <p>
+     * <strong>Defensive Behavior:</strong> Servlet containers that call
+     * isReady/setWriteListener
+     * will receive safe defaults (always ready, no-op listener) rather than
+     * exceptions,
+     * preventing container crashes in environments with mixed async/sync usage.
      */
     private static class ServletOutputStreamWrapper extends ServletOutputStream {
         private final OutputStream delegate;
@@ -404,18 +412,15 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         @Override
         public boolean isReady() {
-            // Async I/O is not supported on compressed output streams
-            throw new IllegalStateException(
-                    "Async I/O is not supported on compressed output streams. " +
-                            "CompressionFilter uses GZIPOutputStream which requires blocking writes. " +
-                            "If this filter is applied to async endpoints (e.g., reactive handlers), " +
-                            "compression must be configured at the reverse proxy or load balancer level instead.");
+            // Async I/O is not supported on compressed output streams, but return true for
+            // defensive compatibility
+            return true;
         }
 
         @Override
         public void setWriteListener(WriteListener listener) {
-            throw new IllegalStateException(
-                    "Async I/O (WriteListener) is not supported on compressed output streams; use synchronous write methods instead");
+            // Async I/O (WriteListener) is not supported on compressed output streams;
+            // no-op for defensive compatibility
         }
     }
 }

@@ -136,7 +136,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"query\": \"query GetUserById($id: ID!) { getUserById(id: $id) { id username email } }\", \"variables\": {\"id\": \"{{user_id}}\"}}"
+              "raw": "{\"query\": \"query GetUserById($id: Long!) { getUserById(id: $id) { id username email } }\", \"variables\": {\"id\": {{user_id}}}}"
             },
             "url": {
               "raw": "{{base_url}}/graphql"
@@ -179,7 +179,7 @@
                   "if (response.data && response.data.createUser && response.data.createUser.id) {",
                   "    pm.environment.set('user_id', response.data.createUser.id);",
                   "    pm.test('User created successfully', function () {",
-                  "        pm.expect(response.data.createUser.id).to.be.a('string');",
+                  "        pm.expect(response.data.createUser.id).to.be.a('number');",
                   "        pm.expect(response.data.createUser.username).to.be.a('string');",
                   "    });",
                   "}"
@@ -216,7 +216,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"query\": \"mutation UpdateUser($id: ID!, $input: UpdateUserInput!) { updateUser(id: $id, input: $input) { id username email } }\", \"variables\": {\"id\": \"{{user_id}}\", \"input\": {\"username\": \"updateduser_{{$timestamp}}\", \"email\": \"updated_{{$timestamp}}@example.com\"}}}"
+              "raw": "{\"query\": \"mutation UpdateUser($id: Long!, $input: UpdateUserInput!) { updateUser(id: $id, input: $input) { id username email } }\", \"variables\": {\"id\": {{user_id}}, \"input\": {\"username\": \"updateduser_{{$timestamp}}\", \"email\": \"updated_{{$timestamp}}@example.com\"}}}"
             },
             "url": {
               "raw": "{{base_url}}/graphql"
@@ -235,7 +235,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\"query\": \"mutation DeleteUser($id: ID!) { deleteUser(id: $id) }\", \"variables\": {\"id\": \"{{user_id}}\"}}"
+              "raw": "{\"query\": \"mutation DeleteUser($id: Long!) { deleteUser(id: $id) }\", \"variables\": {\"id\": {{user_id}}}}"
             },
             "url": {
               "raw": "{{base_url}}/graphql"
@@ -267,7 +267,7 @@
     {
       "key": "user_id",
       "value": "",
-      "type": "string",
+      "type": "number",
       "description": "User ID for operations - auto-populated after successful user creation"
     },
     {
