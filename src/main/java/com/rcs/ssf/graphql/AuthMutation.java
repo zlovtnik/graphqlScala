@@ -4,6 +4,13 @@ import com.rcs.ssf.dto.AuthResponse;
 import com.rcs.ssf.security.AuthenticatedUser;
 import com.rcs.ssf.security.JwtTokenProvider;
 import com.rcs.ssf.service.AuditService;
+import com.rcs.ssf.metrics.ComplianceMetricsService;
+import graphql.GraphqlErrorException;
+import io.micrometer.core.annotation.Timed;
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.graphql.data.method.annotation.Argument;
@@ -14,14 +21,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.util.StringUtils;
 
-import jakarta.servlet.http.HttpServletRequest;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import graphql.GraphqlErrorException;
-
-import java.util.Map;
-
 @Controller
 public class AuthMutation {
 
@@ -31,20 +30,24 @@ public class AuthMutation {
     private final AuditService auditService;
     private final ObjectProvider<HttpServletRequest> requestProvider;
     private final Environment environment;
+    private final ComplianceMetricsService complianceMetricsService;
 
     public AuthMutation(AuthenticationManager authenticationManager,
                         JwtTokenProvider jwtTokenProvider,
                         AuditService auditService,
                         ObjectProvider<HttpServletRequest> requestProvider,
-                        Environment environment) {
+                        Environment environment,
+                        ComplianceMetricsService complianceMetricsService) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.auditService = auditService;
         this.requestProvider = requestProvider;
         this.environment = environment;
+        this.complianceMetricsService = complianceMetricsService;
     }
 
     @MutationMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99}, extraTags = {"operation", "login"})
     public AuthResponse login(@Argument String username, @Argument String password) {
         if (!StringUtils.hasText(username)) {
             throw new IllegalArgumentException("Username must not be blank");
@@ -87,24 +90,28 @@ public class AuthMutation {
             AuthenticatedUser principal = extractAuthenticatedUser(authentication, username, ipAddress, userAgent);
             auditService.logSessionStart(principal.getId().toString(), token, ipAddress, userAgent);
 
+            complianceMetricsService.incrementSuccessfulLoginAttempts();
+
             return new AuthResponse(token);
         } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
             // User not found in database - use generic error message to prevent username enumeration
             LOGGER.warn("Login attempt failed: user not found. username={}, ipAddress={}, userAgent={}", 
                     username, ipAddress, userAgent);
             auditService.logLoginAttempt(username, false, ipAddress, userAgent, "USER_NOT_FOUND");
+            complianceMetricsService.incrementFailedLoginAttempts("USER_NOT_FOUND");
             throw GraphqlErrorException.newErrorException()
                     .message("Invalid username or password")
                     .extensions(Map.of("reason", "INVALID_CREDENTIALS"))
                     .cause(e)
                     .build();
         } catch (org.springframework.security.core.AuthenticationException e) {
-            // Bad credentials or other authentication failure
+            // Bad credentials or other authentication failure - use generic error message to prevent username enumeration
             LOGGER.warn("Login attempt failed: authentication error. username={}, ipAddress={}, userAgent={}, error={}", 
                     username, ipAddress, userAgent, e.getMessage());
             auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
+            complianceMetricsService.incrementFailedLoginAttempts("INVALID_CREDENTIALS");
             throw GraphqlErrorException.newErrorException()
-                    .message("Authentication failed")
+                    .message("Invalid username or password")
                     .extensions(Map.of("reason", "INVALID_CREDENTIALS"))
                     .cause(e)
                     .build();
@@ -112,9 +119,11 @@ public class AuthMutation {
     }
 
     @MutationMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99}, extraTags = {"operation", "logout"})
     public boolean logout() {
         // Token invalidation is handled client-side by removing it
         // For server-side blacklisting, implement a token blacklist service
+        complianceMetricsService.incrementLogoutAttempts();
         return true;
     }
 

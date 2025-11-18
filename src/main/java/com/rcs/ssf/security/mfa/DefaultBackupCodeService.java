@@ -65,10 +65,17 @@ public class DefaultBackupCodeService implements BackupCodeService {
      *
      * @param userId user identifier (Long, non-null)
      * @return list of 10 newly generated backup codes
+     * @throws IllegalArgumentException if userId is null or non-positive
      * @throws IllegalStateException if persistence fails
      */
     @Override
     public List<String> generateBackupCodes(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
         return generateCodesInternal(userId, "GENERATE");
     }
 
@@ -81,10 +88,17 @@ public class DefaultBackupCodeService implements BackupCodeService {
      *
      * @param userId user identifier
      * @return list of 10 new backup codes
+     * @throws IllegalArgumentException if userId is null or non-positive
      * @throws IllegalStateException if persistence fails
      */
     @Override
     public List<String> regenerateBackupCodes(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
         return generateCodesInternal(userId, "REGENERATE");
     }
 
@@ -173,8 +187,14 @@ public class DefaultBackupCodeService implements BackupCodeService {
     @Override
     @Transactional
     public boolean verifyBackupCode(Long userId, String code) {
-        if (userId == null || code == null) {
-            auditService.logMfaEvent(userId != null ? userId.toString() : "unknown", null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Null userId or code", null, null);
+        if (userId == null) {
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
+        if (code == null) {
+            auditService.logMfaEvent(userId.toString(), null, "USE_BACKUP_CODE", "BACKUP_CODE", "FAILURE", "Null code", null, null);
             return false;
         }
 
@@ -207,7 +227,10 @@ public class DefaultBackupCodeService implements BackupCodeService {
     @Override
     public int getRemainingBackupCodeCount(Long userId) {
         if (userId == null) {
-            return 0;
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
         }
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL",
@@ -218,6 +241,12 @@ public class DefaultBackupCodeService implements BackupCodeService {
     @Override
     @Transactional
     public boolean adminConsumeBackupCode(Long userId, String adminId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
         // Check authorization
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMIN")) &&
