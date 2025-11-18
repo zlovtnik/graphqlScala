@@ -51,9 +51,15 @@ CREATE TABLE audit_error_log (
 );
 
 -- Primary retrieval indexes for filtering and time-range queries
-CREATE INDEX idx_audit_error_log_created_at ON audit_error_log(created_at);
-CREATE INDEX idx_audit_error_log_error_code ON audit_error_log(error_code);
-CREATE INDEX idx_audit_error_log_procedure_name ON audit_error_log(procedure_name);
+-- NOTE: Index strategy consolidates composite indexes to eliminate redundant single-column indexes.
+-- Single-column indexes on error_code, created_at, and procedure_name have been removed as they are
+-- subsumed by composite indexes below (e.g., idx_audit_error_log_error_created covers both error_code
+-- and created_at queries). All queries must specify a leading column matching a composite leftmost.
+-- If profiling shows pure single-column lookups (e.g., error_code without time filter) have <5% of traffic,
+-- reintroduce single-column indexes and document findings. Current composites cover the primary patterns:
+-- - error spike queries (error_code + created_at filter)
+-- - critical error alerts (error_level + created_at window)
+-- - user session correlation (user_id + session_id)
 
 -- Composite index for error spike detection and time-window analysis
 CREATE INDEX idx_audit_error_log_error_created ON audit_error_log(error_code, created_at);

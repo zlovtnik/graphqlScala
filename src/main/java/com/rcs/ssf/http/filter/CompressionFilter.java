@@ -15,11 +15,14 @@ import jakarta.servlet.WriteListener;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.zip.GZIPOutputStream;
 import java.util.concurrent.TimeUnit;
 
@@ -44,12 +47,14 @@ public class CompressionFilter extends OncePerRequestFilter {
     private static final String GZIP = "gzip";
     private static final String BROTLI = "br";
 
+    private volatile Boolean cachedBrotliAvailable;
+
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
-                                    @NonNull FilterChain filterChain) throws ServletException, IOException {
+            @NonNull FilterChain filterChain) throws ServletException, IOException {
         long startTime = System.nanoTime();
         CompressingResponseWrapper wrappedResponse = null;
-        
+
         try {
             // Skip if already committed
             if (response.isCommitted()) {
@@ -60,7 +65,7 @@ public class CompressionFilter extends OncePerRequestFilter {
             // Select best compression algorithm
             String acceptEncoding = request.getHeader(HttpHeaders.ACCEPT_ENCODING);
             String selectedAlgorithm = selectCompressionAlgorithm(acceptEncoding);
-            
+
             if (selectedAlgorithm != null) {
                 // Create compression wrapper that will actually compress the response
                 wrappedResponse = new CompressingResponseWrapper(response, selectedAlgorithm);
@@ -101,23 +106,77 @@ public class CompressionFilter extends OncePerRequestFilter {
         String upgradeHeader = request.getHeader(HttpHeaders.UPGRADE);
         String path = request.getRequestURI();
 
-        return upgradeHeader != null || 
-               path.contains("/stream") || 
-               path.contains("/download") ||
-               path.contains("/export");
+        return upgradeHeader != null ||
+                path.contains("/stream") ||
+                path.contains("/download") ||
+                path.contains("/export");
     }
 
     /**
      * Check if Brotli compression is available in the classpath.
-     * Currently, Brotli requires the Brotli4j library which is not yet implemented.
+     * Attempts to load Brotli4j library and validate runtime availability.
      * 
      * @return true if Brotli can be used, false otherwise
      */
     private boolean isBrotliAvailable() {
-        // TODO: Implement Brotli4j integration
-        // For now, always return false until Brotli4j is added as a dependency
-        // and proper initialization is implemented
-        return false;
+        Boolean cached = cachedBrotliAvailable;
+        if (cached != null) {
+            return cached;
+        }
+
+        synchronized (this) {
+            if (cachedBrotliAvailable != null) {
+                return cachedBrotliAvailable;
+            }
+
+            try {
+                Class<?> loaderClass = Class.forName("com.aayushatharva.brotli4j.Brotli4jLoader");
+                loaderClass.getMethod("ensureAvailability").invoke(null);
+
+                Class<?> compressorClass = Class.forName("com.aayushatharva.brotli4j.encoder.BrotliOutputStream");
+                ByteArrayOutputStream compressed = new ByteArrayOutputStream();
+                byte[] payload = "brotli-self-test".getBytes(StandardCharsets.UTF_8);
+
+                try (OutputStream brOut = (OutputStream) compressorClass
+                        .getConstructor(OutputStream.class)
+                        .newInstance(compressed)) {
+                    brOut.write(payload);
+                }
+
+                Class<?> decoderClass = Class.forName("com.aayushatharva.brotli4j.decoder.BrotliInputStream");
+                byte[] compressedBytes = compressed.toByteArray();
+                byte[] roundTrip;
+                try (ByteArrayInputStream in = new ByteArrayInputStream(compressedBytes);
+                        java.io.InputStream decoder = (java.io.InputStream) decoderClass
+                                .getConstructor(java.io.InputStream.class)
+                                .newInstance(in)) {
+                    roundTrip = decoder.readAllBytes();
+                }
+
+                boolean matches = Arrays.equals(payload, roundTrip);
+                cachedBrotliAvailable = matches;
+                if (matches) {
+                    log.info("Brotli4j detected and verified; Brotli compression enabled");
+                } else {
+                    log.warn("Brotli4j self-test failed: decompressed payload mismatch");
+                }
+                return cachedBrotliAvailable;
+            } catch (ClassNotFoundException e) {
+                log.debug("Brotli4j library not found in classpath: {}", e.getMessage());
+                cachedBrotliAvailable = false;
+                return false;
+            } catch (ReflectiveOperationException e) {
+                log.warn("Brotli4j reflection-based initialization failed; Brotli disabled");
+                log.debug("Brotli4j reflection failure", e);
+                cachedBrotliAvailable = false;
+                return false;
+            } catch (IOException e) {
+                log.warn("Brotli4j initialization I/O failed; Brotli disabled");
+                log.debug("Brotli4j I/O failure", e);
+                cachedBrotliAvailable = false;
+                return false;
+            }
+        }
     }
 
     /**
@@ -132,17 +191,17 @@ public class CompressionFilter extends OncePerRequestFilter {
         if (acceptEncoding == null || acceptEncoding.isEmpty()) {
             return null;
         }
-        
+
         // Prioritize Brotli for modern browsers, but only if available
         if (acceptEncoding.contains(BROTLI) && isBrotliAvailable()) {
             return BROTLI;
         }
-        
+
         // Fall back to GZIP
         if (acceptEncoding.contains(GZIP)) {
             return GZIP;
         }
-        
+
         return null;
     }
 
@@ -157,7 +216,8 @@ public class CompressionFilter extends OncePerRequestFilter {
     /**
      * HttpServletResponseWrapper that compresses the output stream.
      * 
-     * This wrapper intercepts the output stream and wraps it with a compression stream
+     * This wrapper intercepts the output stream and wraps it with a compression
+     * stream
      * (GZIPOutputStream). The wrapper also:
      * - Sets the Content-Encoding header to indicate compression
      * - Properly flushes and closes the compression stream when done
@@ -181,7 +241,8 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         /**
          * Override setContentLength to prevent incorrect Content-Length headers.
-         * When compression is enabled, the final size is unknown until compression completes.
+         * When compression is enabled, the final size is unknown until compression
+         * completes.
          */
         @Override
         public void setContentLength(int len) {
@@ -190,7 +251,8 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         /**
          * Override setContentLengthLong to prevent incorrect Content-Length headers.
-         * When compression is enabled, the final size is unknown until compression completes.
+         * When compression is enabled, the final size is unknown until compression
+         * completes.
          */
         @Override
         public void setContentLengthLong(long len) {
@@ -204,27 +266,32 @@ public class CompressionFilter extends OncePerRequestFilter {
             }
             if (!streamObtained) {
                 streamObtained = true;
-                
+
                 // Get the original response output stream
                 ServletOutputStream originalStream = super.getOutputStream();
-                
+
                 if (GZIP.equals(algorithm)) {
                     // Wrap with GZIP compression
                     gzipStream = new GZIPOutputStream(originalStream, true); // true = syncFlush mode
                     wrappedStream = new ServletOutputStreamWrapper(gzipStream);
-                    
+
                     // Set Content-Encoding header now that we're wrapping with compression
                     super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
                     log.debug("Initialized GZIP compression stream");
                 } else if (BROTLI.equals(algorithm)) {
-                    // Brotli support: attempt to use if available, fall back to gzip
-                    log.debug("Brotli requested but falling back to GZIP (Brotli4j not currently implemented)");
-                    gzipStream = new GZIPOutputStream(originalStream, true);
-                    wrappedStream = new ServletOutputStreamWrapper(gzipStream);
-                    super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
+                    // Brotli is not currently implemented/available.
+                    // If selectCompressionAlgorithm() correctly gates BROTLI selection,
+                    // this branch should never be reached. Throwing here detects configuration
+                    // issues early.
+                    throw new IllegalStateException(
+                            "Brotli (br) compression was selected but is not implemented. " +
+                                    "This indicates a configuration error in selectCompressionAlgorithm(). " +
+                                    "isBrotliAvailable() must return false to prevent this path.");
                 } else {
-                    // Unknown algorithm, return original stream
-                    wrappedStream = originalStream;
+                    // Unknown algorithm - fail fast instead of silently falling back
+                    throw new IllegalStateException(
+                            "Unknown compression algorithm: " + algorithm + ". " +
+                                    "selectCompressionAlgorithm() should only return 'gzip', 'br', or null.");
                 }
             }
             return wrappedStream;
@@ -242,13 +309,13 @@ public class CompressionFilter extends OncePerRequestFilter {
             }
             if (!writerObtained) {
                 writerObtained = true;
-                
+
                 // Ensure the output stream is initialized with compression
                 ServletOutputStream compressedStream = getOutputStream();
-                
-                // Create a PrintWriter that wraps the compressed output stream with UTF-8 encoding
-                OutputStream osDelegate = (gzipStream != null) ? gzipStream : compressedStream;
-                wrappedWriter = new PrintWriter(new OutputStreamWriter(osDelegate, StandardCharsets.UTF_8), true);
+
+                // Create a PrintWriter that wraps the compressed output stream with UTF-8
+                // encoding
+                wrappedWriter = new PrintWriter(new OutputStreamWriter(compressedStream, StandardCharsets.UTF_8), true);
             }
             return wrappedWriter;
         }
@@ -267,13 +334,14 @@ public class CompressionFilter extends OncePerRequestFilter {
                     throw new IOException("Failed to flush compression stream", e);
                 }
             }
-            
+
             // Finish the GZIP stream to complete compression
             if (gzipStream != null) {
                 try {
                     // finish() flushes all buffered compressed data and closes the deflater
-                    // No need for explicit flush() after finish()
                     gzipStream.finish();
+                    // Explicitly close to ensure all resources are released
+                    gzipStream.close();
                 } catch (IOException e) {
                     log.warn("Error finishing compression stream", e);
                     throw e;
@@ -285,14 +353,21 @@ public class CompressionFilter extends OncePerRequestFilter {
     /**
      * ServletOutputStream wrapper that delegates to a GZIPOutputStream.
      *
-     * <strong>Async I/O Not Supported:</strong> This wrapper is designed for blocking (synchronous) servlet
-     * responses only and does not support Servlet 3.1 non-blocking I/O semantics. The {@link #isReady()} method
-     * always returns true, and {@link #setWriteListener(WriteListener)} is a no-op. If this filter is applied
-     * to endpoints that use async responses (e.g., CompletableFuture-backed handlers), the response may be
+     * <strong>Async I/O Not Supported:</strong> This wrapper is designed for
+     * blocking (synchronous) servlet
+     * responses only and does not support Servlet 3.1 non-blocking I/O semantics.
+     * The {@link #isReady()} method
+     * always returns true, and {@link #setWriteListener(WriteListener)} is a no-op.
+     * If this filter is applied
+     * to endpoints that use async responses (e.g., CompletableFuture-backed
+     * handlers), the response may be
      * incorrectly buffered or cause hangs.
      *
-     * <p><strong>Recommended Usage:</strong> Only apply this filter to blocking servlet endpoints. If your
-     * application uses async responses, configure a separate compression strategy (e.g., at the reverse proxy
+     * <p>
+     * <strong>Recommended Usage:</strong> Only apply this filter to blocking
+     * servlet endpoints. If your
+     * application uses async responses, configure a separate compression strategy
+     * (e.g., at the reverse proxy
      * or load balancer level) rather than applying this filter.
      */
     private static class ServletOutputStreamWrapper extends ServletOutputStream {
@@ -329,13 +404,18 @@ public class CompressionFilter extends OncePerRequestFilter {
 
         @Override
         public boolean isReady() {
-            // Always ready for writing
-            return true;
+            // Async I/O is not supported on compressed output streams
+            throw new IllegalStateException(
+                    "Async I/O is not supported on compressed output streams. " +
+                            "CompressionFilter uses GZIPOutputStream which requires blocking writes. " +
+                            "If this filter is applied to async endpoints (e.g., reactive handlers), " +
+                            "compression must be configured at the reverse proxy or load balancer level instead.");
         }
 
         @Override
         public void setWriteListener(WriteListener listener) {
-            throw new IllegalStateException("Async I/O (WriteListener) is not supported on compressed output streams; use synchronous write methods instead");
+            throw new IllegalStateException(
+                    "Async I/O (WriteListener) is not supported on compressed output streams; use synchronous write methods instead");
         }
     }
 }

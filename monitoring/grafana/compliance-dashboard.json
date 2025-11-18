@@ -71,7 +71,7 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "label_replace(ssf_mfa_enrollment_rate, \"__label_name__\", \"placeholder\")",
+          "expr": "ssf_mfa_enrollment_rate",
           "refId": "A"
         }
       ],

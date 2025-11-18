@@ -5,6 +5,7 @@ import com.rcs.ssf.security.AuthenticatedUser;
 import com.rcs.ssf.security.JwtTokenProvider;
 import com.rcs.ssf.service.AuditService;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.core.env.Environment;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
@@ -31,16 +32,19 @@ public class AuthMutation {
     private final JwtTokenProvider jwtTokenProvider;
     private final AuditService auditService;
     private final ObjectProvider<HttpServletRequest> requestProvider;
+    private final Environment environment;
 
     @Autowired
     public AuthMutation(AuthenticationManager authenticationManager,
                         JwtTokenProvider jwtTokenProvider,
                         AuditService auditService,
-                        ObjectProvider<HttpServletRequest> requestProvider) {
+                        ObjectProvider<HttpServletRequest> requestProvider,
+                        Environment environment) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;
         this.auditService = auditService;
         this.requestProvider = requestProvider;
+        this.environment = environment;
     }
 
     @MutationMapping
@@ -52,10 +56,27 @@ public class AuthMutation {
             throw new IllegalArgumentException("Password must not be blank");
         }
         
-        // Lazily resolve HttpServletRequest; works in HTTP contexts and gracefully falls back in tests
-        // SECURITY NOTE: Ensure upstream infrastructure (proxy/load balancer) controls X-Forwarded-For
-        // to prevent external clients from spoofing IP addresses in audit logs
+        // Lazily resolve HttpServletRequest; works in HTTP contexts
+        // In production environments, missing HttpServletRequest is an error condition that should not be silently ignored
         HttpServletRequest request = requestProvider.getIfAvailable();
+        
+        // Determine if running in production environment
+        boolean isProduction = isProductionEnvironment();
+        
+        if (request == null && isProduction) {
+            // In production, fail fast when HTTP context is missing
+            LOGGER.error("Login attempt without HttpServletRequest context. " +
+                    "This indicates a misconfiguration or non-HTTP invocation in production.");
+            throw new IllegalStateException("Authentication context not available. " +
+                    "Login must be invoked through HTTP endpoint. Endpoint: /graphql, Principal: {}");
+        }
+        
+        // For non-production/test environments, log a warning but allow fallback to "unknown" values
+        if (request == null) {
+            LOGGER.warn("HttpServletRequest not available (non-production environment). " +
+                    "Audit logs will use 'unknown' for ipAddress and userAgent.");
+        }
+        
         String ipAddress = (request != null) ? getClientIpAddress(request) : "unknown";
         String userAgent = (request != null) ? request.getHeader("User-Agent") : "unknown";
 
@@ -97,6 +118,22 @@ public class AuthMutation {
             return xRealIp;
         }
         return request.getRemoteAddr();
+    }
+
+    /**
+     * Determines if the application is running in a production environment.
+     * Checks the active Spring profiles to identify production (e.g., "prod", "production").
+     *
+     * @return true if production profile is active, false otherwise
+     */
+    private boolean isProductionEnvironment() {
+        String[] activeProfiles = environment.getActiveProfiles();
+        for (String profile : activeProfiles) {
+            if (profile.equalsIgnoreCase("prod") || profile.equalsIgnoreCase("production")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private AuthenticatedUser extractAuthenticatedUser(Authentication authentication, String username, String ipAddress, String userAgent) {

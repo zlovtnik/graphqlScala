@@ -230,7 +230,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
         String hash;
         try {
             hash = jdbcTemplate.queryForObject(
-                "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL ORDER BY created_at ASC FETCH FIRST 1 ROWS ONLY FOR UPDATE",
+                "SELECT code_hash FROM MFA_BACKUP_CODES WHERE user_id = ? AND used_at IS NULL ORDER BY created_at ASC FETCH FIRST 1 ROWS ONLY",
                 String.class, userId);
         } catch (EmptyResultDataAccessException e) {
             auditService.logMfaEvent(userId, adminId, "ADMIN_OVERRIDE", "BACKUP_CODE", "FAILURE", "No unused backup codes available", null, null);
@@ -238,7 +238,7 @@ public class DefaultBackupCodeService implements BackupCodeService {
             return false;
         }
 
-        // Consume it
+        // Consume it (two-step transactional pattern: find first, then lock and update)
         int rowsAffected = jdbcTemplate.update(
             "UPDATE MFA_BACKUP_CODES SET used_at = SYSTIMESTAMP WHERE user_id = ? AND code_hash = ? AND used_at IS NULL",
             userId, hash);

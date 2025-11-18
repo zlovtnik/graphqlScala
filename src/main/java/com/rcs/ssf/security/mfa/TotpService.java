@@ -42,8 +42,8 @@ public interface TotpService {
      *
      * @param userId user identifier
      * @param code 6-digit TOTP code from authenticator app
-     * @return true if code is valid, false otherwise
-     * @throws MfaVerificationException if verification fails (e.g., rate-limited)
+     * @return true if code is valid and verification succeeds
+     * @throws MfaVerificationException if verification fails permanently (e.g., user TOTP secret not found, rate-limited, or account locked)
      */
     boolean verifyTotpCode(String userId, String code);
 

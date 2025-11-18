@@ -6,6 +6,13 @@ spring:
   # To use JDBC instead, activate the 'jdbc' profile which will enable DataSource auto-configuration.
   autoconfigure:
     exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  
+  # ============================================================================
+  # INACTIVE - R2DBC MODE: The following spring.datasource and spring.jpa
+  # blocks are DISABLED because DataSourceAutoConfiguration is excluded and
+  # the application runs in reactive R2DBC mode. Do NOT edit these properties
+  # unless switching to JDBC mode. See app.r2dbc below for the active config.
+  # ============================================================================
   datasource:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
     driver-class-name: oracle.jdbc.OracleDriver
@@ -28,6 +35,11 @@ spring:
         oracle.net.READ_TIMEOUT: 60000
         oracle.jdbc.implicitStatementCacheSize: 25
         oracle.jdbc.maxCachedBufferSize: 65536
+  
+  # ============================================================================
+  # INACTIVE - HIBERNATE/JPA MODE: The following JPA/Hibernate configuration
+  # is DISABLED in R2DBC mode. Kept only for reference if reverting to JDBC.
+  # ============================================================================
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
     hibernate:

@@ -64,12 +64,32 @@ Authentication & Security team
 2. Codes presented to user one-time (hashed in database)
 3. User stores codes in secure location
 
+## Phase 1: Core Security Requirements
+
+### Rate Limiting (REQUIRED)
+
+- **Per-User Limits**: Maximum 5 failed MFA verification attempts per 15 minutes
+- **Per-IP Limits**: Maximum 20 failed attempts per 15 minutes per IP address
+- **Lockout**: Account locked for 30 minutes after exceeding limits
+- **Audit**: All rate-limited attempts logged to `audit_mfa_events` with status='RATE_LIMITED'
+- **Implementation**: Redis-backed distributed rate limiter with sliding window
+- **Bypass**: Admins can reset rate limits via `resetMfaRateLimit(userId)` admin endpoint
+
+### Audit Logging (REQUIRED)
+
+- **Event Types**: SETUP_TOTP, VERIFY_TOTP, SETUP_SMS, VERIFY_SMS, SETUP_WEBAUTHN, VERIFY_WEBAUTHN, USE_BACKUP_CODE, ADMIN_OVERRIDE, DISABLE_MFA
+- **Immutability**: All audit records created with TIMESTAMP DEFAULT SYSTIMESTAMP, no updates permitted
+- **Retention**: 7-year SOX retention policy enforced via partitioning by created_at (monthly)
+- **Pseudonymization**: When user deleted, audit records maintain user_id for compliance but with NULL foreign key (ON DELETE SET NULL)
+- **Fields Logged**: event_type, mfa_method, status, ip_address, user_agent, timestamp
+- **Monitoring**: Failed attempts trigger alert when count > 10 in 1 hour window
+
 ## Security Considerations
 
+- [x] Rate limiting on MFA verification attempts (Phase 1)
+- [x] Audit logging for MFA enrollment/disablement (Phase 1)
 - [ ] TOTP secrets encrypted using TDE (Phase 3)
-- [ ] Rate limiting on MFA verification attempts
-- [ ] Audit logging for MFA enrollment/disablement
-- [ ] Account recovery procedures for lost MFA devices
+- [ ] Account recovery procedures for lost MFA devices (Phase 2)
 
 ## Sections to Be Filled In Later
 

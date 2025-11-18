@@ -196,5 +196,3 @@ GRANT SELECT, INSERT ON audit_graphql_complexity TO app_user;
 GRANT SELECT, INSERT ON audit_graphql_execution_plans TO app_user;
 GRANT SELECT, INSERT ON audit_circuit_breaker_events TO app_user;
 GRANT SELECT, INSERT ON audit_http_compression TO app_user;
-
-COMMIT;

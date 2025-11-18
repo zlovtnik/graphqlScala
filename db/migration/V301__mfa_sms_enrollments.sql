@@ -18,10 +18,14 @@ CREATE TABLE MFA_SMS_ENROLLMENTS (
     created_at TIMESTAMP DEFAULT SYSTIMESTAMP,
     verified_at TIMESTAMP,
     updated_at TIMESTAMP DEFAULT SYSTIMESTAMP,
-    UNIQUE (user_id)  -- Only one phone number per user
+    UNIQUE (user_id),  -- Only one phone number per user
+    -- Constraints ensure hash/salt pairs are present or absent together (no orphaned salts)
+    CONSTRAINT chk_verification_code_pair CHECK ((verification_code_hash IS NULL) = (verification_code_salt IS NULL)),
+    CONSTRAINT chk_otp_code_pair CHECK ((otp_code_hash IS NULL) = (otp_code_salt IS NULL))
 );
 
-CREATE INDEX idx_mfa_sms_user_id ON MFA_SMS_ENROLLMENTS(user_id);
+-- Note: UNIQUE (user_id) constraint automatically creates a unique index; explicit index idx_mfa_sms_user_id is redundant and has been removed.
+-- Remaining indexes support queries on verification state, expiration times, and rate limiting.
 CREATE INDEX idx_mfa_sms_is_verified ON MFA_SMS_ENROLLMENTS(is_verified);
 CREATE INDEX idx_mfa_sms_phone_expires ON MFA_SMS_ENROLLMENTS(verification_code_expires_at);
 CREATE INDEX idx_mfa_sms_otp_expires ON MFA_SMS_ENROLLMENTS(otp_expires_at);

@@ -77,6 +77,19 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         this.maxAgeDistribution = DistributionSummary.builder("http.cache.max_age")
                 .publishPercentiles(0.5, 0.95)
                 .register(meterRegistry);
+
+        // Validate SHA-256 algorithm availability at startup to catch configuration
+        // errors early
+        try {
+            MessageDigest.getInstance(ETAG_HASH_ALGORITHM);
+            log.debug("SHA-256 algorithm validated at startup");
+        } catch (NoSuchAlgorithmException e) {
+            log.error(
+                    "CRITICAL: SHA-256 algorithm is not available. This is a critical security configuration error. " +
+                            "ETags require SHA-256 for collision resistance. Failing fast to prevent security bypass.",
+                    e);
+            throw new IllegalStateException("SHA-256 algorithm is required but not available at startup", e);
+        }
     }
 
     @Override
@@ -130,14 +143,20 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
             log.debug("Mutation/subscription - no caching");
         } else {
             // Query (cacheable)
-            String cacheControl = String.format("public, max-age=%d", maxAge);
-            wrappedResponse.setHeader(HttpHeaders.CACHE_CONTROL, cacheControl);
-
             if (wrappedResponse.hasExceededCaptureLimit()) {
+                // When response too large to capture, use no-cache fallback to enable
+                // If-None-Match validation on subsequent requests without guaranteeing cache
+                // hits
+                wrappedResponse.setHeader(HttpHeaders.CACHE_CONTROL, "public, max-age=60, must-revalidate");
                 meterRegistry.counter("http.cache.etag.skipped", "reason", "response_too_large").increment();
-                log.debug("Skipping ETag generation: response exceeded {} bytes (captured ~{} bytes)",
+                log.debug(
+                        "Skipping ETag generation: response exceeded {} bytes (captured ~{} bytes); using fallback TTL",
                         MAX_ETAG_CAPTURE_BYTES, wrappedResponse.getCapturedSize());
             } else {
+                // Normal case: set max-age and generate ETag
+                String cacheControl = String.format("public, max-age=%d", maxAge);
+                wrappedResponse.setHeader(HttpHeaders.CACHE_CONTROL, cacheControl);
+
                 // Generate ETag from actual response body (skip if empty)
                 String responseBody = wrappedResponse.getCapturedBody();
                 String etag = generateETag(responseBody);
@@ -209,6 +228,9 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
      * - __schema or __type fragments/fields
      * - IntrospectionQuery operation name
      * 
+     * Skips expensive JSON parsing for large bodies (>10KB) to prevent performance
+     * regression.
+     * 
      * @param body GraphQL query body
      * @return true if this is an introspection query
      */
@@ -216,11 +238,23 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         if (body == null) {
             return false;
         }
-        // Check for introspection field names
+
+        // Skip expensive JSON parsing for large bodies (>10KB) to avoid performance
+        // regression
+        if (body.length() > 10_240) {
+            log.debug("Skipping JSON parsing for introspection detection: body size {} bytes exceeds 10KB threshold",
+                    body.length());
+            // For large bodies, use lightweight string checks and regex
+            return body.contains("__schema") || body.contains("__type") ||
+                    INTROSPECTION_OPERATION_PATTERN.matcher(body).find();
+        }
+
+        // For smaller bodies, prefer JSON parsing for accuracy, with fallback to
+        // string/regex checks
         if (body.contains("__schema") || body.contains("__type")) {
             return true;
         }
-        // Check for standard IntrospectionQuery operation name via JSON parsing
+
         try {
             JsonNode root = OBJECT_MAPPER.readTree(body);
             JsonNode operationName = root.get("operationName");
@@ -236,17 +270,23 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
      * Generate ETag using SHA-256 hash of response body.
      * 
      * Computes a stable content-based hash from the actual response:
-     * - SHA-256 hash of response body, Base64-encoded and truncated to ETAG_LENGTH characters
+     * - SHA-256 hash of response body, Base64-encoded and truncated to ETAG_LENGTH
+     * characters
      * - Fails fast if SHA-256 is unavailable (required algorithm)
      * 
      * ETag Length Strategy:
      * - 24 Base64 characters represent ~144 bits (2^144) of entropy
-     * - Collision resistance: ~2^72 (birthday paradox), sufficient for typical GraphQL APIs
-     * - RFC 7232 does not mandate length; 24 chars balances collision safety with header size
-     * - Alternative: Remove truncation for full 44-char SHA-256 Base64 if stricter guarantees needed
+     * - Collision resistance: ~2^72 (birthday paradox), sufficient for typical
+     * GraphQL APIs
+     * - RFC 7232 does not mandate length; 24 chars balances collision safety with
+     * header size
+     * - Alternative: Remove truncation for full 44-char SHA-256 Base64 if stricter
+     * guarantees needed
      * 
-     * Security Note: SHA-256 is required. No fallback to weaker algorithms (e.g., CRC32) is provided
-     * to ensure ETag collision resistance. If SHA-256 is unavailable, the application fails fast
+     * Security Note: SHA-256 is required. No fallback to weaker algorithms (e.g.,
+     * CRC32) is provided
+     * to ensure ETag collision resistance. If SHA-256 is unavailable, the
+     * application fails fast
      * rather than silently using insecure hashing.
      * 
      * @param responseBody The response body string to hash
@@ -263,7 +303,8 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
             MessageDigest digest = MessageDigest.getInstance(ETAG_HASH_ALGORITHM);
             byte[] hash = digest.digest(responseBody.getBytes(StandardCharsets.UTF_8));
             String encoded = Base64.getEncoder().encodeToString(hash);
-            // Truncate to ETAG_LENGTH characters for reasonable ETag length and collision resistance
+            // Truncate to ETAG_LENGTH characters for reasonable ETag length and collision
+            // resistance
             return "\"" + encoded.substring(0, Math.min(ETAG_LENGTH, encoded.length())) + "\"";
         } catch (NoSuchAlgorithmException e) {
             log.error("SHA-256 algorithm is not available; this is a critical security configuration error. " +
@@ -300,8 +341,14 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         // Only cache actual GraphQL endpoint
         boolean isGraphQLPath = path.endsWith("/graphql") || path.contains("/graphql/");
 
-        // Explicitly exclude sensitive paths
-        boolean isSensitivePath = path.startsWith("/api/auth");
+        // Explicitly exclude sensitive paths (auth, oauth, login, etc.)
+        boolean isSensitivePath = path.startsWith("/api/auth") ||
+                path.startsWith("/auth") ||
+                path.startsWith("/oauth") ||
+                path.startsWith("/login") ||
+                path.startsWith("/logout") ||
+                path.startsWith("/signin") ||
+                path.startsWith("/signup");
 
         return isGraphQLPath &&
                 !isSensitivePath &&
@@ -355,7 +402,7 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
         public CapturedResponseWrapper(HttpServletResponse response, long maxCaptureBytes) {
             super(response);
             this.maxCaptureBytes = maxCaptureBytes;
-            this.captureBuffer = new ByteArrayOutputStream((int) Math.min(maxCaptureBytes, 8192));
+            this.captureBuffer = new ByteArrayOutputStream((int) Math.min(maxCaptureBytes, 65_536));
         }
 
         public boolean hasExceededCaptureLimit() {
@@ -395,34 +442,59 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
                 capturedWriter = new PrintWriter(originalWriter, true) {
                     @Override
                     public void write(int c) {
-                        captureChars(Character.toString((char) c));
-                        super.write(c);
+                        try {
+                            super.write(c);
+                            captureChars(Character.toString((char) c));
+                        } catch (Exception e) {
+                            log.warn("Error writing character", e);
+                            throw new RuntimeException(e);
+                        }
                     }
 
                     @Override
                     public void write(char[] cbuf) {
-                        captureChars(new String(cbuf));
-                        super.write(cbuf);
+                        try {
+                            super.write(cbuf);
+                            captureChars(new String(cbuf));
+                        } catch (Exception e) {
+                            log.warn("Error writing char array", e);
+                            throw new RuntimeException(e);
+                        }
                     }
 
                     @Override
                     public void write(char[] cbuf, int off, int len) {
-                        captureChars(new String(cbuf, off, len));
-                        super.write(cbuf, off, len);
+                        try {
+                            super.write(cbuf, off, len);
+                            captureChars(new String(cbuf, off, len));
+                        } catch (Exception e) {
+                            log.warn("Error writing char array with offset", e);
+                            throw new RuntimeException(e);
+                        }
                     }
 
                     @Override
                     public void write(String str) {
-                        captureChars(str);
-                        super.write(str);
+                        try {
+                            super.write(str);
+                            captureChars(str);
+                        } catch (Exception e) {
+                            log.warn("Error writing string", e);
+                            throw new RuntimeException(e);
+                        }
                     }
 
                     @Override
                     public void write(String str, int off, int len) {
-                        if (str != null && len > 0) {
-                            captureChars(str.substring(off, Math.min(str.length(), off + len)));
+                        try {
+                            if (str != null && len > 0) {
+                                super.write(str, off, len);
+                                captureChars(str.substring(off, Math.min(str.length(), off + len)));
+                            }
+                        } catch (Exception e) {
+                            log.warn("Error writing string with offset", e);
+                            throw new RuntimeException(e);
                         }
-                        super.write(str, off, len);
                     }
 
                     @Override
@@ -515,7 +587,8 @@ public class CacheControlHeaderFilter extends OncePerRequestFilter {
     }
 
     /**
-     * ServletOutputStream that captures bytes written to response while enforcing a size cap.
+     * ServletOutputStream that captures bytes written to response while enforcing a
+     * size cap.
      */
     private static class CapturingOutputStream extends jakarta.servlet.ServletOutputStream {
         private final jakarta.servlet.ServletOutputStream delegate;

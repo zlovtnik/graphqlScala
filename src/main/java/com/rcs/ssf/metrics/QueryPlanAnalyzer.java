@@ -38,8 +38,10 @@ import java.util.stream.Collectors;
  * - graphql.query.anomaly.detected (counter)
  * 
  * Usage:
+ * 
  * @Component annotation auto-loads this as a Spring bean.
- * Integrate with JDBC interceptor or R2DBC listener for execution hooks.
+ *            Integrate with JDBC interceptor or R2DBC listener for execution
+ *            hooks.
  */
 @Component
 @RequiredArgsConstructor
@@ -70,17 +72,17 @@ public class QueryPlanAnalyzer {
     /**
      * Record a query execution for analysis.
      * 
-     * @param query SQL query string
+     * @param query           SQL query string
      * @param executionTimeMs Execution time in milliseconds
-     * @param rowsAffected Number of rows returned/affected
+     * @param rowsAffected    Number of rows returned/affected
      */
     public void recordExecution(String query, long executionTimeMs, long rowsAffected) {
         String queryType = normalizeQuery(query);
-        
+
         // Update statistics
         QueryStats stats = queryMetrics.get(queryType, k -> new QueryStats(query));
         stats.recordExecution(executionTimeMs, rowsAffected);
-        
+
         // Track recent queries for N+1 detection
         synchronized (recentQueries) {
             recentQueries.addLast(new QueryExecution(queryType, System.currentTimeMillis()));
@@ -88,13 +90,13 @@ public class QueryPlanAnalyzer {
                 recentQueries.removeFirst();
             }
         }
-        
+
         // Export metrics
         exportMetrics(queryType, executionTimeMs);
-        
+
         // Check for anomalies
         checkForAnomalies(queryType, executionTimeMs);
-        
+
         // Check for N+1 queries
         if (recentQueries.size() >= N_PLUS_ONE_MIN_COUNT) {
             detectNPlusOne();
@@ -106,7 +108,8 @@ public class QueryPlanAnalyzer {
      */
     private void exportMetrics(String queryType, long executionTimeMs) {
         QueryStats stats = queryMetrics.getIfPresent(queryType);
-        if (stats == null) return;
+        if (stats == null)
+            return;
 
         // Histogram with percentiles
         Timer.builder("graphql.query.execution_time_ms")
@@ -183,22 +186,22 @@ public class QueryPlanAnalyzer {
             for (Map.Entry<String, List<QueryExecution>> entry : queriesByType.entrySet()) {
                 String queryType = entry.getKey();
                 List<QueryExecution> queries = entry.getValue();
-                
+
                 if (queries.size() < N_PLUS_ONE_MIN_COUNT) {
                     continue;
                 }
 
                 // Sort by timestamp
                 queries.sort(Comparator.comparingLong(q -> q.timestamp));
-                
+
                 // Find clusters where consecutive queries are within threshold
                 int clusterSize = 1;
                 long clusterStart = queries.get(0).timestamp;
                 long clusterEnd = clusterStart;
-                
+
                 for (int i = 1; i < queries.size(); i++) {
                     long currentTimestamp = queries.get(i).timestamp;
-                    
+
                     if (currentTimestamp - clusterEnd <= N_PLUS_ONE_THRESHOLD_MS) {
                         // Extend current cluster
                         clusterEnd = currentTimestamp;
@@ -208,14 +211,14 @@ public class QueryPlanAnalyzer {
                         if (clusterSize >= N_PLUS_ONE_MIN_COUNT) {
                             reportNPlusOne(queryType, clusterSize, clusterEnd - clusterStart);
                         }
-                        
+
                         // Start new cluster
                         clusterStart = currentTimestamp;
                         clusterEnd = currentTimestamp;
                         clusterSize = 1;
                     }
                 }
-                
+
                 // Check final cluster
                 if (clusterSize >= N_PLUS_ONE_MIN_COUNT) {
                     reportNPlusOne(queryType, clusterSize, clusterEnd - clusterStart);
@@ -257,13 +260,13 @@ public class QueryPlanAnalyzer {
      */
     public Map<String, ResolverStats> getResolverBreakdown() {
         Map<String, ResolverStats> stats = new HashMap<>();
-        
+
         queryMetrics.asMap().forEach((queryType, queryStats) -> {
             String resolver = extractResolverName(queryType);
             stats.computeIfAbsent(resolver, k -> new ResolverStats())
                     .addQuery(queryStats);
         });
-        
+
         return stats;
     }
 
@@ -271,30 +274,37 @@ public class QueryPlanAnalyzer {
      * Normalize query by removing values to find similar queries.
      */
     private String normalizeQuery(String query) {
-        if (query == null) return "unknown";
-        
+        if (query == null)
+            return "unknown";
+
         // Replace parameter values with placeholders
-        String normalized = query.replaceAll("'[^']*'", "?")  // String values
-                .replaceAll("\\b\\d+\\b", "?")  // Numeric values
-                .replaceAll("\\s+", " ")         // Normalize whitespace
+        String normalized = query.replaceAll("'[^']*'", "?") // String values
+                .replaceAll("\\b\\d+\\b", "?") // Numeric values
+                .replaceAll("\\s+", " ") // Normalize whitespace
                 .toLowerCase(java.util.Locale.ROOT);
-        
+
         return normalized.substring(0, Math.min(200, normalized.length())); // Truncate for key
     }
 
     private String extractType(String queryType) {
-        if (queryType == null) return "OTHER";
+        if (queryType == null)
+            return "OTHER";
         String normalized = queryType.toLowerCase(java.util.Locale.ROOT);
-        if (normalized.contains("select")) return "SELECT";
-        if (normalized.contains("insert")) return "INSERT";
-        if (normalized.contains("update")) return "UPDATE";
-        if (normalized.contains("delete")) return "DELETE";
+        if (normalized.contains("select"))
+            return "SELECT";
+        if (normalized.contains("insert"))
+            return "INSERT";
+        if (normalized.contains("update"))
+            return "UPDATE";
+        if (normalized.contains("delete"))
+            return "DELETE";
         return "OTHER";
     }
 
     private String extractResolverName(String queryType) {
         // Extract table name or resolver from query
-        if (queryType == null) return "unknown";
+        if (queryType == null)
+            return "unknown";
         String normalized = queryType.toLowerCase(java.util.Locale.ROOT);
         if (normalized.contains("from")) {
             String[] parts = normalized.split("from");
@@ -309,15 +319,19 @@ public class QueryPlanAnalyzer {
      * Query statistics for tracking execution patterns.
      * 
      * Thread-safe with bounded sampling: stores at most 1000 recent execution times
-     * to prevent unbounded memory growth. Uses ConcurrentLinkedDeque and atomic operations
+     * to prevent unbounded memory growth. Uses ConcurrentLinkedDeque and atomic
+     * operations
      * for concurrent updates with minimal lock contention.
      */
     public static class QueryStats {
         private static final int MAX_SAMPLES = 1000;
         private final String originalQuery;
         private final java.util.concurrent.ConcurrentLinkedDeque<Long> executionTimes = new java.util.concurrent.ConcurrentLinkedDeque<>();
-        private final java.util.concurrent.atomic.AtomicLong minExecutionTime = new java.util.concurrent.atomic.AtomicLong(Long.MAX_VALUE);
-        private final java.util.concurrent.atomic.AtomicLong maxExecutionTime = new java.util.concurrent.atomic.AtomicLong(0);
+        private final java.util.concurrent.atomic.AtomicLong minExecutionTime = new java.util.concurrent.atomic.AtomicLong(
+                Long.MAX_VALUE);
+        private final java.util.concurrent.atomic.AtomicLong maxExecutionTime = new java.util.concurrent.atomic.AtomicLong(
+                0);
+        private volatile boolean minMaxStale = false;
         private final java.util.concurrent.atomic.LongAdder totalExecutionTime = new java.util.concurrent.atomic.LongAdder();
         protected final Object lock = new Object();
 
@@ -332,45 +346,65 @@ public class QueryPlanAnalyzer {
                 // Trim oldest samples if exceeding max
                 if (executionTimes.size() > MAX_SAMPLES) {
                     removedTime = executionTimes.removeFirst();
-                    // Recompute min/max if the removed value was one of them
-                    recomputeMinMaxIfStale(removedTime);
+                    handleRemovalEffects(removedTime);
                 }
+                // Update totals inside synchronized block to avoid race condition
+                // Subtract removed sample from total
+                if (removedTime != null) {
+                    totalExecutionTime.add(-removedTime);
+                }
+                // Add new sample to total
+                totalExecutionTime.add(executionTimeMs);
             }
-            // Subtract removed sample from total
-            if (removedTime != null) {
-                totalExecutionTime.add(-removedTime);
-            }
-            // Update min/max using atomic operations (non-blocking)
+            // Update min/max using atomic operations (non-blocking, outside lock)
             updateMinMax(executionTimeMs);
-            totalExecutionTime.add(executionTimeMs);
         }
 
-        /**
-         * Recompute min/max from current deque contents if the removed sample was
-         * one of the extreme values. Called under synchronized(lock) to ensure
-         * consistent snapshot of executionTimes.
-         */
-        private void recomputeMinMaxIfStale(long removedValue) {
+        private void handleRemovalEffects(long removedValue) {
             long currentMin = minExecutionTime.get();
             long currentMax = maxExecutionTime.get();
-            
-            // Check if removed value matches current min or max
+
+            if (executionTimes.isEmpty()) {
+                minExecutionTime.set(Long.MAX_VALUE);
+                maxExecutionTime.set(0);
+                minMaxStale = false;
+                return;
+            }
+
             if (removedValue == currentMin || removedValue == currentMax) {
+                minMaxStale = true;
+            }
+        }
+
+        private void recomputeMinMaxIfNeeded() {
+            if (!minMaxStale) {
+                return;
+            }
+            synchronized (lock) {
+                if (!minMaxStale) {
+                    return;
+                }
+
+                long newMin = Long.MAX_VALUE;
+                long newMax = 0;
+                for (long time : executionTimes) {
+                    if (time < newMin) {
+                        newMin = time;
+                    }
+                    if (time > newMax) {
+                        newMax = time;
+                    }
+                }
+
                 if (executionTimes.isEmpty()) {
-                    // Deque is now empty, reset to sentinel values
                     minExecutionTime.set(Long.MAX_VALUE);
                     maxExecutionTime.set(0);
                 } else {
-                    // Recompute from current deque contents (already holding lock)
-                    long newMin = Long.MAX_VALUE;
-                    long newMax = 0;
-                    for (long time : executionTimes) {
-                        if (time < newMin) newMin = time;
-                        if (time > newMax) newMax = time;
-                    }
                     minExecutionTime.set(newMin);
                     maxExecutionTime.set(newMax);
                 }
+
+                minMaxStale = false;
             }
         }
 
@@ -382,7 +416,7 @@ public class QueryPlanAnalyzer {
                 }
                 currentMin = minExecutionTime.get();
             }
-            
+
             long currentMax = maxExecutionTime.get();
             while (executionTimeMs > currentMax) {
                 if (maxExecutionTime.compareAndSet(currentMax, executionTimeMs)) {
@@ -392,17 +426,29 @@ public class QueryPlanAnalyzer {
             }
         }
 
-        public long getCount() { return executionTimes.size(); }
-        public long getMinExecutionTime() { 
+        public long getCount() {
+            return executionTimes.size();
+        }
+
+        public long getMinExecutionTime() {
+            recomputeMinMaxIfNeeded();
             long min = minExecutionTime.get();
             return min == Long.MAX_VALUE ? 0 : min;
         }
-        public long getMaxExecutionTime() { return maxExecutionTime.get(); }
+
+        public long getMaxExecutionTime() {
+            recomputeMinMaxIfNeeded();
+            return maxExecutionTime.get();
+        }
+
         public double getAverageExecutionTime() {
             long count = getCount();
             return count > 0 ? (double) totalExecutionTime.sum() / count : 0;
         }
-        public String getOriginalQuery() { return originalQuery; }
+
+        public String getOriginalQuery() {
+            return originalQuery;
+        }
     }
 
     /**
@@ -431,7 +477,8 @@ public class QueryPlanAnalyzer {
         }
 
         private double getPercentile(double percentile) {
-            // Snapshot all times from all queries' bounded deques to avoid ConcurrentModificationException
+            // Snapshot all times from all queries' bounded deques to avoid
+            // ConcurrentModificationException
             List<Long> times = queries.stream()
                     .flatMap(q -> {
                         synchronized (q.lock) {
@@ -440,7 +487,8 @@ public class QueryPlanAnalyzer {
                     })
                     .sorted()
                     .toList();
-            if (times.isEmpty()) return 0;
+            if (times.isEmpty())
+                return 0;
             int index = (int) (times.size() * percentile);
             return times.get(Math.min(index, times.size() - 1));
         }

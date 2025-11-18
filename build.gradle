@@ -125,13 +125,21 @@ jacocoTestCoverageVerification {
 }
 
 flyway {
-	url = System.getenv('ORACLE_URL') ?: 'jdbc:oracle:thin:@localhost:1521/FREEPDB1'
-	user = System.getenv('ORACLE_USER') ?: 'APP_USER'
-	password = System.getenv('ORACLE_PASSWORD') ?: 'ssfpassword'
-	locations = ['filesystem:db/migration']
+    url = System.getenv('ORACLE_URL') ?: 'jdbc:oracle:thin:@localhost:1521/FREE'
+    user = System.getenv('ORACLE_USER') ?: 'ssf_admin'
+    password = {
+        String pwd = System.getenv('ORACLE_PASSWORD')
+        if (pwd == null || pwd.isEmpty()) {
+            throw new GradleException(
+                "ORACLE_PASSWORD environment variable is required and cannot be empty. " +
+                "Set it before running migrations: export ORACLE_PASSWORD='your_password'"
+            )
+        }
+        pwd
+    }()
+    locations = ['filesystem:./db/migration']
+    failOnMissingLocations = true
 }
-
-
 configurations {
 	all {
         exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'

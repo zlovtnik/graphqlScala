@@ -4,6 +4,7 @@ import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletInputStream;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
 import java.nio.charset.Charset;
@@ -12,8 +13,10 @@ import java.nio.charset.StandardCharsets;
 /**
  * HttpServletRequest wrapper that caches the request body for multiple reads.
  * 
- * Enforces a maximum body size to prevent OOM attacks. Async I/O listeners are not supported.
+ * Enforces a maximum body size to prevent OOM attacks. Async I/O listeners are
+ * not supported.
  */
+@Slf4j
 public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
 
     private static final long DEFAULT_MAX_BODY_SIZE = 1_000_000L; // 1MB default
@@ -28,32 +31,53 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
     /**
      * Creates a new cached request with a configurable maximum body size.
      *
-     * @param request the original HttpServletRequest
+     * Enforces the size limit on actual bytes read from the request input stream
+     * before
+     * decoding/accumulation. This prevents the StringBuilder from growing beyond
+     * the allowed
+     * size and avoids false rejections due to UTF-8 encoding overhead.
+     *
+     * @param request          the original HttpServletRequest
      * @param maxBodySizeBytes maximum allowed request body size in bytes
-     * @throws IOException if the request body cannot be read
+     * @throws IOException if the request body cannot be read or exceeds the size
+     *                     limit
      */
     public CachedBodyHttpServletRequest(HttpServletRequest request, long maxBodySizeBytes) throws IOException {
         super(request);
         String encoding = request.getCharacterEncoding();
-        this.bodyCharset = (encoding == null || encoding.isBlank())
-                ? StandardCharsets.UTF_8
-                : Charset.forName(encoding);
-        
-        StringBuilder stringBuilder = new StringBuilder();
-        long estimatedBytes = 0L;
-        try (BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(request.getInputStream(), bodyCharset))) {
-            char[] charBuffer = new char[128];
-            int bytesRead;
-            while ((bytesRead = bufferedReader.read(charBuffer)) > 0) {
-                // Check size limit (conservative UTF-8 upper bound: 4 bytes per char)
-                estimatedBytes += (long) bytesRead * 4;
-                if (estimatedBytes > maxBodySizeBytes) {
-                    throw new IOException("Request body exceeds maximum allowed size of " + maxBodySizeBytes + " bytes");
-                }
-                stringBuilder.append(charBuffer, 0, bytesRead);
+        // Handle charset with exception fallback for invalid names
+        Charset resolvedCharset;
+        if (encoding == null || encoding.isBlank()) {
+            resolvedCharset = StandardCharsets.UTF_8;
+        } else {
+            try {
+                resolvedCharset = Charset.forName(encoding);
+            } catch (Exception e) {
+                log.warn("Invalid charset '{}' in request; falling back to UTF-8: {}", encoding, e.getMessage());
+                resolvedCharset = StandardCharsets.UTF_8;
             }
         }
-        body = stringBuilder.toString();
+        this.bodyCharset = resolvedCharset;
+
+        // Read raw bytes from input stream with strict size enforcement
+        ByteArrayOutputStream byteBuffer = new ByteArrayOutputStream();
+        byte[] rawBuffer = new byte[8192];
+        long totalBytesRead = 0L;
+        int bytesRead;
+
+        try (InputStream inputStream = request.getInputStream()) {
+            while ((bytesRead = inputStream.read(rawBuffer)) > 0) {
+                totalBytesRead += bytesRead;
+                if (totalBytesRead > maxBodySizeBytes) {
+                    throw new IOException(
+                            "Request body exceeds maximum allowed size of " + maxBodySizeBytes + " bytes");
+                }
+                byteBuffer.write(rawBuffer, 0, bytesRead);
+            }
+        }
+
+        // Convert collected bytes to String using the resolved charset
+        body = byteBuffer.toString(bodyCharset);
     }
 
     public String getBody() {
@@ -77,7 +101,8 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
             @Override
             public void setReadListener(ReadListener readListener) {
                 // Async I/O is not supported by this cached request wrapper
-                throw new UnsupportedOperationException("Async read listeners are not supported by CachedBodyHttpServletRequest");
+                throw new UnsupportedOperationException(
+                        "Async read listeners are not supported by CachedBodyHttpServletRequest");
             }
 
             @Override

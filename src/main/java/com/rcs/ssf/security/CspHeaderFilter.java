@@ -114,8 +114,8 @@ public class CspHeaderFilter extends OncePerRequestFilter implements Ordered {
             
             java.util.regex.Matcher hostMatcher = httpsHostPattern.matcher(token);
             if (hostMatcher.matches()) {
-                // Valid HTTPS host; validate port if present
-                String portStr = hostMatcher.group(2);
+                // Valid HTTPS host; validate port if present (group 3 is the port number)
+                String portStr = hostMatcher.group(3);
                 if (portStr != null && !portStr.isEmpty()) {
                     try {
                         int port = Integer.parseInt(portStr);

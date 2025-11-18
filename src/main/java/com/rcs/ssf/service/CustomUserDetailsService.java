@@ -7,6 +7,7 @@ import com.rcs.ssf.security.AuthenticatedUser;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -21,7 +22,7 @@ import java.util.List;
  * using Spring Data R2DBC reactive repositories.
  */
 @Service
-public class CustomUserDetailsService {
+public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final SecurityProperties securityProperties;
@@ -44,6 +45,24 @@ public class CustomUserDetailsService {
     }
 
     /**
+     * Blocking implementation of UserDetailsService.loadUserByUsername() for Spring
+     * Security.
+     * 
+     * This method blocks the reactive call to support synchronous servlet filter
+     * usage
+     * in JwtAuthenticationFilter. The blocking is necessary because servlet filters
+     * operate in a blocking context.
+     *
+     * @param username the username to search for
+     * @return UserDetails if found
+     * @throws UsernameNotFoundException if user is not found
+     */
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        return findByUsername(username).block();
+    }
+
+    /**
      * Builds UserDetails from a User entity without blocking.
      *
      * @param user the user entity
@@ -52,52 +71,59 @@ public class CustomUserDetailsService {
     private UserDetails buildUserDetails(User user) {
         // Fetch user's roles and convert to GrantedAuthority instances
         List<GrantedAuthority> authorities = getUserAuthorities(user);
-        
+
         // Make authorities immutable to prevent post-authentication mutation
         List<GrantedAuthority> immutableAuthorities = List.copyOf(authorities);
-        
+
         return new AuthenticatedUser(
                 user.getId(),
                 user.getUsername(),
                 user.getPassword(),
-                immutableAuthorities
-        );
+                immutableAuthorities);
     }
-    
+
     /**
      * Fetches the user's roles and converts them to GrantedAuthority instances.
      * 
-     * Implements least-privilege principle: Users receive only the roles explicitly assigned to them.
-     * If the user has no roles, an empty authority list is returned (no implicit authorities).
+     * Implements least-privilege principle: Users receive only the roles explicitly
+     * assigned to them.
+     * If the user has no roles, an empty authority list is returned (no implicit
+     * authorities).
      * 
      * Legacy Backward Compatibility:
-     * If app.security.enableDefaultUserRole=true is set in configuration, users with no explicit roles
-     * will receive ROLE_USER as a fallback (only for systems requiring backward compatibility).
-     * Default behavior (enableDefaultUserRole=false) returns empty list for users with no roles.
+     * If app.security.enableDefaultUserRole=true is set in configuration, users
+     * with no explicit roles
+     * will receive ROLE_USER as a fallback (only for systems requiring backward
+     * compatibility).
+     * Default behavior (enableDefaultUserRole=false) returns empty list for users
+     * with no roles.
      * 
-     * Once the User entity is extended with roles/role relationships, this method will:
+     * Once the User entity is extended with roles/role relationships, this method
+     * will:
      * - Fetch roles from user.getRoles() if available
      * - Map each role to a GrantedAuthority with "ROLE_" prefix
      * - Still respect the enableDefaultUserRole flag for any remaining empty cases
      *
      * @param user the user entity
-     * @return list of GrantedAuthority instances for the user (may be empty if no roles assigned and flag disabled)
+     * @return list of GrantedAuthority instances for the user (may be empty if no
+     *         roles assigned and flag disabled)
      */
     private List<GrantedAuthority> getUserAuthorities(User user) {
         List<GrantedAuthority> authorities = new ArrayList<>();
-        
+
         // TODO: Once User entity has roles field, replace this with:
         // if (user.getRoles() != null && !user.getRoles().isEmpty()) {
-        //     authorities = user.getRoles().stream()
-        //             .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName()))
-        //             .collect(Collectors.toList());
+        // authorities = user.getRoles().stream()
+        // .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName()))
+        // .collect(Collectors.toList());
         // }
-        
-        // Apply least-privilege principle: only grant implicit default role if explicitly enabled
+
+        // Apply least-privilege principle: only grant implicit default role if
+        // explicitly enabled
         if (authorities.isEmpty() && securityProperties.isEnableDefaultUserRole()) {
             authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
         }
-        
+
         return authorities;
     }
 }

@@ -221,8 +221,11 @@ public class UserService {
         }
 
         // Use blocking repository calls - R2dbcRepository returns Mono, block it
+        // IMPORTANT: Block the deleteById() call to ensure deletion completes before returning.
+        // Without block(), the delete operation is not guaranteed to have completed when the method returns,
+        // creating a race condition where callers may check for deletion before it actually finishes.
         if (userRepository.existsById(userId).block()) {
-            userRepository.deleteById(userId);
+            userRepository.deleteById(userId).block();
             return true;
         }
         return false;

@@ -22,8 +22,12 @@ CREATE TABLE audit_login_attempts (
 -- CREATE INDEX idx_audit_login_attempts_success ON audit_login_attempts(success);
 -- CREATE INDEX idx_audit_login_attempts_created_at ON audit_login_attempts(created_at);
 
+-- NOTE: Single-column idx_audit_login_attempts_ip has been removed because it is redundant
+-- with the composite idx_audit_login_attempts_ip_created below. If profiling shows that
+-- standalone IP-address lookups (without created_at filtering) are frequently used without
+-- time-window conditions, reintroduce this single-column index and document the finding.
+
 -- Additional indexes for security monitoring
-CREATE INDEX idx_audit_login_attempts_ip ON audit_login_attempts(ip_address);
 CREATE INDEX idx_audit_login_attempts_username_created ON audit_login_attempts(username, created_at);
 CREATE INDEX idx_audit_login_attempts_success_created ON audit_login_attempts(success, created_at);
 CREATE INDEX idx_audit_login_attempts_ip_created ON audit_login_attempts(ip_address, created_at);

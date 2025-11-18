@@ -225,7 +225,8 @@ export class AuthService implements OnDestroy {
       this.authStateSubject$.next(AuthState.AUTHENTICATED);
     } else if (!this.currentUser$.value) {
       // We only re-fetch when we do not already have user context
-      // loadCurrentUser() will set AUTHENTICATED on successful fetch
+      // Set LOADING state before async fetch to prevent stale data inconsistency
+      this.authStateSubject$.next(AuthState.LOADING);
       this.loadCurrentUser();
     } else {
       // We already have user context from a previous successful load

@@ -22,12 +22,11 @@ public class AuditService {
     }
 
     public void logLoginAttempt(String username, boolean success, String ipAddress, String userAgent, String failureReason) {
-        final JdbcTemplate jt1 = this.jdbcTemplate;
-        if (jt1 == null) {
+        if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_login_attempt)");
             throw new IllegalStateException("Audit disabled: no DataSource configured");
         }
-        jt1.execute((Connection con) -> {
+        this.jdbcTemplate.execute((Connection con) -> {
             try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_login_attempt(?, ?, ?, ?, ?) }")) {
                 cs.setString(1, username);
                 cs.setInt(2, success ? 1 : 0);
@@ -41,13 +40,12 @@ public class AuditService {
     }
 
     public void logSessionStart(String userId, String token, String ipAddress, String userAgent) {
-        final JdbcTemplate jt2 = this.jdbcTemplate;
-        if (jt2 == null) {
+        if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_session_start)");
             throw new IllegalStateException("Audit disabled: no DataSource configured");
         }
         String tokenHash = HashUtils.sha256Hex(token);
-        jt2.execute((Connection con) -> {
+        this.jdbcTemplate.execute((Connection con) -> {
             try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_session_start(?, ?, ?, ?) }")) {
                 cs.setString(1, userId);
                 cs.setString(2, tokenHash);
@@ -74,8 +72,7 @@ public class AuditService {
      * @throws IllegalStateException if auditing is disabled (no DataSource configured)
      */
     public void logMfaEvent(String userId, String adminId, String eventType, String mfaMethod, String status, String details, String ipAddress, String userAgent) {
-        final JdbcTemplate jt3 = this.jdbcTemplate;
-        if (jt3 == null) {
+        if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_mfa_event)");
             throw new IllegalStateException("Audit disabled: no DataSource configured");
         }
@@ -95,7 +92,7 @@ public class AuditService {
             throw new IllegalArgumentException("Either userId or adminId must be provided");
         }
 
-        jt3.execute((Connection con) -> {
+        this.jdbcTemplate.execute((Connection con) -> {
             try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_mfa_event(?, ?, ?, ?, ?, ?, ?, ?) }")) {
                 cs.setString(1, userId);
                 cs.setString(2, adminId);

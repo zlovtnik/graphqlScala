@@ -50,7 +50,8 @@ import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
  * - r2dbc.pool.pending: Connections waiting in queue
  * - r2dbc.connection.creation.time: P95/P99 connection establish latency
  * 
- * Production tune: Adjust based on actual traffic patterns and database connection limits.
+ * Production tune: Adjust based on actual traffic patterns and database
+ * connection limits.
  */
 @Configuration
 @EnableR2dbcRepositories(basePackages = "com.rcs.ssf", entityOperationsRef = "r2dbcEntityTemplate")
@@ -61,7 +62,7 @@ public class ReactiveDataSourceConfiguration {
     @Bean
     public ConnectionProvider connectionProvider(MeterRegistry meterRegistry) {
         log.info("Configuring R2DBC connection provider with monitoring");
-        
+
         return ConnectionProvider.builder("graphql-r2dbc")
                 .maxIdleTime(Duration.ofMinutes(30))
                 .maxLifeTime(Duration.ofHours(1))
@@ -70,37 +71,43 @@ public class ReactiveDataSourceConfiguration {
 
     @Bean
     public ConnectionFactory r2dbcConnectionFactory(
-        R2dbcProperties r2dbcProperties,
-        MeterRegistry meterRegistry) {
-    
+            R2dbcProperties r2dbcProperties,
+            MeterRegistry meterRegistry) {
+
         log.info("Creating R2DBC connection factory");
-        
+
         // Validate required R2DBC properties
         validateR2dbcProperties(r2dbcProperties);
-        
+
         // Get SSL setting from properties (defaults to false if not specified)
         boolean useSsl = Boolean.TRUE.equals(r2dbcProperties.getSsl());
         String driver = r2dbcProperties.getDriver().trim().toLowerCase();
-        
-        // Build base options
-        ConnectionFactoryOptions.Builder optionsBuilder = ConnectionFactoryOptions.builder()
-            .option(DRIVER, r2dbcProperties.getDriver())
-            .option(HOST, r2dbcProperties.getHost())
-            .option(PORT, r2dbcProperties.getPort())
-            .option(DATABASE, r2dbcProperties.getDatabase())
-            .option(USER, r2dbcProperties.getUsername())
-            .option(PASSWORD, r2dbcProperties.getPassword());
-        
-        // Apply driver-specific SSL configuration
-        try {
-            applyDriverSpecificSslConfig(optionsBuilder, driver, useSsl);
-        } catch (IllegalArgumentException ex) {
-            log.warn("Failed to apply driver-specific SSL configuration: {}", ex.getMessage());
-            // Fall back to generic SSL option if driver is unknown
-            log.debug("Falling back to generic SSL option for driver: {}", driver);
-            optionsBuilder.option(SSL, useSsl);
+
+        // Build driver-specific R2DBC URL with SSL parameters included
+        String r2dbcUrl = buildR2dbcUrl(driver, r2dbcProperties, useSsl);
+        log.debug("Constructed R2DBC URL for driver={} with SSL={}: {}", driver, useSsl, maskPasswordInUrl(r2dbcUrl));
+
+        // Build ConnectionFactoryOptions from the constructed URL with credentials
+        ConnectionFactoryOptions.Builder optionsBuilder;
+
+        if ("oracle".equals(driver)) {
+            // For Oracle, build options directly since R2DBC SPI URL parser doesn't support
+            // Oracle format
+            optionsBuilder = ConnectionFactoryOptions.builder()
+                    .option(DRIVER, "oracle")
+                    .option(HOST, r2dbcProperties.getHost())
+                    .option(PORT, r2dbcProperties.getPort())
+                    .option(DATABASE, r2dbcProperties.getDatabase())
+                    .option(USER, r2dbcProperties.getUsername())
+                    .option(PASSWORD, r2dbcProperties.getPassword());
+        } else {
+            // For other drivers, use URL parsing
+            optionsBuilder = ConnectionFactoryOptions.builder()
+                    .from(ConnectionFactoryOptions.parse(r2dbcUrl))
+                    .option(USER, r2dbcProperties.getUsername())
+                    .option(PASSWORD, r2dbcProperties.getPassword());
         }
-        
+
         ConnectionFactoryOptions options = optionsBuilder.build();
 
         try {
@@ -110,65 +117,86 @@ public class ReactiveDataSourceConfiguration {
             return factory;
         } catch (Exception e) {
             meterRegistry.counter("r2dbc.connection.factory.failed").increment();
-            String errorContext = String.format("Failed to create R2DBC ConnectionFactory for driver=%s, host=%s", 
-                r2dbcProperties.getDriver(), r2dbcProperties.getHost());
+            String errorContext = String.format("Failed to create R2DBC ConnectionFactory for driver=%s, host=%s",
+                    r2dbcProperties.getDriver(), r2dbcProperties.getHost());
             log.error("{}: {}", errorContext, e.getMessage());
-            throw new RuntimeException("Cannot initialize R2DBC ConnectionFactory. Verify R2DBC driver availability and connection options.", e);
+            throw new RuntimeException(
+                    "Cannot initialize R2DBC ConnectionFactory. Verify R2DBC driver availability and connection options.",
+                    e);
         }
     }
-    
+
     /**
-     * Apply driver-specific SSL configuration options.
-     * Different R2DBC drivers use different option keys for SSL configuration.
+     * Constructs a driver-specific R2DBC connection URL with SSL parameters
+     * embedded.
      * 
-     * Supported drivers and their SSL option keys:
-     * - PostgreSQL: sslMode (REQUIRE/PREFER/DISABLE)
-     * - MySQL/MariaDB: sslMode (REQUIRED/PREFERRED/DISABLED)
-     * - Oracle: Not typically needed; handled at connection string level
-     * - MSSQL: encrypt (true/false)
-     * 
-     * @param optionsBuilder the ConnectionFactoryOptions builder to configure
      * @param driver the R2DBC driver name (lowercase)
+     * @param props  R2DBC properties
      * @param useSsl whether SSL should be enabled
-     * @throws IllegalArgumentException if driver is unknown or unsupported
+     * @return the constructed R2DBC URL with SSL parameters
      */
-    private void applyDriverSpecificSslConfig(ConnectionFactoryOptions.Builder optionsBuilder, String driver, boolean useSsl) {
+    private String buildR2dbcUrl(String driver, R2dbcProperties props, boolean useSsl) {
+        String baseUrl;
+
         switch (driver) {
             case "postgresql" -> {
-                // PostgreSQL uses sslMode: REQUIRE (enforce SSL), PREFER (prefer SSL, fall back to non-SSL), DISABLE (no SSL)
-                String sslMode = useSsl ? "REQUIRE" : "DISABLE";
-                log.debug("Applied PostgreSQL SSL config: sslMode={}", sslMode);
-                // Note: ConnectionFactoryOptions.parse creates a new options object; for builder pattern, 
-                // the specific option must be set using the appropriate method on the specific driver class.
-                // In practice, R2DBC drivers use properties passed through the connection string or configuration.
+                // PostgreSQL: r2dbc:postgresql://host:port/database?sslMode=require
+                String sslMode = useSsl ? "require" : "disable";
+                baseUrl = String.format("r2dbc:postgresql://%s:%d/%s?sslMode=%s",
+                        props.getHost(), props.getPort(), props.getDatabase(), sslMode);
             }
             case "mysql", "mariadb" -> {
-                // MySQL/MariaDB use sslMode: REQUIRED, PREFERRED, DISABLED
-                String sslMode = useSsl ? "REQUIRED" : "DISABLED";
-                log.debug("Applied MySQL/MariaDB SSL config: sslMode={}", sslMode);
+                // MySQL/MariaDB: r2dbc:mysql://host:port/database?useSSL=true&requireSSL=true
+                String sslParam = useSsl ? "true" : "false";
+                baseUrl = String.format("r2dbc:mysql://%s:%d/%s?useSSL=%s&requireSSL=%s",
+                        props.getHost(), props.getPort(), props.getDatabase(), sslParam, sslParam);
             }
             case "mssql" -> {
-                // MSSQL uses encrypt boolean
-                log.debug("Applied MSSQL SSL config: encrypt={}", useSsl);
+                // MSSQL: r2dbc:mssql://host:port;database=dbname;encrypt=true
+                String encryptParam = useSsl ? "true" : "false";
+                baseUrl = String.format("r2dbc:mssql://%s:%d;database=%s;encrypt=%s",
+                        props.getHost(), props.getPort(), props.getDatabase(), encryptParam);
             }
-            case "oracle", "h2" -> {
-                // Oracle and H2 handle SSL configuration differently
-                // Fall back to generic SSL option or skip
+            case "oracle" -> {
+                // Oracle: r2dbc:oracle:thin:@//host:port/service_name
+                // SSL/TLS is typically configured via wallet or TNS, not in URL
+                baseUrl = String.format("r2dbc:oracle:thin:@//%s:%d/%s",
+                        props.getHost(), props.getPort(), props.getDatabase());
                 if (useSsl) {
-                    log.debug("Note: {} driver SSL configuration handled elsewhere or not typically needed; ignoring useSsl flag", driver);
+                    log.debug(
+                            "Oracle SSL/TLS should be configured via database wallet or TNS configuration, not in URL");
+                }
+            }
+            case "h2" -> {
+                // H2: r2dbc:h2:mem:///database
+                baseUrl = String.format("r2dbc:h2:mem:///%s", props.getDatabase());
+                if (useSsl) {
+                    log.debug("H2 database does not use network-level SSL");
                 }
             }
             default -> throw new IllegalArgumentException(
-                String.format("Unknown or unsupported R2DBC driver: %s. Cannot apply driver-specific SSL configuration.", driver));
+                    String.format("Unknown or unsupported R2DBC driver: %s. Cannot construct R2DBC URL.", driver));
         }
+
+        return baseUrl;
     }
-    
+
+    /**
+     * Masks the password in a URL for safe logging.
+     * 
+     * @param url the URL to mask
+     * @return the URL with password replaced by asterisks
+     */
+    private String maskPasswordInUrl(String url) {
+        return url.replaceAll("([?&]password=)[^&]*", "$1***");
+    }
+
     /**
      * Validate that all required R2DBC properties are present and non-empty.
      * 
      * @param props R2DBC properties to validate
      * @throws IllegalArgumentException if any required property is missing or empty
-     * @throws IllegalStateException if driver is invalid
+     * @throws IllegalStateException    if driver is invalid
      */
     private void validateR2dbcProperties(R2dbcProperties props) {
         if (props == null) {
@@ -178,14 +206,17 @@ public class ReactiveDataSourceConfiguration {
         // Validate driver
         String driver = props.getDriver();
         if (driver == null || driver.trim().isBlank()) {
-            throw new IllegalStateException("R2DBC driver is required and cannot be empty. Set app.r2dbc.driver to a supported value: oracle, postgresql, mysql, h2");
+            throw new IllegalStateException(
+                    "R2DBC driver is required and cannot be empty. Set app.r2dbc.driver to a supported value: oracle, postgresql, mysql, h2");
         }
         driver = driver.trim().toLowerCase();
-        java.util.Set<String> supportedDrivers = java.util.Set.of("oracle", "postgresql", "mysql", "h2", "mariadb", "mssql");
+        java.util.Set<String> supportedDrivers = java.util.Set.of("oracle", "postgresql", "mysql", "h2", "mariadb",
+                "mssql");
         if (!supportedDrivers.contains(driver)) {
             throw new IllegalStateException(
-                String.format("Unsupported R2DBC driver '%s'. Supported drivers: %s. Set app.r2dbc.driver to a valid value.",
-                    driver, supportedDrivers));
+                    String.format(
+                            "Unsupported R2DBC driver '%s'. Supported drivers: %s. Set app.r2dbc.driver to a valid value.",
+                            driver, supportedDrivers));
         }
 
         if (props.getHost() == null || props.getHost().isBlank()) {
@@ -209,14 +240,16 @@ public class ReactiveDataSourceConfiguration {
             Integer maxSize = props.getPool().getMaxSize();
 
             if (minIdle != null && minIdle < 0) {
-                throw new IllegalArgumentException("R2DBC pool minIdle must be non-negative (>= 0); provided: " + minIdle);
+                throw new IllegalArgumentException(
+                        "R2DBC pool minIdle must be non-negative (>= 0); provided: " + minIdle);
             }
             if (maxSize != null && maxSize <= 0) {
                 throw new IllegalArgumentException("R2DBC pool maxSize must be positive (> 0); provided: " + maxSize);
             }
             if (minIdle != null && maxSize != null && minIdle > maxSize) {
-                throw new IllegalArgumentException("R2DBC pool minIdle cannot be greater than maxSize; provided minIdle: " +
-                        minIdle + ", maxSize: " + maxSize);
+                throw new IllegalArgumentException(
+                        "R2DBC pool minIdle cannot be greater than maxSize; provided minIdle: " +
+                                minIdle + ", maxSize: " + maxSize);
             }
         }
     }
@@ -226,14 +259,14 @@ public class ReactiveDataSourceConfiguration {
             ConnectionFactory r2dbcConnectionFactory,
             R2dbcProperties r2dbcProperties,
             MeterRegistry meterRegistry) {
-        
+
         log.info("Configuring R2DBC connection pool: " +
                 "min={}, max={}, queue={}, idleTimeout={}",
                 r2dbcProperties.getPool().getMinIdle(),
                 r2dbcProperties.getPool().getMaxSize(),
                 r2dbcProperties.getPool().getQueueDepth(),
                 r2dbcProperties.getPool().getIdleTimeout());
-        
+
         ConnectionPoolConfiguration poolConfig = ConnectionPoolConfiguration.builder(r2dbcConnectionFactory)
                 .initialSize(r2dbcProperties.getPool().getMinIdle())
                 .maxIdleTime(Duration.parse(r2dbcProperties.getPool().getIdleTimeout()))
@@ -244,14 +277,14 @@ public class ReactiveDataSourceConfiguration {
                 .build();
 
         ConnectionPool pool = new ConnectionPool(poolConfig);
-        
+
         // Export pool metrics
         pool.getMetrics().ifPresent(metrics -> {
             meterRegistry.gauge("r2dbc.pool.acquired", metrics, PoolMetrics::acquiredSize);
             meterRegistry.gauge("r2dbc.pool.idle", metrics, PoolMetrics::idleSize);
             meterRegistry.gauge("r2dbc.pool.pending", metrics, PoolMetrics::pendingAcquireSize);
         });
-        
+
         return pool;
     }
 
@@ -288,8 +321,9 @@ public class ReactiveDataSourceConfiguration {
         MappingR2dbcConverter converter = new MappingR2dbcConverter(
                 Objects.requireNonNull(context, "context must not be null"),
                 Objects.requireNonNull(conversions, "conversions must not be null"));
-        
-        // Converter inherits IdentifierProcessing.NONE from the dialect proxy, keeping identifiers unquoted
+
+        // Converter inherits IdentifierProcessing.NONE from the dialect proxy, keeping
+        // identifiers unquoted
         log.info("MappingR2dbcConverter configured; identifier quoting disabled via dialect override");
         return converter;
     }
@@ -317,8 +351,10 @@ public class ReactiveDataSourceConfiguration {
      */
     @org.springframework.boot.context.properties.ConfigurationProperties(prefix = "app.r2dbc")
     public static class R2dbcProperties {
-        // Default driver is "oracle" for backward compatibility with existing deployments
-        // Set app.r2dbc.driver property to use a different R2DBC driver (e.g., "postgresql", "h2")
+        // Default driver is "oracle" for backward compatibility with existing
+        // deployments
+        // Set app.r2dbc.driver property to use a different R2DBC driver (e.g.,
+        // "postgresql", "h2")
         private String driver = "oracle";
         private String host = "localhost";
         private Integer port = 1521;
@@ -334,42 +370,101 @@ public class ReactiveDataSourceConfiguration {
             private Integer queueDepth = 1000;
             private String idleTimeout = "PT30M"; // 30 minutes
 
-            public Integer getMinIdle() { return minIdle; }
-            public void setMinIdle(Integer minIdle) { this.minIdle = minIdle; }
+            public Integer getMinIdle() {
+                return minIdle;
+            }
 
-            public Integer getMaxSize() { return maxSize; }
-            public void setMaxSize(Integer maxSize) { this.maxSize = maxSize; }
+            public void setMinIdle(Integer minIdle) {
+                this.minIdle = minIdle;
+            }
 
-            public Integer getQueueDepth() { return queueDepth; }
-            public void setQueueDepth(Integer queueDepth) { this.queueDepth = queueDepth; }
+            public Integer getMaxSize() {
+                return maxSize;
+            }
 
-            public String getIdleTimeout() { return idleTimeout; }
-            public void setIdleTimeout(String idleTimeout) { this.idleTimeout = idleTimeout; }
+            public void setMaxSize(Integer maxSize) {
+                this.maxSize = maxSize;
+            }
+
+            public Integer getQueueDepth() {
+                return queueDepth;
+            }
+
+            public void setQueueDepth(Integer queueDepth) {
+                this.queueDepth = queueDepth;
+            }
+
+            public String getIdleTimeout() {
+                return idleTimeout;
+            }
+
+            public void setIdleTimeout(String idleTimeout) {
+                this.idleTimeout = idleTimeout;
+            }
         }
 
-        public String getHost() { return host; }
-        public void setHost(String host) { this.host = host; }
+        public String getHost() {
+            return host;
+        }
 
-        public Integer getPort() { return port; }
-        public void setPort(Integer port) { this.port = port; }
+        public void setHost(String host) {
+            this.host = host;
+        }
 
-        public String getDatabase() { return database; }
-        public void setDatabase(String database) { this.database = database; }
+        public Integer getPort() {
+            return port;
+        }
 
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
+        public void setPort(Integer port) {
+            this.port = port;
+        }
 
-        public String getPassword() { return password; }
-        public void setPassword(String password) { this.password = password; }
-        
-        public Boolean getSsl() { return ssl; }
-        public void setSsl(Boolean ssl) { this.ssl = ssl; }
+        public String getDatabase() {
+            return database;
+        }
 
-        public String getDriver() { return driver; }
-        public void setDriver(String driver) { this.driver = driver; }
+        public void setDatabase(String database) {
+            this.database = database;
+        }
 
-        public Pool getPool() { return pool; }
-        public void setPool(Pool pool) { this.pool = pool; }
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
+
+        public Boolean getSsl() {
+            return ssl;
+        }
+
+        public void setSsl(Boolean ssl) {
+            this.ssl = ssl;
+        }
+
+        public String getDriver() {
+            return driver;
+        }
+
+        public void setDriver(String driver) {
+            this.driver = driver;
+        }
+
+        public Pool getPool() {
+            return pool;
+        }
+
+        public void setPool(Pool pool) {
+            this.pool = pool;
+        }
     }
 }
-

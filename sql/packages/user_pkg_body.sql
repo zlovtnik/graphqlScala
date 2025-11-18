@@ -243,6 +243,7 @@ CREATE OR REPLACE PACKAGE BODY user_pkg AS
         p_ip_address IN VARCHAR2 DEFAULT NULL,
         p_user_agent IN VARCHAR2 DEFAULT NULL
     ) IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
     BEGIN
         -- Log MFA events to dedicated audit_mfa_events table with structured columns
         INSERT INTO AUDIT_MFA_EVENTS (user_id, admin_id, event_type, mfa_method, status, details, ip_address, user_agent, created_at)

@@ -272,21 +272,21 @@
     },
     {
       "key": "username",
-      "value": "testuser",
+      "value": "",
       "type": "string",
-      "description": "Username for login/operations"
+      "description": "Username for login/operations - must be set per developer environment for testing"
     },
     {
       "key": "password",
-      "value": "TestPassword123",
+      "value": "",
       "type": "string",
-      "description": "Password for login"
+      "description": "Password for login - must be set per developer environment for testing"
     },
     {
       "key": "email",
-      "value": "testuser@example.com",
+      "value": "",
       "type": "string",
-      "description": "Email for user operations"
+      "description": "Email for user operations - must be set per developer environment for testing"
     }
   ],
   "protocolProfileBehavior": {
