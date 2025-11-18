@@ -2,6 +2,7 @@ package com.rcs.ssf.graphql;
 
 import com.rcs.ssf.dto.UserDto;
 import com.rcs.ssf.service.UserService;
+import io.micrometer.core.annotation.Timed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
 import org.springframework.security.core.Authentication;
@@ -15,6 +16,7 @@ public class AuthQuery {
     private UserService userService;
 
     @QueryMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99})
     public UserDto getCurrentUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (isAuthenticatedUser(auth)) {

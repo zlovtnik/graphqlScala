@@ -1,0 +1,62 @@
+groups:
+  - name: ssf-graphql
+    rules:
+      # JVM Memory alerts
+      - alert: HighJVMMemoryUsage
+        expr: (jvm_memory_used_bytes / jvm_memory_max_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM memory usage"
+          description: "JVM memory usage is above 90% for 5 minutes"
+
+      # Database connection pool alerts
+      - alert: HighDatabaseConnectionUsage
+        expr: (hikaricp_connections_active / hikaricp_connections_max) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connection pool usage"
+          description: "Database connection pool usage is above 80% for 2 minutes"
+
+      # R2DBC connection pool alerts
+      - alert: HighR2dbcConnectionUsage
+        expr: (r2dbc_pool_acquired / r2dbc_pool_max_size) > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High R2DBC connection pool usage"
+          description: "R2DBC connection pool usage is above 80% for 2 minutes"
+
+      # GraphQL error rate alerts
+      - alert: HighGraphQLErrorRate
+        expr: rate(graphql_responses_total{status="error"}[5m]) / rate(graphql_requests_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High GraphQL error rate"
+          description: "GraphQL error rate is above 10% for 2 minutes"
+
+      # Failed login rate alerts
+      - alert: HighFailedLoginRate
+        expr: rate(ssf_failed_login_attempts_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High failed login rate"
+          description: "Failed login attempts rate is above 10 per 5 minutes for 2 minutes"
+
+      # Application down alert
+      - alert: SSFGraphQLDown
+        expr: up{job="ssf-graphql"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SSF GraphQL application is down"
+          description: "SSF GraphQL has been down for more than 1 minute"

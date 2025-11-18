@@ -2,6 +2,7 @@ package com.rcs.ssf.graphql;
 
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.service.UserService;
+import io.micrometer.core.annotation.Timed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
@@ -22,6 +23,7 @@ public class UserMutation {
     private UserService userService;
 
     @MutationMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99})
     public User createUser(@Argument CreateUserInput input) {
         User user = new User();
         user.setUsername(input.username());
@@ -31,12 +33,14 @@ public class UserMutation {
     }
 
     @MutationMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99})
     public User updateUser(@Argument Long id, @Argument UpdateUserInput input) {
         return userService.updateUser(id, Optional.ofNullable(input.username()), Optional.ofNullable(input.email()),
                 Optional.ofNullable(input.password()));
     }
 
     @MutationMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99})
     public Boolean deleteUser(@Argument Long id) {
         return userService.deleteUser(id);
     }

@@ -2,6 +2,7 @@ package com.rcs.ssf.graphql;
 
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.service.UserService;
+import io.micrometer.core.annotation.Timed;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.QueryMapping;
@@ -14,11 +15,13 @@ public class UserQuery {
     private UserService userService;
 
     @QueryMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99})
     public User getUserById(@Argument Long id) {
         return userService.findById(id).orElse(null);
     }
 
     @QueryMapping
+    @Timed(value = "graphql.resolver.duration", percentiles = {0.5, 0.95, 0.99})
     public User getUserByUsername(@Argument String username) {
         return userService.findByUsername(username).orElse(null);
     }

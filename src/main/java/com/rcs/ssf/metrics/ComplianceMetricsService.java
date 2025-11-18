@@ -1,5 +1,6 @@
 package com.rcs.ssf.metrics;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PostConstruct;
@@ -9,7 +10,7 @@ import org.springframework.stereotype.Component;
  * Compliance metrics service that exposes Prometheus metrics for security and
  * compliance monitoring.
  * Registers gauges for MFA enrollment rate, audit log completeness, encryption
- * coverage, and SOX control status.
+ * coverage, SOX control status, and counters for failed login attempts.
  */
 @Component
 public class ComplianceMetricsService {
@@ -20,6 +21,8 @@ public class ComplianceMetricsService {
     private volatile double auditLogCompleteness = 0.0;
     private volatile double encryptionCoverage = 0.0;
     private volatile double soxControlStatus = 0.0;
+
+    private Counter failedLoginCounter;
 
     public ComplianceMetricsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -41,6 +44,11 @@ public class ComplianceMetricsService {
 
         Gauge.builder("ssf_sox_control_status", () -> soxControlStatus)
                 .description("SOX control status as a percentage")
+                .register(meterRegistry);
+
+        // Counter for failed login attempts - Prometheus will calculate rate
+        failedLoginCounter = Counter.builder("ssf_failed_login_attempts_total")
+                .description("Total number of failed login attempts")
                 .register(meterRegistry);
     }
 
@@ -70,5 +78,14 @@ public class ComplianceMetricsService {
      */
     public void setSoxControlStatus(double status) {
         soxControlStatus = Math.max(0.0, Math.min(1.0, status));
+    }
+
+    /**
+     * Increment the failed login attempts counter.
+     */
+    public void incrementFailedLoginAttempts() {
+        if (failedLoginCounter != null) {
+            failedLoginCounter.increment();
+        }
     }
 }

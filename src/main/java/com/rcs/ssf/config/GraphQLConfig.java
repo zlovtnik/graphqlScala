@@ -2,6 +2,8 @@ package com.rcs.ssf.config;
 
 import com.rcs.ssf.security.GraphQLAuthorizationInstrumentation;
 import graphql.scalars.ExtendedScalars;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -11,7 +13,6 @@ import org.springframework.graphql.server.WebGraphQlInterceptor;
 import org.springframework.graphql.server.WebGraphQlRequest;
 import org.springframework.graphql.server.WebGraphQlResponse;
 import org.springframework.lang.NonNull;
-import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 /**
@@ -40,13 +41,29 @@ public class GraphQLConfig {
     }
 
     /**
-     * GraphQL interceptor that handles other cross-cutting concerns if needed.
-     * The main authentication enforcement is handled by GraphQLAuthorizationInstrumentation.
+     * Configure GraphQL source with custom instrumentation.
+     * Note: Instrumentation beans are automatically registered by Spring GraphQL
      */
-    @Component
-    public static class GraphQLLoggingInterceptor implements WebGraphQlInterceptor {
 
-        private static final Logger logger = LoggerFactory.getLogger(GraphQLLoggingInterceptor.class);
+    /**
+     * GraphQL interceptor for logging and metrics collection.
+     */
+    @Bean
+    public WebGraphQlInterceptor metricsInterceptor(MeterRegistry meterRegistry) {
+        return new MetricsInterceptor(meterRegistry);
+    }
+
+    /**
+     * GraphQL interceptor for logging requests and collecting metrics.
+     */
+    public static class MetricsInterceptor implements WebGraphQlInterceptor {
+
+        private static final Logger logger = LoggerFactory.getLogger(MetricsInterceptor.class);
+        private final MeterRegistry meterRegistry;
+
+        public MetricsInterceptor(MeterRegistry meterRegistry) {
+            this.meterRegistry = meterRegistry;
+        }
 
         @Override
         public @NonNull Mono<WebGraphQlResponse> intercept(@NonNull WebGraphQlRequest request, @NonNull Chain chain) {
@@ -55,7 +72,39 @@ public class GraphQLConfig {
             if (query != null && !query.isEmpty()) {
                 logger.debug("GraphQL query: {}", query);
             }
-            return chain.next(request);
+
+            // Track GraphQL request metrics
+            Counter.builder("graphql_requests_total")
+                    .description("Total number of GraphQL requests")
+                    .tag("operation", extractOperationType(query))
+                    .register(meterRegistry)
+                    .increment();
+
+            return chain.next(request)
+                    .doOnNext(response -> {
+                        // Track response status
+                        String status = response.getErrors().isEmpty() ? "success" : "error";
+                        Counter.builder("graphql_responses_total")
+                                .description("Total number of GraphQL responses")
+                                .tag("status", status)
+                                .register(meterRegistry)
+                                .increment();
+                    });
+        }
+
+        private String extractOperationType(String query) {
+            if (query == null || query.trim().isEmpty()) {
+                return "unknown";
+            }
+            String trimmed = query.trim().toLowerCase();
+            if (trimmed.startsWith("query")) {
+                return "query";
+            } else if (trimmed.startsWith("mutation")) {
+                return "mutation";
+            } else if (trimmed.startsWith("subscription")) {
+                return "subscription";
+            }
+            return "unknown";
         }
     }
 }
