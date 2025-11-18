@@ -2,6 +2,7 @@ package com.rcs.ssf.config;
 
 import com.rcs.ssf.security.GraphQLAuthorizationInstrumentation;
 import graphql.scalars.ExtendedScalars;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,9 @@ import org.springframework.graphql.server.WebGraphQlRequest;
 import org.springframework.graphql.server.WebGraphQlResponse;
 import org.springframework.lang.NonNull;
 import reactor.core.publisher.Mono;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * GraphQL Configuration for Spring Boot GraphQL.
@@ -60,8 +64,20 @@ public class GraphQLConfig {
         private static final Logger logger = LoggerFactory.getLogger(MetricsInterceptor.class);
         private final MeterRegistry meterRegistry;
 
+        private final Counter graphqlResponsesSuccess;
+        private final Counter graphqlResponsesError;
+        private final Map<String, Counter> operationCounters;
+
         public MetricsInterceptor(MeterRegistry meterRegistry) {
             this.meterRegistry = meterRegistry;
+            this.graphqlResponsesSuccess = meterRegistry.counter("graphql_responses_success_total");
+            this.graphqlResponsesError = meterRegistry.counter("graphql_responses_error_total");
+            this.operationCounters = new ConcurrentHashMap<>();
+            // Pre-populate operation counters for expected operation types
+            operationCounters.put("query", meterRegistry.counter("graphql_requests_query_total"));
+            operationCounters.put("mutation", meterRegistry.counter("graphql_requests_mutation_total"));
+            operationCounters.put("subscription", meterRegistry.counter("graphql_requests_subscription_total"));
+            operationCounters.put("unknown", meterRegistry.counter("graphql_requests_unknown_total"));
         }
 
         @Override
@@ -73,13 +89,17 @@ public class GraphQLConfig {
             }
 
             // Track GraphQL request metrics
-            meterRegistry.counter("graphql_requests_total", "operation", extractOperationType(query)).increment();
+            String opType = extractOperationType(query);
+            operationCounters.get(opType).increment();
 
             return chain.next(request)
                     .doOnNext(response -> {
                         // Track response status
-                        String status = response.getErrors().isEmpty() ? "success" : "error";
-                        meterRegistry.counter("graphql_responses_total", "status", status).increment();
+                        if (response.getErrors().isEmpty()) {
+                            graphqlResponsesSuccess.increment();
+                        } else {
+                            graphqlResponsesError.increment();
+                        }
                     });
         }
 
@@ -87,15 +107,19 @@ public class GraphQLConfig {
             if (query == null || query.trim().isEmpty()) {
                 return "unknown";
             }
-            String trimmed = query.trim().toLowerCase();
-            if (trimmed.startsWith("query")) {
-                return "query";
-            } else if (trimmed.startsWith("mutation")) {
-                return "mutation";
-            } else if (trimmed.startsWith("subscription")) {
-                return "subscription";
+            // Extract the first word from the query, ignoring whitespace and comments
+            // GraphQL queries start with operation type (query, mutation, subscription) optionally followed by name
+            String firstWord = query.trim().split("\\s+")[0].toLowerCase();
+            switch (firstWord) {
+                case "query":
+                    return "query";
+                case "mutation":
+                    return "mutation";
+                case "subscription":
+                    return "subscription";
+                default:
+                    return "unknown";
             }
-            return "unknown";
         }
     }
 }

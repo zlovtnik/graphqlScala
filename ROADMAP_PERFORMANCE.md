@@ -42,6 +42,8 @@
   - Configure leak detection threshold (60s) and enable test on borrow
 
 - [ ] **Enable Oracle Fast Connection Failover**
+  - **Licensing**: Requires Oracle RAC or Data Guard licensing; infrastructure prerequisites include FAN-enabled RAC cluster or Data Guard setup.
+  - **Alternatives**: For non-RAC environments, implement custom connection retry logic with `oracle.jdbc.ReadTimeout` and `oracle.net.CONNECT_TIMEOUT`; consider PgBouncer or HAProxy for load balancing without Oracle licensing.
   - Configure Oracle DataSource with FAN (Fast Application Notification)
   - Implement connection pool failover strategies (affinity, load balancing)
   - Add connection state monitoring and recovery (3-second recovery SLA)
@@ -72,6 +74,8 @@
 
 ### **Priority 2: Stored Procedure Optimization** 🟡
 
+> **Licensing Note**: AWR/ASH/ADDM are part of Oracle Diagnostics Pack, requiring separate licensing. For cost-effective alternatives, consider Statspack (free, basic reports) or complementary tools like Oracle Enterprise Manager Express (free tier). Cost-benefit: Diagnostics Pack ~$12k/core/year; Statspack provides 70% of insights at 0 cost.
+
 - [ ] **Profile PL/SQL Package Performance**
   - **AWR/ASH workflow**: Schedule weekly AWR/ASH snapshot reviews for `dynamic_crud_pkg`, `user_pkg`, and any ad-hoc packages touched by GraphQL resolvers; document the top SQL_IDs and wait events with recommended fixes in Confluence before each sprint demo.
   - **Cursor + array audit**: Enable `DBMS_PROFILER` on critical packages for one full load test run, flag implicit cursor usage >5% of total execution time, and rewrite to explicit BULK COLLECT/FORALL where it removes context switches.
@@ -95,12 +99,6 @@
   - **Cursor-based pagination**: Standardize on opaque `pageState` tokens (table PK + `ROWID`) returned from stored procedures; add contract tests that validate monotonic ordering and deterministic replays.
   - **Export pipelines**: Build a reusable exporter that pipes JDBC `ResultSet` rows into `SseEmitter`/`ZipOutputStream` so CSV/JSON exports stream incrementally, keeping memory usage flat.
   - **Back-pressure + monitoring**: Surface per-stream throughput, client disconnects, and cursor lifetime metrics; auto-close any cursor idle for >30s.
-
-- [ ] **Database Connection Pool Monitoring**
-  - **Metrics + tracing**: Expand the Micrometer registry with gauges for active/idle pool size, wait duration histograms, and connection age; propagate pool context via `TracingDataSource` so slow stored procedures can be tied to specific pool events.
-  - **Leak detection**: Set `leakDetectionThreshold=60000`, emit structured logs with stack traces, and push them into Loki/ELK; add PagerDuty alerts when more than three leaks fire within 15 minutes.
-  - **Dashboards**: Publish Grafana dashboards showing utilization, queue depth, average borrow time, and 95th percentile acquisition latency; tag panels by environment (dev/stage/prod).
-  - **Auto-scaling policy**: Feed pool metrics into the Platform HPA (or custom controller) that scales the Spring Boot pods between 2 and 6 replicas; tie max pool size to `CPU >70%` and `wait time >2s` rules so the pool grows predictably.
 
 ### **Priority 3: Advanced Oracle Features** 🟢
 

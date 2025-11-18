@@ -23,6 +23,7 @@ public class ComplianceMetricsService {
     private volatile double soxControlStatus = 0.0;
 
     private Counter successfulLoginCounter;
+    private Counter logoutCounter;
 
     public ComplianceMetricsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -49,6 +50,11 @@ public class ComplianceMetricsService {
         // Counter for successful login attempts
         successfulLoginCounter = Counter.builder("ssf_successful_login_attempts_total")
                 .description("Total number of successful login attempts")
+                .register(meterRegistry);
+
+        // Counter for logout events
+        logoutCounter = Counter.builder("ssf_logout_attempts_total")
+                .description("Total number of logout attempts")
                 .register(meterRegistry);
     }
 
@@ -82,6 +88,9 @@ public class ComplianceMetricsService {
 
     /**
      * Increment the failed login attempts counter with a specific reason.
+     * Uses tagged counters for detailed breakdown by failure reason (e.g., INVALID_CREDENTIALS, MFA_FAILED).
+     * Note: This creates a new counter per unique tag combination; for high-cardinality reasons,
+     * consider caching counters to avoid metric explosion.
      */
     public void incrementFailedLoginAttempts(String reason) {
         meterRegistry.counter("ssf_failed_login_attempts_total", "reason", reason != null ? reason : "UNKNOWN").increment();
@@ -89,10 +98,22 @@ public class ComplianceMetricsService {
 
     /**
      * Increment the successful login attempts counter.
+     * Uses a pre-registered counter for consistency and to avoid per-request counter creation overhead.
+     * Unlike failed attempts, successful logins don't require reason-based tagging as they are uniform.
      */
     public void incrementSuccessfulLoginAttempts() {
         if (successfulLoginCounter != null) {
             successfulLoginCounter.increment();
+        }
+    }
+
+    /**
+     * Increment the logout attempts counter.
+     * Uses a pre-registered counter for consistency and to track user session termination events.
+     */
+    public void incrementLogoutAttempts() {
+        if (logoutCounter != null) {
+            logoutCounter.increment();
         }
     }
 }

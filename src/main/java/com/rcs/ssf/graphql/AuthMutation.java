@@ -123,6 +123,7 @@ public class AuthMutation {
     public boolean logout() {
         // Token invalidation is handled client-side by removing it
         // For server-side blacklisting, implement a token blacklist service
+        complianceMetricsService.incrementLogoutAttempts();
         return true;
     }
 
