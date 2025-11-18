@@ -278,9 +278,11 @@ public class ReactiveDataSourceConfiguration {
 
         // Export pool metrics
         pool.getMetrics().ifPresent(metrics -> {
-            meterRegistry.gauge("r2dbc.pool.acquired", metrics, PoolMetrics::acquiredSize);
+            meterRegistry.gauge("r2dbc.pool.acquired.connections", metrics, PoolMetrics::acquiredSize);
             meterRegistry.gauge("r2dbc.pool.idle", metrics, PoolMetrics::idleSize);
             meterRegistry.gauge("r2dbc.pool.pending", metrics, PoolMetrics::pendingAcquireSize);
+            // Add max connections metric for alerting
+            meterRegistry.gauge("r2dbc.pool.max.connections", r2dbcProperties.getPool(), p -> p.getMaxSize().doubleValue());
         });
 
         return pool;

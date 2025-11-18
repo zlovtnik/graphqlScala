@@ -22,7 +22,7 @@ public class ComplianceMetricsService {
     private volatile double encryptionCoverage = 0.0;
     private volatile double soxControlStatus = 0.0;
 
-    private Counter failedLoginCounter;
+    private Counter successfulLoginCounter;
 
     public ComplianceMetricsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -46,9 +46,9 @@ public class ComplianceMetricsService {
                 .description("SOX control status as a percentage")
                 .register(meterRegistry);
 
-        // Counter for failed login attempts - Prometheus will calculate rate
-        failedLoginCounter = Counter.builder("ssf_failed_login_attempts_total")
-                .description("Total number of failed login attempts")
+        // Counter for successful login attempts
+        successfulLoginCounter = Counter.builder("ssf_successful_login_attempts_total")
+                .description("Total number of successful login attempts")
                 .register(meterRegistry);
     }
 
@@ -81,11 +81,18 @@ public class ComplianceMetricsService {
     }
 
     /**
-     * Increment the failed login attempts counter.
+     * Increment the failed login attempts counter with a specific reason.
      */
-    public void incrementFailedLoginAttempts() {
-        if (failedLoginCounter != null) {
-            failedLoginCounter.increment();
+    public void incrementFailedLoginAttempts(String reason) {
+        meterRegistry.counter("ssf_failed_login_attempts_total", "reason", reason != null ? reason : "UNKNOWN").increment();
+    }
+
+    /**
+     * Increment the successful login attempts counter.
+     */
+    public void incrementSuccessfulLoginAttempts() {
+        if (successfulLoginCounter != null) {
+            successfulLoginCounter.increment();
         }
     }
 }

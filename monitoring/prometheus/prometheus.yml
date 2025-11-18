@@ -3,6 +3,7 @@ global:
   evaluation_interval: 15s
 
 rule_files:
+  - "alerts.yml"
   # - "first_rules.yml"
   # - "second_rules.yml"
 

@@ -17,35 +17,35 @@ class DisabledBackupCodeServiceTest {
 
     @Test
     void generateBackupCodesThrows() {
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> service.generateBackupCodes("user"));
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> service.generateBackupCodes(1L));
         assertDisabledMessage(ex);
     }
 
     @Test
     void verifyBackupCodeThrows() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> service.verifyBackupCode("user", "code"));
+                () -> service.verifyBackupCode(1L, "code"));
         assertDisabledMessage(ex);
     }
 
     @Test
     void remainingBackupCodeCountThrows() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> service.getRemainingBackupCodeCount("user"));
+                () -> service.getRemainingBackupCodeCount(1L));
         assertDisabledMessage(ex);
     }
 
     @Test
     void regenerateBackupCodesThrows() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> service.regenerateBackupCodes("user"));
+                () -> service.regenerateBackupCodes(1L));
         assertDisabledMessage(ex);
     }
 
     @Test
     void adminConsumeBackupCodeThrows() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-                () -> service.adminConsumeBackupCode("user", "admin"));
+                () -> service.adminConsumeBackupCode(1L, "admin"));
         assertDisabledMessage(ex);
     }
 

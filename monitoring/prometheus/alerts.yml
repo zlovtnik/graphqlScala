@@ -23,7 +23,7 @@ groups:
 
       # R2DBC connection pool alerts
       - alert: HighR2dbcConnectionUsage
-        expr: (r2dbc_pool_acquired / r2dbc_pool_max_size) > 0.8
+        expr: (r2dbc_pool_acquired_connections / r2dbc_pool_max_connections) > 0.8
         for: 2m
         labels:
           severity: warning
@@ -33,7 +33,7 @@ groups:
 
       # GraphQL error rate alerts
       - alert: HighGraphQLErrorRate
-        expr: rate(graphql_responses_total{status="error"}[5m]) / rate(graphql_requests_total[5m]) > 0.1
+        expr: rate(graphql_requests_total[5m]) > 0 and (rate(graphql_responses_total{status="error"}[5m]) / rate(graphql_requests_total[5m])) > 0.1
         for: 2m
         labels:
           severity: warning

@@ -2,7 +2,6 @@ package com.rcs.ssf.config;
 
 import com.rcs.ssf.security.GraphQLAuthorizationInstrumentation;
 import graphql.scalars.ExtendedScalars;
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,21 +73,13 @@ public class GraphQLConfig {
             }
 
             // Track GraphQL request metrics
-            Counter.builder("graphql_requests_total")
-                    .description("Total number of GraphQL requests")
-                    .tag("operation", extractOperationType(query))
-                    .register(meterRegistry)
-                    .increment();
+            meterRegistry.counter("graphql_requests_total", "operation", extractOperationType(query)).increment();
 
             return chain.next(request)
                     .doOnNext(response -> {
                         // Track response status
                         String status = response.getErrors().isEmpty() ? "success" : "error";
-                        Counter.builder("graphql_responses_total")
-                                .description("Total number of GraphQL responses")
-                                .tag("status", status)
-                                .register(meterRegistry)
-                                .increment();
+                        meterRegistry.counter("graphql_responses_total", "status", status).increment();
                     });
         }
 
