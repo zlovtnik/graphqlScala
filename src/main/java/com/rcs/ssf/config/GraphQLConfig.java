@@ -70,14 +70,14 @@ public class GraphQLConfig {
 
         public MetricsInterceptor(MeterRegistry meterRegistry) {
             this.meterRegistry = meterRegistry;
-            this.graphqlResponsesSuccess = meterRegistry.counter("graphql_responses_success_total");
-            this.graphqlResponsesError = meterRegistry.counter("graphql_responses_error_total");
+            this.graphqlResponsesSuccess = meterRegistry.counter("graphql_responses_total", "status", "success");
+            this.graphqlResponsesError = meterRegistry.counter("graphql_responses_total", "status", "error");
             this.operationCounters = new ConcurrentHashMap<>();
             // Pre-populate operation counters for expected operation types
-            operationCounters.put("query", meterRegistry.counter("graphql_requests_query_total"));
-            operationCounters.put("mutation", meterRegistry.counter("graphql_requests_mutation_total"));
-            operationCounters.put("subscription", meterRegistry.counter("graphql_requests_subscription_total"));
-            operationCounters.put("unknown", meterRegistry.counter("graphql_requests_unknown_total"));
+            operationCounters.put("query", meterRegistry.counter("graphql_requests_total", "operation", "query"));
+            operationCounters.put("mutation", meterRegistry.counter("graphql_requests_total", "operation", "mutation"));
+            operationCounters.put("subscription", meterRegistry.counter("graphql_requests_total", "operation", "subscription"));
+            operationCounters.put("unknown", meterRegistry.counter("graphql_requests_total", "operation", "unknown"));
         }
 
         @Override

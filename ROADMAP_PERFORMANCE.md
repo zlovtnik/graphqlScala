@@ -15,7 +15,7 @@
 
 - [ ] **Database Connection Pool Monitoring**
   - Add real-time dashboards for pool utilization, wait times, and connection age
-  - Implement connection leak detection alerts (connections held >5min idle)
+  - Implement connection leak detection alerts (connections held >5 minutes idle)
   - Add pool pressure indicators (queue depth, saturation thresholds)
   - Configure Grafana dashboards for pool health visualization
   - Set up alerting for pool degradation (utilization >80%, wait time >2s)
@@ -59,7 +59,7 @@
 ### **Priority 1 (continued): Core Caching & Optimization** 🔴
 
 - [ ] **Implement Multi-Level Caching**
-  - Application-level caching with Caffeine (max 500 entries, 10min TTL)
+  - Application-level caching with Caffeine (max 500 entries, 10-minute TTL)
   - Distributed caching with Redis for session data (session TTL: token lifetime)
   - Database query result caching (invalidation strategy: on-write)
   - HTTP response caching with ETags for read-only endpoints
@@ -95,6 +95,8 @@
   - **Memory guardrails**: Emit Micrometer gauges for array buffer utilization and pause the producer when Eden occupancy exceeds 80% to avoid GC spikes.
 
 - [ ] **Implement Query Result Streaming**
+  - **Note**: This builds on Priority 1 "Query Result Streaming & Memory Optimization" (foundation). Priority 1 provides basic streaming; this phase adds enhanced production patterns with cursor-based pagination and export pipelines.
+  - **Cursor-based pagination constraints**: Opaque `pageState` tokens using `ROWID` may have Oracle version dependencies (e.g., rowid stability across commits, cursor lifetime limits in Oracle 12c+). Validate with target Oracle version before implementation.
   - **Server-side cursors**: Enable `setFetchSize(500)` and `ResultSet.TYPE_FORWARD_ONLY` on long-running queries, wiring them into Spring GraphQL data fetchers via `StreamSupport` so consumers can subscribe without loading everything into memory.
   - **Cursor-based pagination**: Standardize on opaque `pageState` tokens (table PK + `ROWID`) returned from stored procedures; add contract tests that validate monotonic ordering and deterministic replays.
   - **Export pipelines**: Build a reusable exporter that pipes JDBC `ResultSet` rows into `SseEmitter`/`ZipOutputStream` so CSV/JSON exports stream incrementally, keeping memory usage flat.
@@ -109,6 +111,9 @@
   - **Compression observability**: Add nightly job that logs compression ratios, CPU overhead, and IO savings into Grafana; define rollback trigger if CPU >70% during peak.
 
 - [ ] **Implement Oracle In-Memory Column Store**
+  - **Licensing**: Requires Oracle Enterprise Edition + In-Memory option license (~$17k/core/year); verify entitlement before implementation.
+  - **Cost-benefit analysis**: Licensing cost vs. query speedup (target: <50ms for analytics queries); document baseline performance before enabling.
+  - **Fallback for non-licensed environments**: Consider materialized views + application-level caching (Caffeine/Redis) instead of INMEMORY for analytics workloads.
   - **Sizing + pool carve-out**: Reserve 10–15% of SGA for `INMEMORY_SIZE`, document approval from DBA lead, and script auto-tuning based on AWR hit ratios.
   - **Heat maps + population**: Tag top audit fact tables and materialized views with `INMEMORY PRIORITY HIGH DISTRIBUTE AUTO`; enable heat map to confirm access frequency.
   - **Query rewrites**: Update critical analytics packages to use vector transformation hints (`/*+ VECTOR_TRANSFORM */`) and verify plan changes via SQL Monitor.
@@ -121,7 +126,7 @@
   - **Pruning validation**: Add regression tests that capture `EXPLAIN PLAN` output to confirm `PARTITION RANGE ITERATOR` usage for top 5 queries.
     - Create SQL harness under `sql/tests/partitioning/` to snapshot `EXPLAIN PLAN FOR <query>`; pipe results into `src/test/java/com/rcs/ssf/db/PartitionPlanTest.java` using Testcontainers + Oracle XE.
     - Fail the test suite if the plan omits `PARTITION RANGE ITERATOR` or touches >2 partitions so CI protects against regressions.
-  - **Automated maintenance**: Build Flyway tasks that create next-quarter partitions, merge old ones into archive storage, and purge >24 month partitions.
+  - **Automated maintenance**: Build Flyway tasks that create next-quarter partitions, merge old ones into archive storage, and purge >24-month partitions.
     - Implement `db/migration/R__partition_rollover.sql` (Repeatable) that reads partition metadata via PL/SQL and auto-creates `P_<YYYY_MM>` partitions 90 days ahead.
     - Add `scripts/partition-maintenance.sh` invoked by `cronjob.yaml` to merge and purge partitions, emitting metrics to Grafana via `healthcheck.sh` hook.
   - **Partition-wise joins**: Refactor ETL procedures to leverage `PARTITION-WISE HASH` joins; document optimizer hints and monitor elapsed time deltas.
@@ -129,6 +134,9 @@
     - Capture elapsed time deltas inside `oracle_profiler` tables and surface them via a new Grafana panel so tuning wins stay visible.
 
 - [ ] **Oracle RAC Optimization**
+  - **Prerequisites**: Requires Oracle RAC cluster already deployed; if not yet available, coordinate with DBA/Infrastructure team on timeline and infrastructure setup (FAN-enabled RAC cluster).
+  - **Fallback for non-RAC environments**: Implement custom connection retry logic with `oracle.jdbc.ReadTimeout` and `oracle.net.CONNECT_TIMEOUT`; consider PgBouncer or HAProxy for load balancing without Oracle licensing.
+  - **Phased approach**: Move Gatling RAC failover drills to a separate "Load Testing & Chaos Engineering" phase once RAC is production-ready, to avoid premature effort.
   - **Connection affinity**: Configure UCP/ONS with `RuntimeLoadBalancingFeature` and `ONSConfiguration` so Spring DataSource pins write workloads to local instances.
     - Extend `src/main/resources/application-prod.yml` with UCP stanza (ONS hosts, FAN enabled) and wire custom `RacAwareDataSourceConfig` bean under `com.rcs.ssf.config`.
     - Document rollout steps in `docs/rac-playbook.md`, including credential rotation and fallback plan.
@@ -229,7 +237,7 @@
   - **Fallback Strategies**:
     - Implement `@Fallback` methods for degraded mode: e.g., audit service down → return cached/empty audit trail with `DEGRADED_MODE: true` flag in response.
     - Create fallback chain: primary endpoint → cached response → default empty response; document fallback SLA per endpoint (e.g., audit queries may be 5+ minutes stale).
-    - Test fallback activation via chaos engineering scenario: kill dependency service, verify fallback invocation, measure response time degradation (<500ms increase acceptable).
+    - Test fallback activation via chaos engineering scenario: kill dependency service, verify fallback invocation, measure response time degradation (<500 ms increase acceptable).
     - Create runbook `docs/runbooks/degraded-mode.md` documenting fallback activation, duration, and escalation steps.
   - **Success Criteria**: Circuit breaker prevents cascading failures; retry success rate >95%; bulkhead prevents thread pool starvation; fallback responses served <500ms
 
@@ -238,7 +246,7 @@
     - Add `CacheControlHeaderFilter` under `com.rcs.ssf.http.filter` generating per-endpoint headers: immutable assets (`Cache-Control: public, max-age=31536000, immutable`), audit queries (`Cache-Control: private, max-age=300`), real-time endpoints (`Cache-Control: no-cache, no-store`).
     - Annotate resolvers with custom `@GraphqlCacheable` metadata: `@GraphqlCacheable(maxAge = 300, isPublic = false, vary = ["Authorization"])` to auto-generate correct headers.
     - Validate headers via integration test `CacheControlHeaderTest` using Spring Mock MVC; assert correct `Cache-Control`, `Vary`, `ETag` headers on 20+ critical endpoints.
-    - Document caching strategy per entity type in `docs/caching/http-cache-strategy.md` (user data: 5min, audit: 10min, static: 1yr).
+    - Document caching strategy per entity type in `docs/caching/http-cache-strategy.md` (user data: 5 minutes, audit: 10 minutes, static: 1 year).
   - **ETag & Conditional Request Support**:
     - Generate ETags from response hash (SHA-256 of serialized JSON); wire into `ResponseEntityExceptionHandler` to return `304 Not Modified` if `If-None-Match` matches.
     - Add conditional request logic: on `If-Modified-Since` / `If-None-Match`, compute ETag and compare with client header; short-circuit database query if match found.
@@ -263,3 +271,25 @@
     - Create Grafana dashboard showing top 10 slowest queries, resolver execution breakdown (p50/p95/p99 per resolver), and data loader efficiency (N+1 query detection).
     - Build anomaly detection: alert if query plan changes significantly (>5% execution time variance unexplained) post-deployment.
   - **Success Criteria**: Automated detection of query regressions; <3s p95 execution time on all queries
+
+---
+
+## 📋 Implementation Guidance & Risk Mitigation
+
+### **Phased Rollout Strategy**
+
+- **Phase 1 (Foundation)**: Observability + HikariCP tuning + basic caching (high ROI, low risk) - see Priority 1 items
+- **Phase 2 (Optimization)**: Stored procedures + reactive + query caching (medium ROI, medium risk) - see Priority 2 items
+- **Phase 3 (Advanced)**: RAC + INMEMORY + DCN (high ROI, high complexity & cost) - see Priority 3 items
+
+### **Resource Planning & Dependencies**
+
+- **Team FTE Allocation**: Cross-reference `PROJECT_PLAN.md` for sprint breakdown, critical path, and dependencies
+- **Licensing Review Gate**: Perform licensing audit before Phase 2/3 commencement; multiple high-cost options (RAC, Diagnostics Pack, INMEMORY, Advanced Compression) require budget approval
+- **Oracle Version Dependencies**: Validate cursor-based pagination (ROWID stability), RAC features, and INMEMORY compatibility with target Oracle version
+
+### **Testing & Rollback Requirements**
+
+- **High-Risk Items**: DCN, partitioning, RAC, INMEMORY require explicit rollback plans and chaos engineering validation
+- **Runbook Documentation**: Create rollback procedures for each high-complexity item (e.g., `docs/runbooks/rollback-dcn.md`, `docs/runbooks/rollback-partitioning.md`)
+- **File Artifacts**: Many items reference files not yet in repo (`docs/`, `sql/`, `scripts/`, `infra/`); clarify if these are to be created during implementation or are placeholder references
