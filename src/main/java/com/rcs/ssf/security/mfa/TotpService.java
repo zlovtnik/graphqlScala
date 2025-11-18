@@ -5,7 +5,7 @@ package com.rcs.ssf.security.mfa;
  *
  * Responsibilities:
  * - Generate TOTP secrets during enrollment
- * - Generate QR codes for user scanning
+ * - Generate otpauth URIs for QR code enrollment
  * - Verify TOTP codes with time-window tolerance
  * - Rate-limit verification attempts
  *
@@ -31,7 +31,7 @@ public interface TotpService {
      * @param issuerName issuer name for authenticator app
      * @return otpauth:// URI string for downstream QR generation
      */
-    String generateQrCode(String userId, String secret, String issuerName);
+    String generateOtpauthUri(String userId, String secret, String issuerName);
 
     /**
      * Verify a TOTP code provided by the user.

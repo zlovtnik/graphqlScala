@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 
+import java.util.Objects;
+
 /**
  * Authenticator assertion response from the client during WebAuthn
  * authentication.
@@ -22,61 +24,53 @@ import jakarta.validation.constraints.NotNull;
  */
 public class AuthenticatorAssertionResponse {
     @NotNull(message = "Client data JSON is required")
-    private byte[] clientDataJSON; // ClientDataJSON in base64 format
+    private final byte[] clientDataJSON; // ClientDataJSON in base64 format
 
     @NotNull(message = "Authenticator data is required")
-    private byte[] authenticatorData; // Authenticator data in base64 format
+    private final byte[] authenticatorData; // Authenticator data in base64 format
 
     @NotNull(message = "Signature is required")
-    private byte[] signature; // Signature in base64 format
+    private final byte[] signature; // Signature in base64 format
 
     @Nullable
-    private byte[] userHandle; // User handle (optional, may be null)
+    private final byte[] userHandle; // User handle (optional, may be null)
 
+    /**
+     * Constructs an AuthenticatorAssertionResponse with required cryptographic proof.
+     *
+     * @param clientDataJSON the serialized client data JSON (required, non-null)
+     * @param authenticatorData the authenticator data (required, non-null)
+     * @param signature the cryptographic signature (required, non-null)
+     * @param userHandle the optional user handle from the authenticator (may be null)
+     * @throws NullPointerException if clientDataJSON, authenticatorData, or signature is null
+     */
     @JsonCreator
     public AuthenticatorAssertionResponse(
             @JsonProperty("clientDataJSON") byte[] clientDataJSON,
             @JsonProperty("authenticatorData") byte[] authenticatorData,
             @JsonProperty("signature") byte[] signature,
             @JsonProperty("userHandle") byte[] userHandle) {
-        this.clientDataJSON = clientDataJSON != null ? clientDataJSON.clone() : null;
-        this.authenticatorData = authenticatorData != null ? authenticatorData.clone() : null;
-        this.signature = signature != null ? signature.clone() : null;
+        // Enforce non-null preconditions at construction time
+        this.clientDataJSON = Objects.requireNonNull(clientDataJSON, "Client data JSON is required").clone();
+        this.authenticatorData = Objects.requireNonNull(authenticatorData, "Authenticator data is required").clone();
+        this.signature = Objects.requireNonNull(signature, "Signature is required").clone();
+        // userHandle is optional and may remain null
         this.userHandle = userHandle != null ? userHandle.clone() : null;
-    }
-
-    public AuthenticatorAssertionResponse() {
     }
 
     public byte[] getClientDataJSON() {
         return clientDataJSON != null ? clientDataJSON.clone() : null;
     }
 
-    public void setClientDataJSON(byte[] clientDataJSON) {
-        this.clientDataJSON = clientDataJSON != null ? clientDataJSON.clone() : null;
-    }
-
     public byte[] getAuthenticatorData() {
         return authenticatorData != null ? authenticatorData.clone() : null;
-    }
-
-    public void setAuthenticatorData(byte[] authenticatorData) {
-        this.authenticatorData = authenticatorData != null ? authenticatorData.clone() : null;
     }
 
     public byte[] getSignature() {
         return signature != null ? signature.clone() : null;
     }
 
-    public void setSignature(byte[] signature) {
-        this.signature = signature != null ? signature.clone() : null;
-    }
-
     public byte[] getUserHandle() {
         return userHandle != null ? userHandle.clone() : null;
-    }
-
-    public void setUserHandle(byte[] userHandle) {
-        this.userHandle = userHandle != null ? userHandle.clone() : null;
     }
 }

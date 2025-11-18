@@ -24,15 +24,12 @@ import org.springframework.r2dbc.core.DatabaseClient;
 import reactor.netty.resources.ConnectionProvider;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.Objects;
 
 import static io.r2dbc.spi.ConnectionFactoryOptions.DATABASE;
 import static io.r2dbc.spi.ConnectionFactoryOptions.DRIVER;
 import static io.r2dbc.spi.ConnectionFactoryOptions.HOST;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PASSWORD;
 import static io.r2dbc.spi.ConnectionFactoryOptions.PORT;
-import static io.r2dbc.spi.ConnectionFactoryOptions.SSL;
 import static io.r2dbc.spi.ConnectionFactoryOptions.USER;
 
 /**
@@ -292,26 +289,24 @@ public class ReactiveDataSourceConfiguration {
     @Bean
     public R2dbcDialect r2dbcDialect(
             @Qualifier("r2dbcConnectionFactory") @NonNull ConnectionFactory connectionFactory) {
-        ConnectionFactory nonNullFactory = Objects.requireNonNull(connectionFactory,
-                "r2dbcConnectionFactory must not be null");
-        return DialectResolver.getDialect(nonNullFactory);
+        // Returns the dialect resolved from the connection factory as-is.
+        // The dialect's default IdentifierProcessing behavior is applied; no overrides are made here.
+        // If unquoted identifiers are required in the future, a decorator wrapper should be implemented
+        // that delegates all Dialect methods to the resolved dialect but overrides getIdentifierProcessing()
+        // to return IdentifierProcessing.NONE.
+        return DialectResolver.getDialect(connectionFactory);
     }
 
     @Bean
     public R2dbcCustomConversions r2dbcCustomConversions(@NonNull R2dbcDialect dialect) {
-        R2dbcDialect nonNullDialect = Objects.requireNonNull(dialect, "dialect must not be null");
-        Collection<?> converters = Objects.requireNonNull(R2dbcUuidConverters.getConverters(),
-                "UUID converters must not be null");
-        return R2dbcCustomConversions.of(nonNullDialect, converters);
+        return R2dbcCustomConversions.of(dialect, R2dbcUuidConverters.getConverters());
     }
 
     @Bean
     @org.springframework.context.annotation.Primary
     public RelationalMappingContext relationalMappingContext(@NonNull R2dbcCustomConversions conversions) {
-        R2dbcCustomConversions nonNullConversions = Objects.requireNonNull(conversions,
-                "conversions must not be null");
         RelationalMappingContext context = new RelationalMappingContext();
-        context.setSimpleTypeHolder(nonNullConversions.getSimpleTypeHolder());
+        context.setSimpleTypeHolder(conversions.getSimpleTypeHolder());
         return context;
     }
 
@@ -319,14 +314,7 @@ public class ReactiveDataSourceConfiguration {
     public MappingR2dbcConverter mappingR2dbcConverter(
             @NonNull RelationalMappingContext context,
             @NonNull R2dbcCustomConversions conversions) {
-        MappingR2dbcConverter converter = new MappingR2dbcConverter(
-                Objects.requireNonNull(context, "context must not be null"),
-                Objects.requireNonNull(conversions, "conversions must not be null"));
-
-        // Converter inherits IdentifierProcessing.NONE from the dialect proxy, keeping
-        // identifiers unquoted
-        log.info("MappingR2dbcConverter configured; identifier quoting disabled via dialect override");
-        return converter;
+        return new MappingR2dbcConverter(context, conversions);
     }
 
     @Bean

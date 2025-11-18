@@ -77,7 +77,15 @@
               "raw": "{\"query\": \"mutation { logout }\"}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         },
@@ -96,7 +104,15 @@
               "raw": "{\"query\": \"query ValidateToken($token: String!) { validateToken(token: $token) }\", \"variables\": {\"token\": \"{{jwt_token}}\"}}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         }
@@ -120,7 +136,15 @@
               "raw": "{\"query\": \"query { getCurrentUser { id username email } }\"}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         },
@@ -139,7 +163,15 @@
               "raw": "{\"query\": \"query GetUserById($id: Long!) { getUserById(id: $id) { id username email } }\", \"variables\": {\"id\": {{user_id}}}}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         },
@@ -158,7 +190,15 @@
               "raw": "{\"query\": \"query GetUserByUsername($username: String!) { getUserByUsername(username: $username) { id username email } }\", \"variables\": {\"username\": \"{{username}}\"}}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         }
@@ -200,7 +240,15 @@
               "raw": "{\"query\": \"mutation CreateUser($input: CreateUserInput!) { createUser(input: $input) { id username email } }\", \"variables\": {\"input\": {\"username\": \"newuser_{{$timestamp}}\", \"email\": \"user_{{$timestamp}}@example.com\", \"password\": \"{{user_password}}\"}}}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         },
@@ -219,7 +267,15 @@
               "raw": "{\"query\": \"mutation UpdateUser($id: Long!, $input: UpdateUserInput!) { updateUser(id: $id, input: $input) { id username email } }\", \"variables\": {\"id\": {{user_id}}, \"input\": {\"username\": \"updateduser_{{$timestamp}}\", \"email\": \"updated_{{$timestamp}}@example.com\"}}}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         },
@@ -238,7 +294,15 @@
               "raw": "{\"query\": \"mutation DeleteUser($id: Long!) { deleteUser(id: $id) }\", \"variables\": {\"id\": {{user_id}}}}"
             },
             "url": {
-              "raw": "{{base_url}}/graphql"
+              "raw": "{{base_url}}/graphql",
+              "protocol": "https",
+              "host": [
+                "localhost"
+              ],
+              "port": "8443",
+              "path": [
+                "graphql"
+              ]
             }
           }
         }

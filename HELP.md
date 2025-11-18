@@ -90,24 +90,39 @@ mc ls local
 
 | Problem | Root Cause | Fix |
 | --- | --- | --- |
+| `UsernameNotFoundException: User not found: <username>` | User doesn't exist in database | Create user first: `TEST_PASSWORD=pass ./create_test_user.sh username email` |
+| `GraphQL error: "User not found... Please create an account first"` | Login attempt with non-existent user | Use `createUser` mutation or REST endpoint to register first |
+| `GraphQL error: "Authentication failed" (INVALID_CREDENTIALS)` | User exists but password is wrong | Verify password is correct or reset via password recovery |
 | `IllegalStateException: JWT secret must be provided` | Missing or weak `JWT_SECRET` | Export a ≥32 char secret before starting the app |
 | HTTPS connection refused | Keystore not trusted | Import `src/main/resources/keystore.p12` into local trust store or use REST client with `--insecure` for dev |
 | Oracle connection fails (`ORA-01017`) | Bad credentials or DB offline | Verify env vars, confirm container/instance is healthy |
 | MinIO health check DOWN | MinIO not running or invalid credentials | Start container and align `minio.*` properties with environment |
 | GraphQL `AccessDeniedException` | Missing token header | Provide `Authorization: Bearer <token>` in GraphiQL/HTTP client |
 
-## 🔍 Useful Logs & Endpoints
+### Authentication Error Handling (v1.1+)
 
-- Application logs: `build/logs/` (if configured) or console output.
-- Actuator health: `GET https://localhost:8443/actuator/health`
-- JWT validation audit trail: `AuditService` logs in `com.example.ssf.service`.
+The platform now provides clear, actionable error messages for authentication failures:
 
-Enable verbose security logging during investigation:
+- **User not found**: Returns specific error code `USER_NOT_FOUND` with guidance to create an account
+- **Bad credentials**: Returns `INVALID_CREDENTIALS` error code when user exists but password is wrong
+- **Token validation**: Invalid or expired tokens are silently ignored (graceful degradation)
+
+For debugging, enable verbose security logging:
 
 ```properties
 # src/main/resources/application.properties (temporary for debugging)
 logging.level.org.springframework.security=DEBUG
+logging.level.com.rcs.ssf.security=DEBUG
+logging.level.com.rcs.ssf.graphql=DEBUG
 ```
+
+## 🔍 Useful Logs & Endpoints
+
+- Application logs: `build/logs/` (if configured) or console output.
+- Actuator health: `GET https://localhost:8443/actuator/health`
+- JWT validation audit trail: `AuditService` logs in `com.rcs.ssf.service`.
+
+Enable verbose security logging during investigation:
 
 ## 🤝 Need More Help?
 

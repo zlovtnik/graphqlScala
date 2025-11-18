@@ -6,7 +6,6 @@ import com.rcs.ssf.security.JwtTokenProvider;
 import com.rcs.ssf.service.AuditService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.graphql.data.method.annotation.Argument;
 import org.springframework.graphql.data.method.annotation.MutationMapping;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -27,14 +26,12 @@ import java.util.Map;
 public class AuthMutation {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthMutation.class);
-
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuditService auditService;
     private final ObjectProvider<HttpServletRequest> requestProvider;
     private final Environment environment;
 
-    @Autowired
     public AuthMutation(AuthenticationManager authenticationManager,
                         JwtTokenProvider jwtTokenProvider,
                         AuditService auditService,
@@ -91,7 +88,20 @@ public class AuthMutation {
             auditService.logSessionStart(principal.getId().toString(), token, ipAddress, userAgent);
 
             return new AuthResponse(token);
+        } catch (org.springframework.security.core.userdetails.UsernameNotFoundException e) {
+            // User not found in database - use generic error message to prevent username enumeration
+            LOGGER.warn("Login attempt failed: user not found. username={}, ipAddress={}, userAgent={}", 
+                    username, ipAddress, userAgent);
+            auditService.logLoginAttempt(username, false, ipAddress, userAgent, "USER_NOT_FOUND");
+            throw GraphqlErrorException.newErrorException()
+                    .message("Invalid username or password")
+                    .extensions(Map.of("reason", "INVALID_CREDENTIALS"))
+                    .cause(e)
+                    .build();
         } catch (org.springframework.security.core.AuthenticationException e) {
+            // Bad credentials or other authentication failure
+            LOGGER.warn("Login attempt failed: authentication error. username={}, ipAddress={}, userAgent={}, error={}", 
+                    username, ipAddress, userAgent, e.getMessage());
             auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
             throw GraphqlErrorException.newErrorException()
                     .message("Authentication failed")

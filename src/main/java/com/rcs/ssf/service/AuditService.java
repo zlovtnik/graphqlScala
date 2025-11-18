@@ -21,10 +21,11 @@ public class AuditService {
         this.jdbcTemplate = (dataSource != null) ? new JdbcTemplate(dataSource) : null;
     }
 
-    public void logLoginAttempt(String username, boolean success, String ipAddress, String userAgent, String failureReason) {
+    public void logLoginAttempt(String username, boolean success, String ipAddress, String userAgent,
+            String failureReason) {
         if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_login_attempt)");
-            throw new IllegalStateException("Audit disabled: no DataSource configured");
+            return;
         }
         this.jdbcTemplate.execute((Connection con) -> {
             try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_login_attempt(?, ?, ?, ?, ?) }")) {
@@ -42,7 +43,7 @@ public class AuditService {
     public void logSessionStart(String userId, String token, String ipAddress, String userAgent) {
         if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_session_start)");
-            throw new IllegalStateException("Audit disabled: no DataSource configured");
+            return;
         }
         String tokenHash = HashUtils.sha256Hex(token);
         this.jdbcTemplate.execute((Connection con) -> {
@@ -58,23 +59,27 @@ public class AuditService {
     }
 
     /**
-     * Log an MFA-related event to the audit trail via stored procedure user_pkg.log_mfa_event.
+     * Log an MFA-related event to the audit trail via stored procedure
+     * user_pkg.log_mfa_event.
      *
-     * @param userId affected user ID (nullable when admin-only action without target user)
-     * @param adminId administrator ID if action performed by admin; otherwise null
-     * @param eventType event type tag (e.g., GENERATE_BACKUP, USE_BACKUP_CODE, ADMIN_OVERRIDE)
+     * @param userId    affected user ID (nullable when admin-only action without
+     *                  target user)
+     * @param adminId   administrator ID if action performed by admin; otherwise
+     *                  null
+     * @param eventType event type tag (e.g., GENERATE_BACKUP, USE_BACKUP_CODE,
+     *                  ADMIN_OVERRIDE)
      * @param mfaMethod MFA method (e.g., BACKUP_CODE, SMS, TOTP, WEBAUTHN)
-     * @param status outcome status (e.g., SUCCESS, FAILURE)
-     * @param details human-readable details/context (nullable)
+     * @param status    outcome status (e.g., SUCCESS, FAILURE)
+     * @param details   human-readable details/context (nullable)
      * @param ipAddress source IP (nullable)
      * @param userAgent user agent string (nullable)
      * @throws IllegalArgumentException if required parameters are invalid
-     * @throws IllegalStateException if auditing is disabled (no DataSource configured)
      */
-    public void logMfaEvent(String userId, String adminId, String eventType, String mfaMethod, String status, String details, String ipAddress, String userAgent) {
+    public void logMfaEvent(String userId, String adminId, String eventType, String mfaMethod, String status,
+            String details, String ipAddress, String userAgent) {
         if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_mfa_event)");
-            throw new IllegalStateException("Audit disabled: no DataSource configured");
+            return;
         }
         // Basic validation
         if (eventType == null || eventType.isBlank()) {
@@ -86,7 +91,7 @@ public class AuditService {
         if (status == null || status.isBlank()) {
             throw new IllegalArgumentException("status must not be null/blank");
         }
-        
+
         // Ensure at least one of userId or adminId is present
         if ((userId == null || userId.isBlank()) && (adminId == null || adminId.isBlank())) {
             throw new IllegalArgumentException("Either userId or adminId must be provided");

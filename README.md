@@ -246,6 +246,32 @@ services:
 
 The server boots with HTTPS on `https://localhost:8443`. Since a development keystore is bundled (`src/main/resources/keystore.p12`), your browser/HTTP client may require a trust override.
 
+#### SSL/TLS & Postman Setup for Local Development
+
+The application uses a self-signed certificate in the bundled keystore for local development. To test the GraphQL API with Postman:
+
+1. **Import the Self-Signed Certificate** (Recommended for development):
+   - Open Postman → **Settings** (⚙️ icon) → **Certificates** → **CA Certificates**
+   - Click **Select File** and choose `src/main/resources/keystore.p12`
+   - Enter password: `changeit` (default development keystore password)
+   - Reload Postman
+
+2. **Alternative: Temporarily Disable SSL Verification** (NOT recommended for production):
+   - Open **Settings** (⚙️ icon) → **General** → **SSL certificate verification**: toggle **OFF**
+   - ⚠️ **Warning:** Only for development. Re-enable for any sensitive work.
+
+3. **Use the Postman Collection**:
+   - Import `SSF-GraphQL-Postman-Collection.json` into Postman
+   - Update environment variables:
+     - `base_url`: Should resolve to `https://localhost:8443` (already set)
+     - `username` / `password`: Set to test account credentials
+   - All requests in the collection use the standardized full URL structure with explicit host, port, and path
+
+**For Production Deployments:**
+- Replace `keystore.p12` with a certificate signed by a trusted Certificate Authority
+- Set `strictSSL: true` (enforced by default in the Postman collection)
+- Use valid DNS names and update environment variables accordingly
+
 ### 4. Optional: Start Dependencies with Docker
 
 ```bash

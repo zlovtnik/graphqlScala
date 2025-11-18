@@ -1,17 +1,15 @@
 spring:
   application:
     name: ssf
-  # When using the default reactive mode (preferred), exclude DataSource auto-configuration
-  # and prefer R2DBC to avoid accidental blocking DataSource creation.
-  # To use JDBC instead, activate the 'jdbc' profile which will enable DataSource auto-configuration.
-  autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+  # DataSourceAutoConfiguration is required for JDBC DataSource creation (used by AuditService).
+  # R2DBC configuration is handled separately via custom ReactiveDataSourceConfiguration bean.
+  # Both JDBC and R2DBC are used: JDBC for blocking audit operations, R2DBC for reactive GraphQL endpoints.
   
   # ============================================================================
-  # INACTIVE - R2DBC MODE: The following spring.datasource and spring.jpa
-  # blocks are DISABLED because DataSourceAutoConfiguration is excluded and
-  # the application runs in reactive R2DBC mode. Do NOT edit these properties
-  # unless switching to JDBC mode. See app.r2dbc below for the active config.
+  # ACTIVE - JDBC MODE: Spring DataSource is configured for JDBC operations
+  # (AuditService and synchronous repository access).
+  # R2DBC is configured separately via custom ReactiveDataSourceConfiguration bean
+  # for reactive GraphQL endpoints. Both coexist in the application.
   # ============================================================================
   datasource:
     url: jdbc:oracle:thin:@//${ORACLE_HOST:localhost}:${ORACLE_PORT:1521}/${ORACLE_DB:FREEPDB1}
@@ -37,8 +35,9 @@ spring:
         oracle.jdbc.maxCachedBufferSize: 65536
   
   # ============================================================================
-  # INACTIVE - HIBERNATE/JPA MODE: The following JPA/Hibernate configuration
-  # is DISABLED in R2DBC mode. Kept only for reference if reverting to JDBC.
+  # HIBERNATION/JPA CONFIGURATION: Only used if JDBC operations require JPA/Hibernate.
+  # Currently R2DBC (reactive) is the primary data access layer for GraphQL endpoints.
+  # This configuration is kept for potential JDBC-based JPA operations.
   # ============================================================================
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
@@ -140,7 +139,7 @@ app:
     # Reference only: Spring Boot's native r2dbc auto-config is NOT used; app.r2dbc takes precedence
     # spring.r2dbc properties are ignored when app.r2dbc is configured.
   datasource:
-    enabled: false
+    enabled: true  # Enable JDBC DataSource for AuditService and other blocking operations
 
 ssf:
   cache:

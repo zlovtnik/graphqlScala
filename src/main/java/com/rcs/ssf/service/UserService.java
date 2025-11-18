@@ -9,6 +9,7 @@ import com.rcs.ssf.dynamic.DynamicCrudResponse;
 import com.rcs.ssf.dynamic.PlsqlInstrumentationSupport;
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.repository.UserRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -28,7 +29,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import reactor.core.publisher.Mono;
 
+@Slf4j
 @Service
 public class UserService {
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$",
@@ -85,7 +88,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findByUsername(username).blockOptional(OPERATION_TIMEOUT);
+        return blockOptional(userRepository.findByUsername(username));
     }
 
     public Optional<User> findByEmail(String email) {
@@ -108,7 +111,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findByEmail(email).blockOptional(OPERATION_TIMEOUT);
+        return blockOptional(userRepository.findByEmail(email));
     }
 
     public User createUser(User user) {
@@ -133,20 +136,48 @@ public class UserService {
 
         if (hasJdbcSupport()) {
             DynamicCrudResponse response = dynamicCrudGateway.execute(request);
+            log.debug("JDBC createUser response: affected={}, message={}, generatedId={}",
+                    response.affectedRows(), response.message(), response.generatedId());
             response.optionalGeneratedId()
                     .map(this::parseId)
-                    .ifPresent(user::setId);
+                    .ifPresentOrElse(
+                            user::setId,
+                            () -> log.warn("No generated ID returned from JDBC CREATE operation for user: {}",
+                                    user.getUsername())
+                    );
+            if (user.getId() == null) {
+                log.error("JDBC createUser failed to populate ID. Response: {}", response);
+                throw new IllegalStateException("GENERATED_ID_NOT_FOUND");
+            }
             return user;
         }
 
         // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
-        User saved = userRepository.save(user).block(OPERATION_TIMEOUT);
-        if (saved == null) {
-            throw new RuntimeException(
-                    String.format("Failed to persist new user: email=%s, username=%s. Save returned null.",
-                            user.getEmail(), user.getUsername()));
+        // Note: R2DBC won't populate the ID from a SEQUENCE-based primary key,
+        // so we must fetch the user by username after insertion to populate the ID
+        User savedUser = blockOptional(userRepository.save(user)).orElseThrow(() -> {
+            log.error("Failed to persist new user: email={}, username={}. R2DBC save returned null.",
+                    user.getEmail(), user.getUsername());
+            return new IllegalStateException("USER_PERSIST_FAILED");
+        });
+        log.debug("R2DBC saved user: username={}, id={}", savedUser.getUsername(), savedUser.getId());
+        
+        // Fetch the persisted user by username to populate the generated ID
+        // R2DBC doesn't return generated IDs for sequence-based PKs, so we refetch
+        User persistedUser = findByUsername(user.getUsername())
+                .orElseThrow(() -> {
+                    log.error("Created user not found by username: {}. This should not happen.", user.getUsername());
+                    return new IllegalStateException("USER_NOT_FOUND_AFTER_CREATE");
+                });
+        log.debug("R2DBC fetched persisted user: username={}, id={}", persistedUser.getUsername(),
+                persistedUser.getId());
+        
+        if (persistedUser.getId() == null) {
+            log.error("R2DBC createUser failed to populate ID. User: {}", persistedUser);
+            throw new IllegalStateException("GENERATED_ID_NOT_FOUND");
         }
-        return saved;
+        
+        return persistedUser;
     }
 
     public User updateUser(Long userId, Optional<String> newUsername, Optional<String> newEmail,
@@ -195,12 +226,9 @@ public class UserService {
         }
 
         // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
-        User saved = userRepository.save(existing).block(OPERATION_TIMEOUT);
-        if (saved == null) {
-            throw new RuntimeException(
-                    String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
-                            userId, existing.getEmail()));
-        }
+        User saved = blockOptional(userRepository.save(existing)).orElseThrow(() -> new RuntimeException(
+                String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
+                        userId, existing.getEmail())));
         return saved;
     }
 
@@ -229,8 +257,8 @@ public class UserService {
         // when the method returns,
         // creating a race condition where callers may check for deletion before it
         // actually finishes.
-        if (userRepository.existsById(userId).block(OPERATION_TIMEOUT)) {
-            userRepository.deleteById(userId).block(OPERATION_TIMEOUT);
+        if (blockOptional(userRepository.existsById(userId)).orElse(false)) {
+            userRepository.deleteById(userId).block();
             return true;
         }
         return false;
@@ -259,7 +287,7 @@ public class UserService {
                                 }
                             }));
         }
-        return userRepository.findById(id).blockOptional(OPERATION_TIMEOUT);
+        return blockOptional(userRepository.findById(id));
     }
 
     private void validateNewUser(User user) {
@@ -306,34 +334,6 @@ public class UserService {
     }
 
     private void ensureEmailAvailable(String email, Long currentUserId) {
-        if (hasJdbcSupport()) {
-            Boolean exists = jdbcTemplate.get()
-                    .execute((ConnectionCallback<Boolean>) (Connection con) -> instrumentationSupport.withAction(con,
-                            "user_pkg", "email_exists", () -> {
-                                try (CallableStatement cs = con.prepareCall("{ ? = call user_pkg.email_exists(?) }")) {
-                                    cs.registerOutParameter(1, java.sql.Types.BOOLEAN);
-                                    cs.setString(2, email);
-                                    cs.execute();
-                                    boolean result = cs.getBoolean(1);
-                                    if (cs.wasNull())
-                                        result = false;
-                                    return result;
-                                }
-                            }));
-            if (Boolean.TRUE.equals(exists)) {
-                // Check if it's the current user
-                if (currentUserId != null) {
-                    Optional<User> existingUser = findByEmail(email);
-                    if (existingUser.isPresent() && !Objects.equals(existingUser.get().getId(), currentUserId)) {
-                        throw new IllegalArgumentException("EMAIL_IN_USE");
-                    }
-                } else {
-                    throw new IllegalArgumentException("EMAIL_IN_USE");
-                }
-            }
-            return;
-        }
-
         Optional<User> existingUser = findByEmail(email);
         if (existingUser.isPresent() && !Objects.equals(existingUser.get().getId(), currentUserId)) {
             throw new IllegalArgumentException("EMAIL_IN_USE");
@@ -350,6 +350,19 @@ public class UserService {
 
     private boolean hasJdbcSupport() {
         return jdbcTemplate.isPresent();
+    }
+
+    /**
+     * Block a Mono on the operation timeout, returning an Optional.
+     * Centralizes the common pattern of mono.timeout(OPERATION_TIMEOUT).blockOptional()
+     * used throughout this service for R2DBC operations.
+     *
+     * @param <T> the type of element emitted by the mono
+     * @param mono the mono to block
+     * @return Optional containing the result, or empty if mono completes empty
+     */
+    private <T> Optional<T> blockOptional(Mono<T> mono) {
+        return mono.timeout(OPERATION_TIMEOUT).blockOptional();
     }
 
     private Long parseId(String rawId) {

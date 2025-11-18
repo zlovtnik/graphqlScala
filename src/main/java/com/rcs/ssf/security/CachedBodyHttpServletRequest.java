@@ -31,10 +31,9 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
     /**
      * Creates a new cached request with a configurable maximum body size.
      *
-     * Enforces the size limit on actual bytes read from the request input stream
-     * before
-     * decoding/accumulation. This prevents the StringBuilder from growing beyond
-     * the allowed
+     * Enforces the size limit on raw bytes read from the request input stream
+     * into a byte buffer (ByteArrayOutputStream) before any decoding or character
+     * accumulation. This prevents the byte buffer from growing beyond the allowed
      * size and avoids false rejections due to UTF-8 encoding overhead.
      *
      * @param request          the original HttpServletRequest
@@ -66,7 +65,7 @@ public class CachedBodyHttpServletRequest extends HttpServletRequestWrapper {
         int bytesRead;
 
         try (InputStream inputStream = request.getInputStream()) {
-            while ((bytesRead = inputStream.read(rawBuffer)) > 0) {
+            while ((bytesRead = inputStream.read(rawBuffer)) != -1) {
                 totalBytesRead += bytesRead;
                 if (totalBytesRead > maxBodySizeBytes) {
                     throw new IOException(

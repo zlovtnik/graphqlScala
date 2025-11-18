@@ -56,7 +56,6 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
             .build();
 
     @Override
-    @SuppressWarnings({ "null", "unchecked" })
     public @NonNull Mono<WebGraphQlResponse> intercept(@NonNull WebGraphQlRequest request, @NonNull Chain chain) {
         // Allow introspection queries without authentication
         if (isIntrospectionQuery(request)) {
@@ -75,14 +74,9 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
         if (authentication == null ||
                 !authentication.isAuthenticated() ||
                 authentication instanceof AnonymousAuthenticationToken) {
-            // Mono.error() returns Mono<T> where T cannot be narrowed by the type system;
-            // explicitly cast to satisfy @NonNull return type requirement
-            @SuppressWarnings("null")
-            final Mono<WebGraphQlResponse> errorMono = (Mono<WebGraphQlResponse>) (Mono<?>) Mono
-                    .error(new AccessDeniedException(
-                            "Authentication required: Missing or invalid JWT token. " +
-                                    "Please provide a valid JWT token in the Authorization header."));
-            return errorMono;
+            return Mono.<WebGraphQlResponse>error(new AccessDeniedException(
+                    "Authentication required: Missing or invalid JWT token. " +
+                            "Please provide a valid JWT token in the Authorization header."));
         }
 
         // Continue with the chain

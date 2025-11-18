@@ -16,10 +16,10 @@ public class ComplianceMetricsService {
 
     private final MeterRegistry meterRegistry;
 
-    private double mfaEnrollmentRate = 0.0;
-    private double auditLogCompleteness = 0.0;
-    private double encryptionCoverage = 0.0;
-    private double soxControlStatus = 0.0;
+    private volatile double mfaEnrollmentRate = 0.0;
+    private volatile double auditLogCompleteness = 0.0;
+    private volatile double encryptionCoverage = 0.0;
+    private volatile double soxControlStatus = 0.0;
 
     public ComplianceMetricsService(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
