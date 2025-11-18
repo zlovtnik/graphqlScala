@@ -65,10 +65,17 @@ public class DefaultBackupCodeService implements BackupCodeService {
      *
      * @param userId user identifier (Long, non-null)
      * @return list of 10 newly generated backup codes
+     * @throws IllegalArgumentException if userId is null or non-positive
      * @throws IllegalStateException if persistence fails
      */
     @Override
     public List<String> generateBackupCodes(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
         return generateCodesInternal(userId, "GENERATE");
     }
 
@@ -81,10 +88,17 @@ public class DefaultBackupCodeService implements BackupCodeService {
      *
      * @param userId user identifier
      * @return list of 10 new backup codes
+     * @throws IllegalArgumentException if userId is null or non-positive
      * @throws IllegalStateException if persistence fails
      */
     @Override
     public List<String> regenerateBackupCodes(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId must not be null");
+        }
+        if (userId <= 0) {
+            throw new IllegalArgumentException("userId must be positive");
+        }
         return generateCodesInternal(userId, "REGENERATE");
     }
 

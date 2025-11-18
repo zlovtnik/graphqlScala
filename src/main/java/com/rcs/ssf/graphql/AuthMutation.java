@@ -99,12 +99,12 @@ public class AuthMutation {
                     .cause(e)
                     .build();
         } catch (org.springframework.security.core.AuthenticationException e) {
-            // Bad credentials or other authentication failure
+            // Bad credentials or other authentication failure - use generic error message to prevent username enumeration
             LOGGER.warn("Login attempt failed: authentication error. username={}, ipAddress={}, userAgent={}, error={}", 
                     username, ipAddress, userAgent, e.getMessage());
             auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
             throw GraphqlErrorException.newErrorException()
-                    .message("Authentication failed")
+                    .message("Invalid username or password")
                     .extensions(Map.of("reason", "INVALID_CREDENTIALS"))
                     .cause(e)
                     .build();
