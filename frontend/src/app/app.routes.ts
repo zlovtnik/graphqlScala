@@ -50,6 +50,18 @@ export const routes: Routes = [
     data: { title: 'Settings' },
   },
   {
+    path: 'data',
+    loadComponent: loadPlaceholder,
+    canActivate: [authGuard],
+    data: { title: 'Data' },
+  },
+  {
+    path: 'resources',
+    loadComponent: loadPlaceholder,
+    canActivate: [authGuard],
+    data: { title: 'Resources' },
+  },
+  {
     path: 'analytics',
     loadComponent: loadPlaceholder,
     canActivate: [authGuard],

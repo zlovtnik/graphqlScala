@@ -13,8 +13,10 @@ import { Subject, Observable } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { AuthService, User } from '../core/services/auth.service';
 import { ThemeService } from '../core/services/theme.service';
-import { DashboardService, DashboardStats } from '../core/services/dashboard.service';
+import { DashboardService, DashboardStats, LoginAttemptTrendPoint } from '../core/services/dashboard.service';
 import { PwaService } from '../core/services/pwa.service';
+import { NgxEchartsModule } from 'ngx-echarts';
+import type { EChartsOption } from 'echarts';
 
 interface SystemAlert {
   type: 'success' | 'info' | 'warning' | 'error';
@@ -35,7 +37,8 @@ interface SystemAlert {
     NzStatisticModule,
     NzAvatarModule,
     NzTagModule,
-    NzAlertModule
+    NzAlertModule,
+    NgxEchartsModule
   ],
   templateUrl: './main.component.html',
   styleUrls: ['./main.component.css']
@@ -47,7 +50,7 @@ export class MainComponent implements OnInit, OnDestroy {
   private dismissedAlerts: Set<string> = new Set();
   private destroy$ = new Subject<void>();
 
-  chartData: { day: string; height: number; value: number }[] = [];
+  chartOptions: EChartsOption | null = null;
   successRate: number = 0;
 
   private authService = inject(AuthService);
@@ -74,21 +77,11 @@ export class MainComponent implements OnInit, OnDestroy {
         this.currentUser = user;
       });
 
-    // Initialize chartData with mock data
-    this.chartData = [
-      { day: 'Mon', height: 65, value: 12 },
-      { day: 'Tue', height: 80, value: 19 },
-      { day: 'Wed', height: 45, value: 8 },
-      { day: 'Thu', height: 90, value: 21 },
-      { day: 'Fri', height: 70, value: 15 },
-      { day: 'Sat', height: 55, value: 10 },
-      { day: 'Sun', height: 85, value: 18 }
-    ];
-
     // Initialize alerts based on stats
     this.stats$.pipe(takeUntil(this.destroy$)).subscribe(stats => {
       this.updateAlerts(stats);
       this.successRate = this.getSuccessRate(stats.totalLoginAttempts || 0, stats.failedLoginAttempts || 0);
+      this.updateChartOptions(stats.loginAttemptTrends);
     });
   }
 
@@ -189,5 +182,80 @@ export class MainComponent implements OnInit, OnDestroy {
 
   installPwa(): void {
     this.pwaService.installPwa();
+  }
+
+  private updateChartOptions(trends?: LoginAttemptTrendPoint[]): void {
+    if (!trends || trends.length === 0) {
+      this.chartOptions = null;
+      return;
+    }
+
+    const labels = trends.map(point => this.formatTrendLabel(point.date));
+    const successCounts = trends.map(point => point.successCount);
+    const failedCounts = trends.map(point => point.failedCount);
+
+    this.chartOptions = {
+      tooltip: {
+        trigger: 'axis'
+      },
+      legend: {
+        data: ['Successful', 'Failed']
+      },
+      grid: {
+        left: '3%',
+        right: '3%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: labels,
+        axisTick: { alignWithLabel: true }
+      },
+      yAxis: {
+        type: 'value',
+        minInterval: 1
+      },
+      series: [
+        {
+          name: 'Successful',
+          type: 'bar',
+          stack: 'loginAttempts',
+          data: successCounts,
+          itemStyle: {
+            color: '#52c41a'
+          }
+        },
+        {
+          name: 'Failed',
+          type: 'bar',
+          stack: 'loginAttempts',
+          data: failedCounts,
+          itemStyle: {
+            color: '#ff4d4f'
+          }
+        }
+      ]
+    } satisfies EChartsOption;
+  }
+
+  private formatTrendLabel(dateIso: string): string {
+    if (!dateIso) {
+      return '';
+    }
+
+    const trimmed = dateIso.trim();
+    const date = new Date(trimmed);
+
+    // Validate the parsed date
+    if (Number.isNaN(date.getTime())) {
+      return dateIso;
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    }).format(date);
   }
 }

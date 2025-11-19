@@ -4,6 +4,12 @@ import { catchError } from 'rxjs/operators';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
+export interface LoginAttemptTrendPoint {
+  date: string;
+  successCount: number;
+  failedCount: number;
+}
+
 export interface DashboardStats {
   totalUsers: number;
   activeSessions: number;
@@ -12,6 +18,7 @@ export interface DashboardStats {
   loginAttemptsToday: number;
   failedLoginAttempts: number;
   totalLoginAttempts: number;
+  loginAttemptTrends: LoginAttemptTrendPoint[];
 }
 
 @Injectable({
@@ -48,7 +55,8 @@ export class DashboardService {
       systemHealth: 'HEALTHY',
       loginAttemptsToday: 0,
       failedLoginAttempts: 0,
-      totalLoginAttempts: 0
+      totalLoginAttempts: 0,
+      loginAttemptTrends: []
     };
   }
 }

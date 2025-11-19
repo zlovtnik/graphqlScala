@@ -151,25 +151,6 @@
 
         <div class="header-right">
           <app-notification-center></app-notification-center>
-          <!-- Theme Selector -->
-          <div class="theme-selector-header">
-            <div nz-dropdown [nzDropdownMenu]="themeMenu" nzPlacement="bottomRight">
-              <button nz-button nzType="text" class="theme-trigger">
-                <span nz-icon nzType="skin"></span>
-                <span class="theme-label">{{ (themeService.getCurrentTheme$() | async) | titlecase }}</span>
-              </button>
-            </div>
-            <nz-dropdown-menu #themeMenu="nzDropdownMenu">
-              <ul nz-menu>
-                <li nz-menu-item *ngFor="let theme of themeService.getAvailableThemes()">
-                  <a (click)="themeService.setTheme(theme)" (keydown.enter)="themeService.setTheme(theme)" tabindex="0" role="button">
-                    <span class="theme-dot" [class]="'theme-dot-' + theme"></span>
-                    {{ theme | titlecase }}
-                  </a>
-                </li>
-              </ul>
-            </nz-dropdown-menu>
-          </div>
 
           <!-- User Menu -->
           <div class="user-menu" *ngIf="authService.isAuthenticated()">
