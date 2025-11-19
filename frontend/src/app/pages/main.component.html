@@ -131,17 +131,16 @@
     <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px">
       <nz-col [nzXs]="24" [nzMd]="12">
         <nz-card class="chart-card card" nzTitle="User Activity Trends (Last 7 Days)">
-          <div class="chart-placeholder">
-            <div class="chart-data">
-              <div class="chart-bar" *ngFor="let item of chartData" 
-                   [style.height.%]="item.height">
-                <span class="bar-value">{{ item.value }}</span>
-              </div>
+          <ng-container *ngIf="chartOptions as options; else emptyChart">
+            <div class="chart-wrapper">
+              <div echarts class="chart-canvas" [options]="options" [autoResize]="true"></div>
             </div>
-            <div class="chart-labels">
-              <span *ngFor="let item of chartData">{{ item.day }}</span>
+          </ng-container>
+          <ng-template #emptyChart>
+            <div class="chart-empty">
+              No login activity trend data available yet.
             </div>
-          </div>
+          </ng-template>
         </nz-card>
       </nz-col>
 

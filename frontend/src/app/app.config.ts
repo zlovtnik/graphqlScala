@@ -9,11 +9,13 @@ import { en_US, provideNzI18n } from 'ng-zorro-antd/i18n';
 import { registerLocaleData } from '@angular/common';
 import en from '@angular/common/locales/en';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { provideHttpClient, withFetch } from '@angular/common/http';
+import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/http';
 import { HttpLink } from 'apollo-angular/http';
 import { graphqlProvider } from './graphql.config';
 import { provideServiceWorker } from '@angular/service-worker';
 import { environment } from '../environments/environment';
+import { provideEcharts } from 'ngx-echarts';
+import { jwtInterceptor } from './core/interceptors/jwt.interceptor';
 
 registerLocaleData(en);
 
@@ -25,9 +27,10 @@ export const appConfig: ApplicationConfig = {
     provideNzIcons(icons),
     provideNzI18n(en_US),
     provideAnimationsAsync(),
-    provideHttpClient(withFetch()),
+    provideHttpClient(withFetch(), withInterceptors([jwtInterceptor])),
     graphqlProvider,
     HttpLink,
+    provideEcharts(),
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000'

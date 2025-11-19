@@ -52,10 +52,10 @@ import java.util.stream.Collectors;
  * - POST /graphql - GraphQL endpoint (operation-level authorization enforced by
  * GraphQLAuthorizationInstrumentation; GET is not exposed)
  *
- * Protected Endpoints requiring authentication:
+ * Authenticated Endpoints (HTTP-level):
+ * - /api/dashboard/** - dashboard statistics (requires valid JWT token)
  * - /graphiql/** - GraphQL IDE (requires authenticated operators in production)
  * - All remaining /actuator/** endpoints
- * - Any other HTTP endpoints not explicitly listed above
  *
  * Note: /graphql does not require authentication at the HTTP layer; instead,
  * authentication
@@ -143,6 +143,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow user creation for bootstrap
                         .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
+                        // Dashboard endpoints require authentication
+                        .requestMatchers("/api/dashboard/**").authenticated()
                         // GraphQL IDE requires authentication in production
                         .requestMatchers(HttpMethod.GET, "/graphiql/**").authenticated()
                         // Limit GraphQL HTTP exposure to POST requests; instrumentation enforces public
