@@ -6,15 +6,16 @@ import graphql.execution.DataFetcherExceptionHandlerParameters;
 import graphql.execution.DataFetcherExceptionHandlerResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -30,11 +31,19 @@ import java.util.concurrent.CompletableFuture;
 public class GraphQLSecurityHandler implements DataFetcherExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GraphQLSecurityHandler.class);
+    private static final Set<String> DEV_PROFILES_SET = Collections.unmodifiableSet(
+            Set.of("dev", "development", "local", "test"));
 
-    @Autowired
-    private Environment environment;
+    private final Environment environment;
 
-    private static final String[] DEV_PROFILES = {"dev", "development", "local", "test"};
+    /**
+     * Constructor for dependency injection.
+     * 
+     * @param environment the Spring environment used to detect dev profiles
+     */
+    public GraphQLSecurityHandler(Environment environment) {
+        this.environment = environment;
+    }
 
     @Override
     public CompletableFuture<DataFetcherExceptionHandlerResult> handleException(
@@ -92,7 +101,7 @@ public class GraphQLSecurityHandler implements DataFetcherExceptionHandler {
             activeProfiles = environment.getDefaultProfiles();
         }
         return Arrays.stream(activeProfiles)
-                .anyMatch(profile -> Arrays.asList(DEV_PROFILES).contains(profile.toLowerCase()));
+                .anyMatch(profile -> DEV_PROFILES_SET.contains(profile.toLowerCase()));
     }
 
     private Map<String, Object> buildExtensions(Throwable exception, boolean isDevelopment) {

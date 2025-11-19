@@ -6,9 +6,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.dao.DataAccessException;
 import org.springframework.graphql.execution.DataFetcherExceptionResolver;
 import reactor.core.publisher.Mono;
 
+import jakarta.validation.ValidationException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -29,13 +31,7 @@ public class GlobalExceptionResolver {
     public DataFetcherExceptionResolver exceptionResolver(Environment environment) {
         return (exception, environment1) -> {
             // Detect if we're in development mode
-            String[] activeProfiles = environment.getActiveProfiles();
-            boolean isDevelopment = activeProfiles.length == 0 || 
-                Arrays.stream(activeProfiles)
-                    .anyMatch(p -> p.equalsIgnoreCase("dev") || 
-                                 p.equalsIgnoreCase("development") || 
-                                 p.equalsIgnoreCase("local") || 
-                                 p.equalsIgnoreCase("test"));
+            boolean isDevelopment = isDevelopmentEnvironment(environment);
             
             logger.error("GraphQL DataFetcher Exception Resolved: {}", exception.getMessage(), exception);
             
@@ -49,11 +45,26 @@ public class GlobalExceptionResolver {
                 .message(message)
                 .build();
             
-            List<GraphQLError> errors = Collections.singletonList(graphQLError);
-            @SuppressWarnings("unchecked")
-            Mono<List<GraphQLError>> result = (Mono<List<GraphQLError>>) (Mono<?>) Mono.just(errors);
-            return result;
+            return Mono.just(Collections.singletonList(graphQLError));
         };
+    }
+    
+    /**
+     * Determines if the application is running in a development environment.
+     * Returns true if no profiles are active or if any of the active profiles
+     * match "dev", "development", "local", or "test" (case-insensitive).
+     *
+     * @param environment the Spring environment to check
+     * @return true if in development mode, false otherwise
+     */
+    private static boolean isDevelopmentEnvironment(Environment environment) {
+        String[] activeProfiles = environment.getActiveProfiles();
+        return activeProfiles.length == 0 || 
+            Arrays.stream(activeProfiles)
+                .anyMatch(p -> p.equalsIgnoreCase("dev") || 
+                             p.equalsIgnoreCase("development") || 
+                             p.equalsIgnoreCase("local") || 
+                             p.equalsIgnoreCase("test"));
     }
     
     private static String buildGenericMessage(Throwable exception) {
@@ -61,6 +72,10 @@ public class GlobalExceptionResolver {
             return "Invalid input provided";
         } else if (exception instanceof SecurityException) {
             return "Access denied";
+        } else if (exception instanceof DataAccessException) {
+            return "Data access error occurred";
+        } else if (exception instanceof ValidationException) {
+            return "Validation failed for the request";
         } else {
             return "An error occurred while processing your request";
         }
