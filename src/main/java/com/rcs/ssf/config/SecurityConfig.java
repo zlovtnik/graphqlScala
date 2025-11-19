@@ -139,8 +139,6 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // Allow CORS preflight checks
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Public endpoints for authentication
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow user creation for bootstrap

@@ -42,9 +42,16 @@ export const jwtInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, nex
       // Handle 401 Unauthorized responses
       if (error.status === 401) {
         // Token refresh failed or missing - logout and redirect to login
-        authService.logout().then(() => {
-          router.navigate(['/auth/login']);
-        });
+        authService.logout()
+          .then(() => {
+            console.debug('User logged out successfully');
+          })
+          .catch((logoutError) => {
+            console.error('Failed to logout during 401 handling:', logoutError);
+          })
+          .finally(() => {
+            router.navigate(['/auth/login']);
+          });
       }
 
       return throwError(() => error);

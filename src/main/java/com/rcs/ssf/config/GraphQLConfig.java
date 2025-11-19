@@ -44,11 +44,6 @@ public class GraphQLConfig {
     }
 
     /**
-     * Configure GraphQL source with custom instrumentation.
-     * Note: Instrumentation beans are automatically registered by Spring GraphQL
-     */
-
-    /**
      * GraphQL interceptor for logging and metrics collection.
      */
     @Bean

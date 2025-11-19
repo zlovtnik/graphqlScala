@@ -1,6 +1,8 @@
 spring:
   application:
     name: ssf
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
   # DataSourceAutoConfiguration is required for JDBC DataSource creation (used by AuditService).
   # R2DBC configuration is handled separately via custom ReactiveDataSourceConfiguration bean.
   # Both JDBC and R2DBC are used: JDBC for blocking audit operations, R2DBC for reactive GraphQL endpoints.
