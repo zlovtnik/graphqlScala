@@ -11,9 +11,8 @@ import org.springframework.graphql.execution.DataFetcherExceptionResolver;
 import reactor.core.publisher.Mono;
 
 import jakarta.validation.ValidationException;
-import java.util.Arrays;
+import com.rcs.ssf.util.EnvironmentDetectionUtils;
 import java.util.Collections;
-import java.util.List;
 
 /**
  * Global exception resolver for GraphQL errors.
@@ -28,10 +27,12 @@ public class GlobalExceptionResolver {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionResolver.class);
 
     @Bean
+    @SuppressWarnings("null")
     public DataFetcherExceptionResolver exceptionResolver(Environment environment) {
-        return (exception, environment1) -> {
-            // Detect if we're in development mode
-            boolean isDevelopment = isDevelopmentEnvironment(environment);
+        return (exception, dataFetchingEnv) -> {
+            // Detect if we're in development mode using Spring Environment (for profile detection)
+            // Note: dataFetchingEnv is the GraphQL DataFetchingEnvironment (unused in this resolver)
+            boolean isDevelopment = EnvironmentDetectionUtils.isDevelopment(environment);
             
             logger.error("GraphQL DataFetcher Exception Resolved: {}", exception.getMessage(), exception);
             
@@ -47,24 +48,6 @@ public class GlobalExceptionResolver {
             
             return Mono.just(Collections.singletonList(graphQLError));
         };
-    }
-    
-    /**
-     * Determines if the application is running in a development environment.
-     * Returns true if no profiles are active or if any of the active profiles
-     * match "dev", "development", "local", or "test" (case-insensitive).
-     *
-     * @param environment the Spring environment to check
-     * @return true if in development mode, false otherwise
-     */
-    private static boolean isDevelopmentEnvironment(Environment environment) {
-        String[] activeProfiles = environment.getActiveProfiles();
-        return activeProfiles.length == 0 || 
-            Arrays.stream(activeProfiles)
-                .anyMatch(p -> p.equalsIgnoreCase("dev") || 
-                             p.equalsIgnoreCase("development") || 
-                             p.equalsIgnoreCase("local") || 
-                             p.equalsIgnoreCase("test"));
     }
     
     private static String buildGenericMessage(Throwable exception) {

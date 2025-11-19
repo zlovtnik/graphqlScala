@@ -10,7 +10,7 @@ import { NzAvatarModule } from 'ng-zorro-antd/avatar';
 import { NzTagModule } from 'ng-zorro-antd/tag';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { Subject, Observable } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { takeUntil, shareReplay } from 'rxjs/operators';
 import { AuthService, User } from '../core/services/auth.service';
 import { ThemeService } from '../core/services/theme.service';
 import { DashboardService, DashboardStats, LoginAttemptTrendPoint } from '../core/services/dashboard.service';
@@ -65,7 +65,9 @@ export class MainComponent implements OnInit, OnDestroy {
 
   constructor() {
     // Initialize stats$ from dashboard service with error handling
-    this.stats$ = this.dashboardService.getStats();
+    // Use shareReplay(1) to ensure all subscribers (async pipes + explicit subscription)
+    // share a single HTTP request instead of triggering multiple fetches
+    this.stats$ = this.dashboardService.getStats().pipe(shareReplay(1));
   }
 
   ngOnInit(): void {

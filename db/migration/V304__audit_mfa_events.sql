@@ -179,7 +179,14 @@ BEGIN
     EXCEPTION WHEN OTHERS THEN
         -- Likely missing CREATE JOB privilege or job already exists.
         -- Migration continues; DBA can manually create the scheduler job if needed.
-        NULL;
+        -- Log the failure so DBAs are aware the job was not created
+        PRC_LOG_MFA_ERROR(
+            'MFA_SCHEDULER_JOB_CREATE_FAILED',
+            SQLERRM,
+            'job_name=JOB_DROP_OLD_AUDIT_MFA_PARTITIONS',
+            'Migration_V304_Scheduler_Setup',
+            'WARNING'
+        );
     END;
 END;
 /

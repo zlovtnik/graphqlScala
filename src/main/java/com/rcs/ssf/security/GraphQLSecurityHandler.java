@@ -11,11 +11,12 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
-import java.util.Collections;
+import com.rcs.ssf.util.EnvironmentDetectionUtils;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -31,8 +32,6 @@ import java.util.concurrent.CompletableFuture;
 public class GraphQLSecurityHandler implements DataFetcherExceptionHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(GraphQLSecurityHandler.class);
-    private static final Set<String> DEV_PROFILES_SET = Collections.unmodifiableSet(
-            Set.of("dev", "development", "local", "test"));
 
     private final Environment environment;
 
@@ -92,16 +91,7 @@ public class GraphQLSecurityHandler implements DataFetcherExceptionHandler {
     }
 
     private boolean isDevEnvironment() {
-        if (environment == null) {
-            return false;
-        }
-        String[] activeProfiles = environment.getActiveProfiles();
-        if (activeProfiles.length == 0) {
-            // Check default profiles if no active profiles are set
-            activeProfiles = environment.getDefaultProfiles();
-        }
-        return Arrays.stream(activeProfiles)
-                .anyMatch(profile -> DEV_PROFILES_SET.contains(profile.toLowerCase()));
+        return EnvironmentDetectionUtils.isDevelopment(environment);
     }
 
     private Map<String, Object> buildExtensions(Throwable exception, boolean isDevelopment) {
@@ -118,17 +108,8 @@ public class GraphQLSecurityHandler implements DataFetcherExceptionHandler {
     }
 
     private String getStackTrace(Throwable exception) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(exception.getClass().getName()).append(": ").append(exception.getMessage()).append("\n");
-        
-        for (StackTraceElement element : exception.getStackTrace()) {
-            sb.append("\tat ").append(element).append("\n");
-        }
-        
-        if (exception.getCause() != null) {
-            sb.append("Caused by: ").append(getStackTrace(exception.getCause()));
-        }
-        
-        return sb.toString();
+        StringWriter sw = new StringWriter();
+        exception.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

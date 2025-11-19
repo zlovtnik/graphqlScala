@@ -50,7 +50,7 @@ export const jwtInterceptor: HttpInterceptorFn = (req: HttpRequest<unknown>, nex
             console.error('Failed to logout during 401 handling:', logoutError);
           })
           .finally(() => {
-            router.navigate(['/auth/login']);
+            router.navigate(['/login']);
           });
       }
 
