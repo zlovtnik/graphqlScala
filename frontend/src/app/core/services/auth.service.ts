@@ -117,6 +117,9 @@ export class AuthService implements OnDestroy {
       variables: { username, password }
     }).pipe(
       map(result => {
+        if (result.error) {
+          throw new Error(result.error.message || 'Login failed');
+        }
         const payload = result.data?.login;
         if (!payload?.token) {
           throw new Error('Invalid login response from server');
@@ -136,6 +139,9 @@ export class AuthService implements OnDestroy {
       variables: { username, email, password }
     }).pipe(
       map(result => {
+        if (result.error) {
+          throw new Error(result.error.message || 'Registration failed');
+        }
         const payload = result.data?.register;
         if (!payload?.token) {
           throw new Error('Invalid register response from server');
