@@ -54,7 +54,8 @@ describe('MainComponent - WebSocket Subscription Integration', () => {
         { provide: DashboardService, useValue: dashboardServiceSpy },
         { provide: AuthService, useValue: authServiceSpy },
         { provide: ThemeService, useValue: themeServiceSpy },
-        { provide: PwaService, useValue: pwaServiceSpy }
+        { provide: PwaService, useValue: pwaServiceSpy },
+        { provide: NGX_ECHARTS_CONFIG, useValue: { echarts: {} } }
       ]
     }).compileComponents();
 
