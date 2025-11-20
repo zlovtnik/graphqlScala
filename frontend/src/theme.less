@@ -93,6 +93,16 @@
   --error: #DC2626;
   --info: var(--primary-base);
   
+  // Status-specific semantic colors (Ant Design color mapping)
+  // Using Ant Design palette: success=#52c41a, error=#ff4d4f, warning=#faad14, default=#d9d9d9
+  --status-success: #52c41a;      /* UP status - Ant Design success green */
+  --status-error: #ff4d4f;        /* DOWN status - Ant Design error red */
+  --status-warning: #faad14;      /* DEGRADED status - Ant Design warning amber */
+  --status-unknown: #8c8c8c;      /* UNKNOWN/MUTED status - Ant Design gray */
+  --status-error-bg: #fff1f0;     /* DOWN background - Ant Design error light background */
+  --status-warning-bg: #fffbe6;   /* DEGRADED background - Ant Design warning light background */
+  --border-muted: #d9d9d9;        /* Default border color */
+  
   // Layout
   --header-height: 64px;
   --sidebar-width: 256px;
@@ -211,6 +221,15 @@
   --warning: @amber-dark;
   --error: #f87171;
   --info: @blue-dark;
+  
+  // Status-specific semantic colors (adjusted for dark theme)
+  --status-success: #95de64;      /* UP status - lighter green for dark theme */
+  --status-error: #ff7875;        /* DOWN status - lighter red for dark theme */
+  --status-warning: #ffc53d;      /* DEGRADED status - lighter amber for dark theme */
+  --status-unknown: #bfbfbf;      /* UNKNOWN/MUTED status - lighter gray for dark theme */
+  --status-error-bg: #2c1f1f;     /* DOWN background - dark red background */
+  --status-warning-bg: #2f2413;   /* DEGRADED background - dark amber background */
+  --border-muted: #434343;        /* Dark theme border color */
 }
 
 // ============================================================
