@@ -50,9 +50,17 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
     private static final Set<String> PUBLIC_MUTATIONS_NORMALIZED = PUBLIC_MUTATIONS.stream()
             .map(name -> name.toLowerCase(Locale.ROOT))
             .collect(Collectors.toUnmodifiableSet());
+    private static final Set<String> PUBLIC_SUBSCRIPTIONS = Set.of("dashboardStats");
+    private static final Set<String> PUBLIC_SUBSCRIPTIONS_NORMALIZED = PUBLIC_SUBSCRIPTIONS.stream()
+            .map(name -> name.toLowerCase(Locale.ROOT))
+            .collect(Collectors.toUnmodifiableSet());
     private static final int PUBLIC_MUTATION_CACHE_MAX_ENTRIES = 512;
+    private static final int PUBLIC_SUBSCRIPTION_CACHE_MAX_ENTRIES = 512;
     private final Cache<String, Boolean> publicMutationCache = Caffeine.newBuilder()
             .maximumSize(PUBLIC_MUTATION_CACHE_MAX_ENTRIES)
+            .build();
+    private final Cache<String, Boolean> publicSubscriptionCache = Caffeine.newBuilder()
+            .maximumSize(PUBLIC_SUBSCRIPTION_CACHE_MAX_ENTRIES)
             .build();
 
     @Override
@@ -64,6 +72,11 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
 
         // Allow login and logout mutations without authentication
         if (isPublicMutation(request)) {
+            return chain.next(request);
+        }
+
+        // Allow public subscriptions without authentication
+        if (isPublicSubscription(request)) {
             return chain.next(request);
         }
 
@@ -150,6 +163,63 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
     }
 
     /**
+     * Determines if the GraphQL request is a public subscription.
+     * Public subscriptions are allowed without authentication.
+     *
+     * @param request the GraphQL request
+     * @return true if the request is a public subscription, false otherwise
+     */
+    private boolean isPublicSubscription(@NonNull WebGraphQlRequest request) {
+        String document = request.getDocument();
+        String operationName = request.getOperationName();
+
+        // If no document is present, it's not a public subscription
+        if (document == null || document.isBlank()) {
+            return false;
+        }
+
+        // Cheap textual pre-filter: skip parsing if no "subscription" token exists
+        String normalizedDocument = document.toLowerCase(Locale.ROOT);
+        if (!normalizedDocument.contains("subscription")) {
+            return false;
+        }
+
+        // Use cached result if available
+        String cacheKey = generateCacheKey(document, operationName);
+        if (cacheKey != null) {
+            Boolean cachedResult = publicSubscriptionCache.getIfPresent(cacheKey);
+            if (cachedResult != null) {
+                return cachedResult;
+            }
+        }
+
+        // Parse AST to confirm it's a public subscription
+        boolean parseResult = parseDocumentForPublicSubscription(document, operationName);
+        if (cacheKey != null) {
+            publicSubscriptionCache.put(cacheKey, parseResult);
+        }
+        return parseResult;
+    }
+
+    private boolean parseDocumentForPublicSubscription(String document, String operationName) {
+        return parseDocumentForPublicOperation(
+            document, 
+            operationName, 
+            OperationDefinition.Operation.SUBSCRIPTION, 
+            PUBLIC_SUBSCRIPTIONS_NORMALIZED
+        );
+    }
+
+    private boolean parseDocumentForPublicMutation(String document, String operationName) {
+        return parseDocumentForPublicOperation(
+            document, 
+            operationName, 
+            OperationDefinition.Operation.MUTATION, 
+            PUBLIC_MUTATIONS_NORMALIZED
+        );
+    }
+
+    /**
      * Generate a stable cache key from the GraphQL document and operation name.
      * Uses SHA-256 hash to create a compact, stable key.
      *
@@ -167,31 +237,44 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
         }
     }
 
-    private boolean parseDocumentForPublicMutation(String document, String operationName) {
+    /**
+     * Parses a GraphQL document and checks if all operations of the given type are public.
+     * Shared implementation for both mutations and subscriptions.
+     *
+     * @param document       the GraphQL document
+     * @param operationName  the operation name (may be null)
+     * @param operationType  the operation type to check (MUTATION or SUBSCRIPTION)
+     * @param allowedFields  the set of allowed field names (public mutations or subscriptions)
+     * @return true if the document contains only public operations of the given type
+     */
+    private boolean parseDocumentForPublicOperation(
+            String document,
+            String operationName,
+            OperationDefinition.Operation operationType,
+            Set<String> allowedFields) {
         try {
-            // Instantiate new Parser for each parse operation (thread-safe, no shared
-            // state)
+            // Instantiate new Parser for each parse operation (thread-safe, no shared state)
             Parser parser = new Parser();
             Document parsedDocument = parser.parseDocument(document);
 
-            // Count mutation operations
-            int mutationCount = 0;
+            // Count operations of the given type
+            int operationCount = 0;
             for (var definition : parsedDocument.getDefinitions()) {
                 if (definition instanceof OperationDefinition operation &&
-                        operation.getOperation() == OperationDefinition.Operation.MUTATION) {
-                    mutationCount++;
+                        operation.getOperation() == operationType) {
+                    operationCount++;
                 }
             }
 
-            // If operationName is null and there are multiple mutations, reject
-            if (operationName == null && mutationCount > 1) {
+            // If operationName is null and there are multiple operations of this type, reject
+            if (operationName == null && operationCount > 1) {
                 return false;
             }
 
-            // Check each mutation operation
+            // Check each operation of the given type
             for (var definition : parsedDocument.getDefinitions()) {
                 if (definition instanceof OperationDefinition operation &&
-                        operation.getOperation() == OperationDefinition.Operation.MUTATION) {
+                        operation.getOperation() == operationType) {
                     // If operationName is specified, only check the matching operation
                     String opName = operation.getName();
                     if (operationName != null && !operationName.equals(opName)) {
@@ -208,7 +291,7 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
                             sawAnyField = true;
                             String fieldName = field.getName();
                             if (fieldName == null
-                                    || !PUBLIC_MUTATIONS_NORMALIZED.contains(fieldName.toLowerCase(Locale.ROOT))) {
+                                    || !allowedFields.contains(fieldName.toLowerCase(Locale.ROOT))) {
                                 return false; // mixed or non-public -> deny
                             }
                         } else {
@@ -221,11 +304,11 @@ public class GraphQLAuthorizationInstrumentation implements WebGraphQlIntercepto
                 }
             }
         } catch (InvalidSyntaxException syntaxEx) {
-            log.error("Invalid GraphQL syntax while checking for public mutations", syntaxEx);
+            log.error("Invalid GraphQL syntax while checking for public operations", syntaxEx);
             return false;
         } catch (RuntimeException unexpected) {
             log.warn(
-                    "Unexpected error while parsing GraphQL document for public mutation detection, treating as non-public",
+                    "Unexpected error while parsing GraphQL document for public operation detection, treating as non-public",
                     unexpected);
             return false;
         }

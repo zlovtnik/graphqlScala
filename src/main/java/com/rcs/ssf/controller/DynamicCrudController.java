@@ -40,4 +40,10 @@ public class DynamicCrudController {
         List<String> tablesList = Arrays.asList(tablesArray);
         return ResponseEntity.ok(tablesList);
     }
+
+    @GetMapping("/schema/{table}")
+    public ResponseEntity<DynamicCrudResponseDto.SchemaMetadata> getTableSchema(@PathVariable String table) {
+        DynamicCrudResponseDto.SchemaMetadata schema = dynamicCrudService.getTableSchema(table);
+        return ResponseEntity.ok(schema);
+    }
 }

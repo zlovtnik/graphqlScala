@@ -200,6 +200,13 @@ public class DynamicCrudService {
                 .toArray(String[]::new);
     }
 
+    public DynamicCrudResponseDto.SchemaMetadata getTableSchema(String tableName) {
+        assertAuthorizedForDynamicCrud();
+        validateTable(tableName);
+        List<DynamicCrudResponseDto.ColumnMeta> columns = getColumnMetadata(tableName);
+        return new DynamicCrudResponseDto.SchemaMetadata(tableName, columns);
+    }
+
     private void validateTable(String tableName) {
         if (!ALLOWED_TABLES.contains(tableName.toLowerCase(Locale.ROOT))) {
             throw new IllegalArgumentException("Table not allowed: " + tableName);
@@ -215,6 +222,11 @@ public class DynamicCrudService {
                 SELECT utc.column_name,
                        utc.data_type,
                        utc.nullable,
+                       utc.column_id,
+                       utc.data_length,
+                       utc.data_precision,
+                       utc.data_scale,
+                       utc.data_default,
                        CASE
                          WHEN EXISTS (
                              SELECT 1
@@ -223,8 +235,33 @@ public class DynamicCrudService {
                              WHERE uc.constraint_type = 'P'
                                AND uc.table_name = utc.table_name
                                AND ucc.column_name = utc.column_name
-                       ) THEN 'Y' ELSE 'N' END AS is_primary_key
+                       ) THEN 'Y' ELSE 'N' END AS is_primary_key,
+                       CASE
+                         WHEN EXISTS (
+                             SELECT 1
+                             FROM user_cons_columns ucc
+                             JOIN user_constraints uc ON ucc.constraint_name = uc.constraint_name
+                             WHERE uc.constraint_type = 'U'
+                               AND uc.table_name = utc.table_name
+                               AND ucc.column_name = utc.column_name
+                       ) THEN 'Y' ELSE 'N' END AS is_unique,
+                       NVL(ucc.comments, '') AS column_comment,
+                       fkc.ref_table_name,
+                       fkc.ref_column_name
                 FROM user_tab_columns utc
+                LEFT JOIN user_col_comments ucc ON utc.table_name = ucc.table_name 
+                                                AND utc.column_name = ucc.column_name
+                LEFT JOIN (
+                    SELECT ucc1.table_name,
+                           ucc1.column_name,
+                           ucc2.table_name AS ref_table_name,
+                           ucc2.column_name AS ref_column_name
+                    FROM user_cons_columns ucc1
+                    JOIN user_constraints uc1 ON ucc1.constraint_name = uc1.constraint_name
+                    JOIN user_constraints uc2 ON uc1.r_constraint_name = uc2.constraint_name
+                    JOIN user_cons_columns ucc2 ON uc2.constraint_name = ucc2.constraint_name
+                    WHERE uc1.constraint_type = 'R'
+                ) fkc ON utc.table_name = fkc.table_name AND utc.column_name = fkc.column_name
                 WHERE utc.table_name = UPPER(?)
                 ORDER BY utc.column_id
                 """;
@@ -235,7 +272,15 @@ public class DynamicCrudService {
                         rs.getString("column_name"),
                         rs.getString("data_type"),
                         "Y".equals(rs.getString("nullable")),
-                        "Y".equals(rs.getString("is_primary_key"))),
+                        "Y".equals(rs.getString("is_primary_key")),
+                        rs.getObject("data_length") != null ? rs.getInt("data_length") : null,
+                        rs.getString("data_default"),
+                        rs.getObject("data_precision") != null ? rs.getInt("data_precision") : null,
+                        rs.getObject("data_scale") != null ? rs.getInt("data_scale") : null,
+                        "Y".equals(rs.getString("is_unique")),
+                        rs.getString("column_comment"),
+                        rs.getString("ref_table_name"),
+                        rs.getString("ref_column_name")),
                 tableName);
 
         return columns.stream()
