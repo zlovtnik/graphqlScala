@@ -3,6 +3,7 @@ package com.rcs.ssf.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rcs.ssf.dto.*;
+import com.rcs.ssf.dto.BulkCrudResponse.Status;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
@@ -78,8 +79,8 @@ public class ImportExportService {
             return bulkCrudService.executeBulkOperation(bulkRequest);
         } catch (Exception ex) {
             log.error("Import failed for table '{}'", request.getTableName(), ex);
-            return new BulkCrudResponse(0, 0, 1, 0, "IMPORT_FAILED", 
-                    List.of(new BulkCrudResponse.RowError(0, ex.getMessage(), "IMPORT_ERROR")), 0);
+            return new BulkCrudResponse(0, 0, 1, 0, Status.IMPORT_FAILED, 
+                    List.of(new BulkCrudResponse.RowError(0, ex.getMessage(), "IMPORT_ERROR")), 0L);
         }
     }
 
@@ -179,7 +180,7 @@ public class ImportExportService {
      */
     private List<BulkCrudRequest.BulkRow> parseCSV(String csvData, Map<String, String> columnMapping) {
         List<BulkCrudRequest.BulkRow> rows = new ArrayList<>();
-        String[] lines = csvData.split("\n");
+        String[] lines = csvData.split("\\r?\\n|\\r");
 
         if (lines.length == 0) {
             return rows;

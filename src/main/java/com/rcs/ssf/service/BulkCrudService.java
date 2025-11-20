@@ -2,6 +2,7 @@ package com.rcs.ssf.service;
 
 import com.rcs.ssf.dto.BulkCrudRequest;
 import com.rcs.ssf.dto.BulkCrudResponse;
+import com.rcs.ssf.dto.BulkCrudResponse.Status;
 import com.rcs.ssf.dto.DynamicCrudRequest;
 import com.rcs.ssf.dynamic.*;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,10 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,18 +32,24 @@ public class BulkCrudService {
 
     private final DynamicCrudGateway dynamicCrudGateway;
     private final String requiredRole;
-
-    private static final Set<String> ALLOWED_TABLES = Set.of(
-            "audit_login_attempts", "audit_sessions", "audit_dynamic_crud", "audit_error_log");
+    private final boolean trustProxyHeaders;
+    private final Set<String> allowedTables;
 
     private static final Set<String> SENSITIVE_COLUMN_NAMES = Set.of(
             "PASSWORD", "PASSWORD_HASH", "SECRET", "SECRET_KEY", "ACCESS_KEY", "API_KEY", "TOKEN", "REFRESH_TOKEN");
 
     public BulkCrudService(
             DynamicCrudGateway dynamicCrudGateway,
-            @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole) {
+            @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole,
+            @Value("${security.trustProxyHeaders:true}") boolean trustProxyHeaders,
+            @Value("${importExport.allowedTables:}") String allowedTablesStr) {
         this.dynamicCrudGateway = dynamicCrudGateway;
         this.requiredRole = requiredRole;
+        this.trustProxyHeaders = trustProxyHeaders;
+        this.allowedTables = Arrays.stream(allowedTablesStr.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
     }
 
     /**
@@ -67,7 +78,7 @@ public class BulkCrudService {
         if (!validationErrors.isEmpty() && !request.isDryRun()) {
             long duration = System.currentTimeMillis() - startTime;
             return new BulkCrudResponse(totalRows, 0, validationErrors.size(), 0,
-                    "VALIDATION_FAILED", validationErrors, duration);
+                    Status.VALIDATION_FAILED, validationErrors, duration);
         }
 
         // Handle dry-run
@@ -76,7 +87,7 @@ public class BulkCrudService {
                     tableName, request.getOperation(), totalRows, validationErrors);
             long duration = System.currentTimeMillis() - startTime;
             return new BulkCrudResponse(totalRows, 0, validationErrors.size(), 0,
-                    "DRY_RUN_PREVIEW", validationErrors, duration, preview);
+                    Status.DRY_RUN_PREVIEW, validationErrors, duration, preview);
         }
 
         // Execute in batches with progress tracking
@@ -112,7 +123,7 @@ public class BulkCrudService {
         }
 
         long duration = System.currentTimeMillis() - startTime;
-        String status = failureCount == 0 ? "SUCCESS" : (successCount > 0 ? "PARTIAL_SUCCESS" : "FAILURE");
+        Status status = failureCount == 0 ? Status.SUCCESS : (successCount > 0 ? Status.PARTIAL_SUCCESS : Status.FAILURE);
 
         log.info("Bulk operation completed: {} rows processed in {} ms. Success: {}, Failures: {}",
                 processedCount.get(), duration, successCount, failureCount);
@@ -161,7 +172,7 @@ public class BulkCrudService {
 
         // Fetch table schema for validation
         String schemaTableName = tableName.toLowerCase(Locale.ROOT);
-        if (!ALLOWED_TABLES.contains(schemaTableName)) {
+        if (!allowedTables.contains(schemaTableName)) {
             errors.add(new BulkCrudResponse.RowError(0, "Table not allowed: " + tableName, "VALIDATION_ERROR"));
             return errors;
         }
@@ -279,7 +290,7 @@ public class BulkCrudService {
             throw new IllegalArgumentException("At least one row is required");
         }
         String tableName = request.getTableName().toLowerCase(Locale.ROOT);
-        if (!ALLOWED_TABLES.contains(tableName)) {
+        if (!allowedTables.contains(tableName)) {
             throw new IllegalArgumentException("Table not allowed: " + request.getTableName());
         }
     }
@@ -316,7 +327,25 @@ public class BulkCrudService {
      * Extracts client IP from request context for audit logging.
      */
     private String getClientIp() {
-        return "127.0.0.1"; // In production, extract from request context
+        try {
+            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+            if (trustProxyHeaders) {
+                String xForwardedFor = request.getHeader("X-Forwarded-For");
+                if (xForwardedFor != null && !xForwardedFor.trim().isEmpty()) {
+                    String[] ips = xForwardedFor.split(",");
+                    for (String ip : ips) {
+                        String trimmed = ip.trim();
+                        if (!trimmed.isEmpty()) {
+                            return trimmed;
+                        }
+                    }
+                }
+            }
+            return request.getRemoteAddr();
+        } catch (Exception e) {
+            log.warn("Failed to extract client IP, using fallback", e);
+            return "unknown";
+        }
     }
 
     /**

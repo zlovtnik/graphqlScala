@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,17 +60,17 @@ public class DynamicCrudController {
         ImportExportService.ExportResult result = importExportService.exportData(request);
         
         String contentType = switch (result.getFormat()) {
-            case "CSV" -> "text/csv";
-            case "JSON" -> "application/json";
-            case "JSONL" -> "application/x-ndjson";
-            default -> "text/plain";
+            case "CSV" -> "text/csv; charset=UTF-8";
+            case "JSON" -> "application/json; charset=UTF-8";
+            case "JSONL" -> "application/x-ndjson; charset=UTF-8";
+            default -> "text/plain; charset=UTF-8";
         };
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, 
                         "attachment; filename=\"" + result.getFileName() + "\"")
                 .header(HttpHeaders.CONTENT_TYPE, contentType)
-                .body(result.getData().getBytes());
+                .body(result.getData().getBytes(StandardCharsets.UTF_8));
     }
 
     @GetMapping("/tables")

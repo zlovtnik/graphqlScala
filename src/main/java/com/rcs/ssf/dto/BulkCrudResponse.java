@@ -1,85 +1,174 @@
 package com.rcs.ssf.dto;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
- * Response for bulk CRUD operations with progress tracking and detailed error reporting.
+ * Response for bulk CRUD operations with progress tracking and detailed error
+ * reporting.
  */
 public class BulkCrudResponse {
-    private int totalRows;
-    private int successfulRows;
-    private int failedRows;
-    private int processedRows;
-    private String status;
-    private List<RowError> errors;
-    private long durationMs;
+    private final int totalRows;
+    private final int successfulRows;
+    private final int failedRows;
+    private final int processedRows;
+    private final Status status;
+    private final List<RowError> errors;
+    private final long durationMs;
     private BulkDryRunPreview dryRunPreview;
 
-    public BulkCrudResponse(int totalRows, int successfulRows, int failedRows, 
-                            int processedRows, String status, List<RowError> errors,
-                            long durationMs) {
+    public enum Status {
+        SUCCESS,
+        PARTIAL_SUCCESS,
+        FAILURE,
+        VALIDATION_FAILED,
+        DRY_RUN_PREVIEW,
+        IMPORT_FAILED
+    }
+
+    public BulkCrudResponse(int totalRows, int successfulRows, int failedRows,
+            int processedRows, Status status, List<RowError> errors,
+            long durationMs) {
+        validateMetrics(totalRows, successfulRows, failedRows, processedRows, durationMs);
         this.totalRows = totalRows;
         this.successfulRows = successfulRows;
         this.failedRows = failedRows;
         this.processedRows = processedRows;
-        this.status = status;
-        this.errors = errors != null ? errors : List.of();
+        this.status = Objects.requireNonNull(status, "status must not be null");
+        this.errors = errors == null ? List.of() : List.copyOf(errors);
         this.durationMs = durationMs;
+        this.dryRunPreview = null;
     }
 
     public BulkCrudResponse(int totalRows, int successfulRows, int failedRows,
-                            int processedRows, String status, List<RowError> errors,
-                            long durationMs, BulkDryRunPreview dryRunPreview) {
-        this(totalRows, successfulRows, failedRows, processedRows, status, errors, durationMs);
+            int processedRows, Status status, List<RowError> errors,
+            long durationMs, BulkDryRunPreview dryRunPreview) {
+        validateMetrics(totalRows, successfulRows, failedRows, processedRows, durationMs);
+        this.totalRows = totalRows;
+        this.successfulRows = successfulRows;
+        this.failedRows = failedRows;
+        this.processedRows = processedRows;
+        this.status = Objects.requireNonNull(status, "status must not be null");
+        this.errors = errors == null ? List.of() : List.copyOf(errors);
+        this.durationMs = durationMs;
         this.dryRunPreview = dryRunPreview;
     }
 
+    private void validateMetrics(int totalRows, int successfulRows, int failedRows,
+            int processedRows, long durationMs) {
+        if (totalRows < 0 || successfulRows < 0 || failedRows < 0 || processedRows < 0 || durationMs < 0) {
+            throw new IllegalArgumentException("BulkCrudResponse metrics must be non-negative");
+        }
+        if ((long) successfulRows + failedRows > totalRows) {
+            throw new IllegalArgumentException("successfulRows + failedRows cannot exceed totalRows");
+        }
+        if (processedRows > totalRows) {
+            throw new IllegalArgumentException("processedRows cannot exceed totalRows");
+        }
+        if ((long) successfulRows + failedRows > processedRows) {
+            throw new IllegalArgumentException("processedRows must be >= successfulRows + failedRows");
+        }
+    }
+
     // Getters
-    public int getTotalRows() { return totalRows; }
-    public int getSuccessfulRows() { return successfulRows; }
-    public int getFailedRows() { return failedRows; }
-    public int getProcessedRows() { return processedRows; }
-    public String getStatus() { return status; }
-    public List<RowError> getErrors() { return errors; }
-    public long getDurationMs() { return durationMs; }
-    public BulkDryRunPreview getDryRunPreview() { return dryRunPreview; }
+    public int getTotalRows() {
+        return totalRows;
+    }
+
+    public int getSuccessfulRows() {
+        return successfulRows;
+    }
+
+    public int getFailedRows() {
+        return failedRows;
+    }
+
+    public int getProcessedRows() {
+        return processedRows;
+    }
+
+    public Status getStatus() {
+        return status;
+    }
+
+    public List<RowError> getErrors() {
+        return errors;
+    }
+
+    public long getDurationMs() {
+        return durationMs;
+    }
+
+    public BulkDryRunPreview getDryRunPreview() {
+        return dryRunPreview;
+    }
 
     /**
      * Details about an error in a specific row.
      */
     public static class RowError {
-        private int rowNumber;
-        private String message;
-        private String errorType;
+        private final int rowNumber;
+        private final String message;
+        private final String errorType;
 
         public RowError(int rowNumber, String message, String errorType) {
+            if (rowNumber <= 0) {
+                throw new IllegalArgumentException("rowNumber must be greater than zero");
+            }
+            this.message = requireNonBlank(message, "message must not be blank");
+            this.errorType = requireNonBlank(errorType, "errorType must not be blank");
             this.rowNumber = rowNumber;
-            this.message = message;
-            this.errorType = errorType;
         }
 
-        public int getRowNumber() { return rowNumber; }
-        public String getMessage() { return message; }
-        public String getErrorType() { return errorType; }
+        public int getRowNumber() {
+            return rowNumber;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public String getErrorType() {
+            return errorType;
+        }
     }
 
     /**
      * Preview of what would be executed in a dry-run.
      */
     public static class BulkDryRunPreview {
-        private int estimatedAffectedRows;
-        private String executionPlan;
-        private List<String> validationWarnings;
+        private final int estimatedAffectedRows;
+        private final String executionPlan;
+        private final List<String> validationWarnings;
 
-        public BulkDryRunPreview(int estimatedAffectedRows, String executionPlan, 
-                                 List<String> validationWarnings) {
+        public BulkDryRunPreview(int estimatedAffectedRows, String executionPlan,
+                List<String> validationWarnings) {
+            if (estimatedAffectedRows < 0) {
+                throw new IllegalArgumentException("estimatedAffectedRows must be non-negative");
+            }
+            this.executionPlan = requireNonBlank(executionPlan, "executionPlan must not be blank");
             this.estimatedAffectedRows = estimatedAffectedRows;
-            this.executionPlan = executionPlan;
-            this.validationWarnings = validationWarnings != null ? validationWarnings : List.of();
+            this.validationWarnings = validationWarnings != null ? List.copyOf(validationWarnings) : List.of();
         }
 
-        public int getEstimatedAffectedRows() { return estimatedAffectedRows; }
-        public String getExecutionPlan() { return executionPlan; }
-        public List<String> getValidationWarnings() { return validationWarnings; }
+        public int getEstimatedAffectedRows() {
+            return estimatedAffectedRows;
+        }
+
+        public String getExecutionPlan() {
+            return executionPlan;
+        }
+
+        public List<String> getValidationWarnings() {
+            return validationWarnings;
+        }
+    }
+
+    private static String requireNonBlank(String value, String message) {
+        Objects.requireNonNull(value, message);
+        if (value.trim().isEmpty()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value;
     }
 }
