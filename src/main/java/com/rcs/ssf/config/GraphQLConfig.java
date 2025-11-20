@@ -1,5 +1,6 @@
 package com.rcs.ssf.config;
 
+import com.rcs.ssf.graphql.scalar.DateScalar;
 import com.rcs.ssf.security.GraphQLAuthorizationInstrumentation;
 import graphql.scalars.ExtendedScalars;
 import io.micrometer.core.instrument.Counter;
@@ -32,15 +33,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GraphQLConfig {
 
     /**
-     * Configure RuntimeWiring to register custom scalars.
+     * Configure RuntimeWiring to register custom scalars and enums.
      *
      * Registers the Long scalar from graphql-java-extended-scalars to handle
      * coercion between GraphQL ID (String) and Java Long types.
+     * Also registers the custom Date scalar for ISO 8601 date serialization.
      */
     @Bean
     public RuntimeWiringConfigurer runtimeWiringConfigurer() {
         return wiringBuilder -> wiringBuilder
-                .scalar(ExtendedScalars.GraphQLLong);
+                .scalar(ExtendedScalars.GraphQLLong)
+                .scalar(DateScalar.dateScalar());
     }
 
     /**

@@ -9,6 +9,7 @@
   align-items: center;
   padding: 8px 0;
   font-weight: 600;
+  color: var(--neutral-dark);
 }
 
 .notification-actions {
@@ -21,9 +22,10 @@
 .notification-empty {
   padding: 16px 0;
   text-align: center;
-  color: var(--text-secondary, rgba(0, 0, 0, 0.45));
+  color: var(--neutral-dark-gray);
 }
 
 .notification-content {
   display: block;
+  color: var(--neutral-dark);
 }

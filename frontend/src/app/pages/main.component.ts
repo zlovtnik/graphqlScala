@@ -13,7 +13,7 @@ import { Subject, Observable } from 'rxjs';
 import { takeUntil, shareReplay } from 'rxjs/operators';
 import { AuthService, User } from '../core/services/auth.service';
 import { ThemeService } from '../core/services/theme.service';
-import { DashboardService, DashboardStats, LoginAttemptTrendPoint } from '../core/services/dashboard.service';
+import { DashboardService, DashboardStats, LoginAttemptTrendPoint, SystemHealth, HealthAlert, HealthDependency, HealthStatusEnum } from '../core/services/dashboard.service';
 import { PwaService } from '../core/services/pwa.service';
 import { NgxEchartsModule } from 'ngx-echarts';
 import type { EChartsOption } from 'echarts';
@@ -46,6 +46,7 @@ interface SystemAlert {
 export class MainComponent implements OnInit, OnDestroy {
   currentUser: User | null = null;
   stats$: Observable<DashboardStats>;
+  health$: Observable<SystemHealth>;
   alerts: SystemAlert[] = [];
   private dismissedAlerts: Set<string> = new Set();
   private destroy$ = new Subject<void>();
@@ -68,6 +69,7 @@ export class MainComponent implements OnInit, OnDestroy {
     // Use shareReplay(1) to ensure all subscribers (async pipes + explicit subscription)
     // share a single HTTP request instead of triggering multiple fetches
     this.stats$ = this.dashboardService.getStats().pipe(shareReplay(1));
+    this.health$ = this.dashboardService.getHealthPolling().pipe(shareReplay(1));
   }
 
   ngOnInit(): void {
@@ -79,11 +81,16 @@ export class MainComponent implements OnInit, OnDestroy {
         this.currentUser = user;
       });
 
-    // Initialize alerts based on stats
+    // Initialize alerts based on stats and health
     this.stats$.pipe(takeUntil(this.destroy$)).subscribe(stats => {
       this.updateAlerts(stats);
       this.successRate = this.getSuccessRate(stats.totalLoginAttempts || 0, stats.failedLoginAttempts || 0);
       this.updateChartOptions(stats.loginAttemptTrends);
+    });
+
+    // Subscribe to health updates and add dependency alerts
+    this.health$.pipe(takeUntil(this.destroy$)).subscribe(health => {
+      this.addHealthAlerts(health);
     });
   }
 
@@ -121,7 +128,7 @@ export class MainComponent implements OnInit, OnDestroy {
   private updateAlerts(stats: DashboardStats): void {
     const nextAlerts: SystemAlert[] = [];
 
-    if (stats.systemHealth !== 'HEALTHY') {
+    if (stats.systemHealth !== HealthStatusEnum.UP) {
       const key = 'system-health-error';
       if (!this.dismissedAlerts.has(key)) {
         nextAlerts.push({
@@ -158,7 +165,7 @@ export class MainComponent implements OnInit, OnDestroy {
     }
 
     // Always show a success alert if system is healthy
-    if (stats.systemHealth === 'HEALTHY' && nextAlerts.length === 0) {
+    if (stats.systemHealth === HealthStatusEnum.UP && nextAlerts.length === 0) {
       const key = 'system-health-success';
       if (!this.dismissedAlerts.has(key)) {
         nextAlerts.push({
@@ -171,6 +178,126 @@ export class MainComponent implements OnInit, OnDestroy {
     }
 
     this.alerts = nextAlerts;
+  }
+
+  /**
+   * Add health-related alerts from dependency status and circuit breaker information
+   */
+  private addHealthAlerts(health: SystemHealth): void {
+    if (!health || !health.alerts) {
+      return;
+    }
+
+    // Convert HealthAlert objects to SystemAlert
+    health.alerts.forEach((healthAlert: HealthAlert) => {
+      const key = `health-${healthAlert.component}-${healthAlert.severity}`;
+      if (!this.dismissedAlerts.has(key)) {
+        const alertType = this.mapSeverityToAlertType(healthAlert.severity);
+        this.alerts.push({
+          type: alertType,
+          message: `[${healthAlert.component}] ${healthAlert.message}`,
+          timestamp: new Date(),
+          key
+        });
+      }
+    });
+
+    // Add alerts for degraded dependencies
+    if (health.dependencies) {
+      health.dependencies.forEach((dep: HealthDependency) => {
+        if (dep.status === 'DOWN') {
+          const key = `dependency-${dep.name}-down`;
+          if (!this.dismissedAlerts.has(key)) {
+            this.alerts.push({
+              type: 'error',
+              message: `${dep.name} dependency is down: ${dep.detail}`,
+              timestamp: new Date(),
+              key
+            });
+          }
+        } else if (dep.status === 'DEGRADED') {
+          const key = `dependency-${dep.name}-degraded`;
+          if (!this.dismissedAlerts.has(key)) {
+            this.alerts.push({
+              type: 'warning',
+              message: `${dep.name} dependency is degraded: ${dep.detail}`,
+              timestamp: new Date(),
+              key
+            });
+          }
+        }
+      });
+    }
+
+    // Add alerts for open circuit breakers
+    if (health.circuitBreakerStatus && health.circuitBreakerStatus.states) {
+      Object.entries(health.circuitBreakerStatus.states).forEach(([name, state]) => {
+        if (state === 'OPEN') {
+          const key = `circuit-breaker-${name}-open`;
+          if (!this.dismissedAlerts.has(key)) {
+            const failureRate = health.circuitBreakerStatus.failureRates?.[name] || 0;
+            this.alerts.push({
+              type: 'warning',
+              message: `Circuit breaker '${name}' is OPEN (failure rate: ${failureRate.toFixed(2)}%)`,
+              timestamp: new Date(),
+              key
+            });
+          }
+        }
+      });
+    }
+  }
+
+  private mapSeverityToAlertType(severity: string): 'success' | 'info' | 'warning' | 'error' {
+    switch (severity.toUpperCase()) {
+      case 'CRITICAL':
+      case 'ERROR':
+        return 'error';
+      case 'WARNING':
+        return 'warning';
+      case 'INFO':
+        return 'info';
+      case 'SUCCESS':
+        return 'success';
+      default:
+        return 'info';
+    }
+  }
+
+  /**
+   * Map dependency status to tag color
+   */
+  getStatusColor(status: string): string {
+    switch (status.toUpperCase()) {
+      case 'UP':
+        return 'green';
+      case 'DOWN':
+        return 'red';
+      case 'DEGRADED':
+        return 'orange';
+      case 'UNKNOWN':
+        return 'default';
+      default:
+        return 'default';
+    }
+  }
+
+  /**
+   * Map dependency status to icon name
+   */
+  getStatusIcon(status: string): string {
+    switch (status.toUpperCase()) {
+      case 'UP':
+        return 'check-circle';
+      case 'DOWN':
+        return 'close-circle';
+      case 'DEGRADED':
+        return 'exclamation-circle';
+      case 'UNKNOWN':
+        return 'question-circle';
+      default:
+        return 'question-circle';
+    }
   }
 
   getSuccessRate(totalAttempts: number, failedAttempts: number): number {

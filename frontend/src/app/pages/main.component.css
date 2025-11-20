@@ -217,7 +217,7 @@
         }
       }
 
-      &.theme-purple {
+      &.theme-neo-dark {
         color: var(--theme-purple);
 
         &:hover {
@@ -361,3 +361,61 @@
     }
   }
 }
+
+/* Dependency Status Cards */
+.dependency-card {
+  border-left: 4px solid var(--border-muted);
+  transition: all 0.3s ease;
+
+  &.dependency-up {
+    border-left-color: var(--status-success);
+    
+    .status-icon-up {
+      color: var(--status-success);
+      font-size: 24px;
+    }
+  }
+
+  &.dependency-down {
+    border-left-color: var(--status-error);
+    background-color: var(--status-error-bg);
+
+    .status-icon-down {
+      color: var(--status-error);
+      font-size: 24px;
+    }
+  }
+
+  &.dependency-degraded {
+    border-left-color: var(--status-warning);
+    background-color: var(--status-warning-bg);
+
+    .status-icon-degraded {
+      color: var(--status-warning);
+      font-size: 24px;
+    }
+  }
+
+  &.dependency-unknown {
+    border-left-color: var(--status-unknown);
+
+    .status-icon-unknown {
+      color: var(--status-unknown);
+      font-size: 24px;
+    }
+  }
+
+  .status-tag {
+    text-transform: uppercase;
+    font-weight: 600;
+    font-size: 11px;
+  }
+
+  h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--neutral-dark);
+  }
+}
+

@@ -22,7 +22,7 @@ This roadmap outlines comprehensive improvements for UX/UI and Oracle database p
   - [x] Wire total users / active sessions / login attempts / system health cards to `/api/dashboard/stats` so UI is backed by live Oracle counts instead of mock data.
   - [x] Ship actionable CTAs (Users, Settings, Dynamic CRUD, Logout) and basic alert banners fed by `DashboardStats`.
   - [x] Replace the temporary `chartData` bars with a real charting lib (e.g., `ngx-echarts`) sourced from audit aggregates so trends and performance metrics reflect `audit_login_attempts`.
-  - [ ] Stream stats via WebSocket/GraphQL subscription (or short polling with backoff) so cards + alerts auto-refresh without page reload; emit from `DashboardController` using server-sent updates.
+  - [x] Stream stats via HTTP polling (5-second intervals) with GraphQL subscription fallback so cards + alerts auto-refresh without page reload. Configured in `DashboardService` with polling on `/api/dashboard/stats`.
   - [ ] Surface system health + dependency alerts from `/actuator/health`, `Resilience4jConfig`, and MinIO/Redis health contributors instead of only calculating in the component.
 
 - [ ] **Implement Dynamic CRUD Interface** (frontend `features/dynamic-crud/table-browser`, backend `DynamicCrudController`)

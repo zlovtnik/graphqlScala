@@ -91,20 +91,50 @@
               <h3>System Health</h3>
               <div class="health-status">
                 <nz-tag 
-                  [nzColor]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'green' : 'red'"
+                  [nzColor]="(stats$ | async)?.systemHealth === 'UP' ? 'green' : (stats$ | async)?.systemHealth === 'DEGRADED' ? 'orange' : 'red'"
                   class="health-tag">
                   {{ (stats$ | async)?.systemHealth || 'UNKNOWN' }}
                 </nz-tag>
               </div>
             </div>
             <span nz-icon 
-              [nzType]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'check-circle' : 'close-circle'" 
+              [nzType]="(stats$ | async)?.systemHealth === 'UP' ? 'check-circle' : 'close-circle'" 
               nzTheme="outline" 
               class="stat-icon icon-quaternary">
             </span>
           </div>
         </nz-card>
       </nz-col>
+    </nz-row>
+
+    <!-- Dependency Status Cards -->
+    <nz-row [nzGutter]="[16, 16]" style="margin-top: 24px" *ngIf="(health$ | async) as health">
+      <nz-col [nzSpan]="24">
+        <h3 style="margin-bottom: 16px;">Dependency Status</h3>
+      </nz-col>
+      <ng-container *ngFor="let dep of health.dependencies">
+        <nz-col [nzXs]="24" [nzSm]="12" [nzMd]="6">
+          <nz-card class="dependency-card card" [ngClass]="'dependency-' + dep.status.toLowerCase()">
+            <div nz-row nzType="flex" nzJustify="space-between" nzAlign="middle">
+              <div nz-col class="stat-content">
+                <h4 style="text-transform: capitalize; margin-bottom: 8px;">{{ dep.name }}</h4>
+                <nz-tag [nzColor]="getStatusColor(dep.status)" class="status-tag">
+                  {{ dep.status }}
+                </nz-tag>
+                <p style="font-size: 12px; color: #666; margin-top: 8px;">{{ dep.detail }}</p>
+                <p style="font-size: 11px; color: #999; margin-top: 4px;" *ngIf="dep.responseTimeMs">
+                  Response time: {{ dep.responseTimeMs }}ms
+                </p>
+              </div>
+              <span nz-icon 
+                [nzType]="getStatusIcon(dep.status)" 
+                nzTheme="outline" 
+                [ngClass]="'status-icon-' + dep.status.toLowerCase()">
+              </span>
+            </div>
+          </nz-card>
+        </nz-col>
+      </ng-container>
     </nz-row>
 
     <!-- System Alerts -->

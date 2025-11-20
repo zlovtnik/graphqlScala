@@ -104,18 +104,13 @@
 
   <!-- Shared CRUD Form Template -->
   <ng-template #crudForm>
+    <nz-alert *ngIf="formColumnError" nzType="error" [nzMessage]="formColumnError" nzShowIcon nzCloseable></nz-alert>
     <form nz-form nzLayout="vertical">
-      <nz-form-item *ngFor="let column of columns">
-        <nz-form-label [nzRequired]="!column.nullable">{{ column.name | titlecase }}</nz-form-label>
-        <nz-form-control>
-          <input
-            nz-input
-            [type]="getInputType(column.type)"
-            [(ngModel)]="formData[column.name]"
-            [name]="column.name"
-            [required]="!column.nullable" />
-        </nz-form-control>
-      </nz-form-item>
+      <app-dynamic-form-field
+        *ngFor="let column of columns"
+        [column]="column"
+        [formGroup]="isEditModalVisible ? editFormGroup! : createFormGroup!">
+      </app-dynamic-form-field>
     </form>
   </ng-template>
 

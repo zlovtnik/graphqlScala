@@ -1,7 +1,7 @@
 import { Injectable, PLATFORM_ID, OnDestroy, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { Apollo } from 'apollo-angular';
-import { BehaviorSubject, Observable, of, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, of, Subscription, throwError } from 'rxjs';
 import { map, tap, catchError, take } from 'rxjs/operators';
 import {
   LOGIN_MUTATION,
@@ -123,7 +123,8 @@ export class AuthService implements OnDestroy {
         }
         return payload;
       }),
-      tap(response => this.setAuthToken(response))
+      tap(response => this.setAuthToken(response)),
+      catchError(error => throwError(() => new Error(error?.message || 'Login failed')))
     );
   }
 
@@ -136,6 +137,9 @@ export class AuthService implements OnDestroy {
       variables: { username, email, password }
     }).pipe(
       map(result => {
+        if (result.error) {
+          throw new Error(result.error.message || 'Registration failed');
+        }
         const payload = result.data?.register;
         if (!payload?.token) {
           throw new Error('Invalid register response from server');

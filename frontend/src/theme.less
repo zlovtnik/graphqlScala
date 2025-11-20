@@ -14,10 +14,10 @@
 @blue-dark: #0C2340;
 @blue-darker: #051530;
 
-@purple-light: #F3E8FF;
-@purple-base: #7C3AED;
-@purple-dark: #4C1D95;
-@purple-darker: #2D1250;
+@purple-light: #16213e;
+@purple-base: #1a1a2e;
+@purple-dark: #0f3460;
+@purple-darker: #030404;
 
 @emerald-light: #D1FAE5;
 @emerald-base: #059669;
@@ -93,6 +93,16 @@
   --error: #DC2626;
   --info: var(--primary-base);
   
+  // Status-specific semantic colors (Ant Design color mapping)
+  // Using Ant Design palette: success=#52c41a, error=#ff4d4f, warning=#faad14, default=#d9d9d9
+  --status-success: #52c41a;      /* UP status - Ant Design success green */
+  --status-error: #ff4d4f;        /* DOWN status - Ant Design error red */
+  --status-warning: #faad14;      /* DEGRADED status - Ant Design warning amber */
+  --status-unknown: #8c8c8c;      /* UNKNOWN/MUTED status - Ant Design gray */
+  --status-error-bg: #fff1f0;     /* DOWN background - Ant Design error light background */
+  --status-warning-bg: #fffbe6;   /* DEGRADED background - Ant Design warning light background */
+  --border-muted: #d9d9d9;        /* Default border color */
+  
   // Layout
   --header-height: 64px;
   --sidebar-width: 256px;
@@ -101,28 +111,445 @@
 }
 
 // ============================================================
-// THEME: Purple
+// THEME: Neo Dark
 // ============================================================
-[data-theme="purple"] {
-  --primary-light: @purple-light;
-  --primary-base: @purple-base;
-  --primary-dark: @purple-dark;
+[data-theme="neo-dark"] {
+  --primary-light: lighten(@purple-dark, 10%);
+  --primary-base: @purple-dark;
+  --primary-dark: @purple-darker;
   --primary-darker: @purple-darker;
-  
-  --secondary-light: @blue-light;
-  --secondary-base: @blue-base;
-  --secondary-dark: @blue-dark;
+
+  --secondary-light: lighten(@blue-dark, 12%);
+  --secondary-base: @blue-dark;
+  --secondary-dark: @blue-darker;
   --secondary-darker: @blue-darker;
-  
-  --tertiary-light: @emerald-light;
-  --tertiary-base: @emerald-base;
-  --tertiary-dark: @emerald-dark;
+
+  --tertiary-light: lighten(@emerald-dark, 12%);
+  --tertiary-base: @emerald-dark;
+  --tertiary-dark: @emerald-darker;
   --tertiary-darker: @emerald-darker;
-  
-  --quaternary-light: @amber-light;
-  --quaternary-base: @amber-base;
-  --quaternary-dark: @amber-dark;
+
+  --quaternary-light: lighten(@amber-dark, 12%);
+  --quaternary-base: @amber-dark;
+  --quaternary-dark: @amber-darker;
   --quaternary-darker: @amber-darker;
+
+  --neutral-white: #0a0e27;
+  --neutral-light: #1a1f3a;
+  --neutral-light-gray: #2d3561;
+  --neutral-gray: #3d4a7a;
+  --neutral-dark-gray: #cbd5e0;
+  --neutral-dark: #f7fafc;
+  --neutral-black: #ffffff;
+
+  --success: @emerald-dark;
+  --warning: @amber-dark;
+  --error: #f87171;
+  --info: @blue-dark;
+  
+  // Card surfaces for better contrast
+  --card-bg: #1f2642;
+  --card-border: #2d3561;
+  
+  // Status-specific semantic colors (adjusted for dark theme)
+  --status-success: #95de64;
+  --status-error: #ff7875;
+  --status-warning: #ffc53d;
+  --status-unknown: #bfbfbf;
+  --status-error-bg: #2c1f1f;
+  --status-warning-bg: #2f2413;
+  --border-muted: #434343;
+  
+  // Ant Design component overrides for dark theme
+  .ant-card {
+    background-color: #1f2642 !important;
+    color: #f7fafc !important;
+    border-color: #3d4a7a !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
+  }
+  
+  .ant-card-head {
+    background-color: #2d3561 !important;
+    border-color: #3d4a7a !important;
+  }
+  
+  .ant-card-head-title {
+    color: #f7fafc !important;
+    font-weight: 600;
+  }
+  
+  .ant-table {
+    background-color: #1f2642 !important;
+    color: #f7fafc !important;
+  }
+  
+  .ant-table-thead > tr > th {
+    background-color: #2d3561 !important;
+    color: #f7fafc !important;
+    border-color: #3d4a7a !important;
+    font-weight: 600;
+  }
+  
+  .ant-table-tbody > tr > td {
+    border-color: #3d4a7a !important;
+    color: #f7fafc !important;
+  }
+  
+  .ant-table-tbody > tr:hover > td {
+    background-color: #2d3561 !important;
+  }
+  
+  .ant-modal-content,
+  .ant-drawer-content {
+    background-color: #1f2642 !important;
+    color: #f7fafc !important;
+  }
+  
+  .ant-popover-inner,
+  .ant-tooltip-inner {
+    background-color: #2d3561 !important;
+    color: #f7fafc !important;
+    border-color: #3d4a7a !important;
+  }
+  
+  .ant-input,
+  .ant-input-number,
+  .ant-select-selector,
+  .ant-picker {
+    background-color: #2d3561 !important;
+    color: #f7fafc !important;
+    border-color: #3d4a7a !important;
+    
+    &:focus,
+    &:hover {
+      border-color: @purple-dark !important;
+      background-color: #35408e !important;
+    }
+  }
+  
+  .ant-input::placeholder {
+    color: #9ca3af !important;
+  }
+  
+  .ant-select-arrow {
+    color: #cbd5e0 !important;
+  }
+  
+  .ant-select-item {
+    color: #f7fafc !important;
+    
+    &:hover {
+      background-color: #3d4a7a !important;
+    }
+  }
+  
+  .ant-menu-dark {
+    background-color: #1a1f3a !important;
+  }
+  
+  .ant-menu-dark .ant-menu-item,
+  .ant-menu-dark .ant-menu-submenu-title {
+    color: #f7fafc !important;
+  }
+  
+  .ant-menu-dark .ant-menu-item:hover,
+  .ant-menu-dark .ant-menu-submenu-title:hover {
+    color: #ffffff !important;
+  }
+  
+  .ant-divider {
+    border-color: #3d4a7a !important;
+  }
+  
+  .ant-pagination-item-active {
+    background-color: @purple-dark !important;
+    border-color: @purple-dark !important;
+    color: #ffffff !important;
+  }
+  
+  // Text in dark areas
+  h1, h2, h3, h4, h5, h6 {
+    color: #f7fafc !important;
+  }
+  
+  p, span, label, div, section, article {
+    color: #f7fafc !important;
+  }
+  
+  // Lighter text for secondary content
+  .ant-descriptions-item-label {
+    color: #cbd5e0 !important;
+  }
+  
+  // All text nodes should be light
+  * {
+    color: #f7fafc !important;
+  }
+  
+  // Override specific dark colors that might creep in
+  .ant-card-body {
+    color: #f7fafc !important;
+  }
+  
+  .ant-empty-description {
+    color: #cbd5e0 !important;
+  }
+  
+  .ant-table-cell {
+    color: #f7fafc !important;
+  }
+  
+  .ant-typography {
+    color: #f7fafc !important;
+  }
+  
+  // Notification styles for dark theme
+  .ant-notification-notice {
+    background-color: #1f2642 !important;
+    border-color: #3d4a7a !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
+  }
+  
+  .ant-notification-notice-message {
+    color: #f7fafc !important;
+    font-weight: 600;
+  }
+  
+  .ant-notification-notice-description {
+    color: #cbd5e0 !important;
+  }
+  
+  .ant-notification-notice-close {
+    color: #cbd5e0 !important;
+    
+    &:hover {
+      color: #f7fafc !important;
+    }
+  }
+  
+  // Alert styles for dark theme
+  .ant-alert {
+    background-color: #2d3561 !important;
+    border-color: #3d4a7a !important;
+    color: #f7fafc !important;
+  }
+  
+  .ant-alert-message {
+    color: #f7fafc !important;
+  }
+  
+  .ant-alert-description {
+    color: #cbd5e0 !important;
+  }
+  
+  .ant-alert-close-icon {
+    color: #cbd5e0 !important;
+  }
+  
+  // Message/Toast styles
+  .ant-message-notice-content {
+    background-color: #1f2642 !important;
+    color: #f7fafc !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45) !important;
+  }
+  
+  // Button styles for dark theme
+  .ant-btn {
+    color: #f7fafc !important;
+  }
+  
+  .ant-btn-primary {
+    background-color: @purple-dark !important;
+    border-color: @purple-dark !important;
+    color: #ffffff !important;
+    
+    &:hover {
+      background-color: lighten(@purple-dark, 10%) !important;
+      border-color: lighten(@purple-dark, 10%) !important;
+      color: #ffffff !important;
+    }
+  }
+  
+  .ant-btn-default {
+    background-color: #2d3561 !important;
+    border-color: #3d4a7a !important;
+    color: #f7fafc !important;
+    
+    &:hover {
+      background-color: #35408e !important;
+      border-color: #4d5a9e !important;
+      color: #ffffff !important;
+    }
+  }
+  
+  .ant-btn-dashed {
+    background-color: transparent !important;
+    border-color: #3d4a7a !important;
+    color: #f7fafc !important;
+    
+    &:hover {
+      background-color: #2d3561 !important;
+      border-color: #4d5a9e !important;
+      color: #ffffff !important;
+    }
+  }
+  
+  .ant-btn-text {
+    color: @purple-dark !important;
+    
+    &:hover {
+      background-color: rgba(79, 54, 96, 0.1) !important;
+      color: lighten(@purple-dark, 15%) !important;
+    }
+  }
+  
+  .ant-btn-ghost {
+    background-color: transparent !important;
+    border-color: #f7fafc !important;
+    color: #f7fafc !important;
+    
+    &:hover {
+      background-color: #f7fafc !important;
+      border-color: #f7fafc !important;
+      color: #1f2642 !important;
+    }
+  }
+  
+  // Chart and graphic styles
+  .ant-statistic-title {
+    color: #cbd5e0 !important;
+  }
+  
+  .ant-statistic-content {
+    color: #f7fafc !important;
+  }
+  
+  // ECharts and chart containers
+  .echarts-container {
+    background-color: #1f2642 !important;
+  }
+  
+  // Chart text labels and legends
+  text {
+    fill: #f7fafc !important;
+  }
+  
+  .ant-chart-title {
+    color: #f7fafc !important;
+  }
+  
+  .ant-chart-legend {
+    color: #cbd5e0 !important;
+  }
+  
+  .ant-chart-tooltip {
+    background-color: #2d3561 !important;
+    color: #f7fafc !important;
+    border-color: #3d4a7a !important;
+  }
+  
+  // SVG text in charts
+  svg text {
+    fill: #f7fafc !important;
+  }
+  
+  // Legend items
+  .ant-legend-item-text {
+    color: #cbd5e0 !important;
+  }
+  
+  // Axis labels
+  .ant-chart-axis-label {
+    color: #cbd5e0 !important;
+  }
+  
+  // Tooltip content
+  .ant-chart-tooltip-content {
+    background-color: #2d3561 !important;
+    color: #f7fafc !important;
+  }
+  
+  // Status and label tags
+  .ant-tag {
+    background-color: #2d3561 !important;
+    border-color: #3d4a7a !important;
+    color: #f7fafc !important;
+  }
+  
+  .ant-tag-success {
+    background-color: rgba(149, 222, 100, 0.1) !important;
+    border-color: #95de64 !important;
+    color: #95de64 !important;
+  }
+  
+  .ant-tag-error {
+    background-color: rgba(255, 120, 117, 0.1) !important;
+    border-color: #ff7875 !important;
+    color: #ff7875 !important;
+  }
+  
+  .ant-tag-warning {
+    background-color: rgba(255, 197, 61, 0.1) !important;
+    border-color: #ffc53d !important;
+    color: #ffc53d !important;
+  }
+  
+  .ant-tag-processing {
+    background-color: rgba(64, 169, 255, 0.1) !important;
+    border-color: #40a9ff !important;
+    color: #40a9ff !important;
+  }
+  
+  // Badge styles
+  .ant-badge-status-success {
+    color: #95de64 !important;
+  }
+  
+  .ant-badge-status-error {
+    color: #ff7875 !important;
+  }
+  
+  .ant-badge-status-warning {
+    color: #ffc53d !important;
+  }
+  
+  .ant-badge-status-processing {
+    color: #40a9ff !important;
+  }
+  
+  // Result status text
+  .ant-result-title {
+    color: #f7fafc !important;
+  }
+  
+  .ant-result-subtitle {
+    color: #cbd5e0 !important;
+  }
+  
+  // Status text in cells
+  .status-success,
+  .status-up {
+    color: #95de64 !important;
+    font-weight: 500;
+  }
+  
+  .status-error,
+  .status-down {
+    color: #ff7875 !important;
+    font-weight: 500;
+  }
+  
+  .status-warning,
+  .status-degraded {
+    color: #ffc53d !important;
+    font-weight: 500;
+  }
+  
+  .status-unknown,
+  .status-muted {
+    color: #bfbfbf !important;
+    font-weight: 500;
+  }
 }
 
 // ============================================================
@@ -211,6 +638,15 @@
   --warning: @amber-dark;
   --error: #f87171;
   --info: @blue-dark;
+  
+  // Status-specific semantic colors (adjusted for dark theme)
+  --status-success: #95de64;      /* UP status - lighter green for dark theme */
+  --status-error: #ff7875;        /* DOWN status - lighter red for dark theme */
+  --status-warning: #ffc53d;      /* DEGRADED status - lighter amber for dark theme */
+  --status-unknown: #bfbfbf;      /* UNKNOWN/MUTED status - lighter gray for dark theme */
+  --status-error-bg: #2c1f1f;     /* DOWN background - dark red background */
+  --status-warning-bg: #2f2413;   /* DEGRADED background - dark amber background */
+  --border-muted: #434343;        /* Dark theme border color */
 }
 
 // ============================================================

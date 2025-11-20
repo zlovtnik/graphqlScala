@@ -1,11 +1,20 @@
 # Custom scalars
 scalar Long
+scalar Date
+
+# Health status enum for system health indicator
+enum HealthStatus {
+    UP
+    DOWN
+    DEGRADED
+}
 
 type Query {
     validateToken(token: String!): Boolean!
     getCurrentUser: User
     getUserById(id: Long!): User
     getUserByUsername(username: String!): User
+    getDashboardStats: DashboardStats!
 }
 
 type Mutation {
@@ -16,6 +25,10 @@ type Mutation {
     deleteUser(id: Long!): Boolean!
 }
 
+type Subscription {
+    dashboardStats: DashboardStats!
+}
+
 type AuthResponse {
     token: String!
 }
@@ -24,6 +37,23 @@ type User {
     id: Long!
     username: String!
     email: String
+}
+
+type DashboardStats {
+    totalUsers: Long!
+    activeSessions: Long!
+    totalAuditLogs: Long!
+    systemHealth: HealthStatus!
+    loginAttemptsToday: Long!
+    failedLoginAttempts: Long!
+    totalLoginAttempts: Long!
+    loginAttemptTrends: [LoginAttemptTrendPoint!]!
+}
+
+type LoginAttemptTrendPoint {
+    date: Date!
+    successCount: Long!
+    failedCount: Long!
 }
 
 input CreateUserInput {

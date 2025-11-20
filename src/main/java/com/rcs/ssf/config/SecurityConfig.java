@@ -19,6 +19,8 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
+
+
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -51,11 +53,20 @@ import java.util.stream.Collectors;
  * targets
  * - POST /graphql - GraphQL endpoint (operation-level authorization enforced by
  * GraphQLAuthorizationInstrumentation; GET is not exposed)
+ * - GET /graphql - WebSocket upgrade requests for subscriptions (protocol
+ * handshake)
  *
  * Authenticated Endpoints (HTTP-level):
  * - /api/dashboard/** - dashboard statistics (requires valid JWT token)
  * - /graphiql/** - GraphQL IDE (requires authenticated operators in production)
  * - All remaining /actuator/** endpoints
+ *
+ * WebSocket Security (wss://):
+ * - WebSocket connections tunnel through the HTTP upgrade protocol
+ * - GET /graphql upgrade requests are permitted at the HTTP level
+ * - GraphQL operation-level authentication is enforced by
+ * GraphQLAuthorizationInstrumentation for each GraphQL message
+ * - JWT tokens are passed as connection parameters or in message headers
  *
  * Note: /graphql does not require authentication at the HTTP layer; instead,
  * authentication
@@ -139,6 +150,10 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
+                        // WebSocket subscriptions on /graphql-ws (GET for upgrade, OPTIONS for preflight)
+                        // MUST be first to ensure proper priority matching
+                        .requestMatchers(HttpMethod.GET, "/graphql-ws").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/graphql-ws").permitAll()
                         // Public endpoints for authentication
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow user creation for bootstrap

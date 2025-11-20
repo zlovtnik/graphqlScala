@@ -1,0 +1,109 @@
+# Admin and Role Management Schema
+
+"""
+Role action enum for audit trail
+GRANT: Role was granted to a user
+REVOKE: Role was revoked from a user
+EXPIRE: Role expired due to reaching expiration timestamp
+"""
+enum RoleAction {
+    GRANT
+    REVOKE
+    EXPIRE
+}
+
+"""
+Role type representing a user role in the system.
+Roles are predefined: USER, ADMIN, SUPER_ADMIN, MFA_ADMIN
+"""
+type Role {
+    id: Long!
+    name: String!
+    description: String
+    createdAt: String!
+    updatedAt: String!
+}
+
+"""
+User role assignment with temporal support
+"""
+type UserRole {
+    id: Long!
+    user: User!
+    role: Role!
+    grantedBy: User
+    grantedAt: String!
+    expiresAt: String
+}
+
+"""
+Audit log entry for role changes
+"""
+type AuditRoleChange {
+    id: Long!
+    userId: Long!
+    username: String!
+    roleName: String!
+    action: RoleAction!
+    performedBy: User
+    reason: String
+    ipAddress: String
+    createdAt: String!
+}
+
+"""
+Input for granting a role to a user
+"""
+input GrantRoleInput {
+    userId: Long!
+    roleName: String!
+    expiresAt: String
+}
+
+"""
+Input for revoking a role from a user
+"""
+input RevokeRoleInput {
+    userId: Long!
+    roleName: String!
+    reason: String
+}
+
+# Extend Query type with admin operations
+extend type Query {
+    """
+    Get roles for a user.
+    
+    When userId is omitted (null), returns the currently authenticated user's roles.
+    When userId is provided, admins may retrieve roles for any user, while non-admins
+    can only retrieve their own roles (will return 403 Forbidden if accessing other users).
+    
+    Authorization:
+      - Authenticated users: Can query their own roles (userId null or matching authenticated user)
+      - Admins (ADMIN, SUPER_ADMIN): Can query any user's roles
+    """
+    userRoles(userId: Long): [Role!]!
+
+    """
+    Get all available roles in the system (admin only)
+    """
+    availableRoles: [Role!]!
+
+    """
+    Get audit log for role changes (admin only)
+    """
+    roleAuditLog(userId: Long, action: String, limit: Int = 50, offset: Int = 0): [AuditRoleChange!]!
+}
+
+# Extend Mutation type with admin operations
+extend type Mutation {
+    """
+    Grant a role to a user (admin only)
+    """
+    grantRole(input: GrantRoleInput!): UserRole!
+
+    """
+    Revoke a role from a user (admin only)
+    """
+    revokeRole(input: RevokeRoleInput!): Boolean!
+}

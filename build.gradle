@@ -34,57 +34,59 @@ configurations {
 	dependencies {
 		implementation 'org.springframework.boot:spring-boot-starter-graphql'
 		implementation 'com.graphql-java:graphql-java-extended-scalars:24.0'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-jetty'
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
-	implementation 'org.springframework.boot:spring-boot-starter-aop'
-	implementation 'org.springframework.boot:spring-boot-starter-cache'
-	implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
-	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-	// Reactive Data Access
-	// Spring Boot 3.5.7 BOM manages: oracle-r2dbc:1.1.1, r2dbc-pool:1.0.1
-	// Both are compatible with reactor-netty 1.1.x and micrometer in this Boot version.
-	// Do not pin versions here; let the BOM ensure consistency across the dependency tree.
-	implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
-	implementation 'com.oracle.database.r2dbc:oracle-r2dbc'
-	implementation 'io.r2dbc:r2dbc-pool'
-	implementation 'io.projectreactor.netty:reactor-netty' // Use Spring Boot 3.5.7 managed version (1.1.8)
-	
-	// Resilience & Observability
-	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.1.0'
-	implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
-	implementation 'io.github.resilience4j:resilience4j-retry:2.1.0'
-	implementation 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
-	implementation 'io.github.resilience4j:resilience4j-timelimiter:2.1.0'
-	implementation 'io.github.resilience4j:resilience4j-micrometer:2.1.0'
-	implementation 'io.micrometer:micrometer-registry-prometheus' // Use Spring Boot 3.5.7 managed version (1.15.0)
-	
-	// Oracle Database Driver
-	implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
-	
-	// Flyway runtime dependencies
-	flyway 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
-	
-	// JWT
-	implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
-	
-	// BCrypt
-	implementation 'org.mindrot:jbcrypt:0.4'
-	
-	// MinIO
-	implementation 'io.minio:minio:8.6.0'
-	
-	compileOnly 'org.projectlombok:lombok:1.18.32'
-	annotationProcessor 'org.projectlombok:lombok:1.18.32'
-	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-	
-	testCompileOnly 'org.projectlombok:lombok:1.18.32'
-	testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
+		// WebSocket support for GraphQL subscriptions
+		implementation 'org.springframework.boot:spring-boot-starter-websocket'
+		implementation 'org.springframework.boot:spring-boot-starter-security'
+		implementation 'org.springframework.boot:spring-boot-starter-web'
+		implementation 'org.springframework.boot:spring-boot-starter-validation'
+		implementation 'org.springframework.boot:spring-boot-starter-jetty'
+		implementation 'org.springframework.boot:spring-boot-starter-actuator'
+		implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+		implementation 'org.springframework.boot:spring-boot-starter-aop'
+		implementation 'org.springframework.boot:spring-boot-starter-cache'
+		implementation 'com.github.ben-manes.caffeine:caffeine'
+		implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+		// Reactive Data Access
+		// Spring Boot 3.5.7 BOM manages: oracle-r2dbc:1.1.1, r2dbc-pool:1.0.1
+		// Both are compatible with reactor-netty 1.1.x and micrometer in this Boot version.
+		// Do not pin versions here; let the BOM ensure consistency across the dependency tree.
+		implementation 'org.springframework.boot:spring-boot-starter-data-r2dbc'
+		implementation 'com.oracle.database.r2dbc:oracle-r2dbc'
+		implementation 'io.r2dbc:r2dbc-pool'
+		implementation 'io.projectreactor.netty:reactor-netty' // Use Spring Boot 3.5.7 managed version (1.1.8)
+		
+		// Resilience & Observability
+		implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.1.0'
+		implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.1.0'
+		implementation 'io.github.resilience4j:resilience4j-retry:2.1.0'
+		implementation 'io.github.resilience4j:resilience4j-bulkhead:2.1.0'
+		implementation 'io.github.resilience4j:resilience4j-timelimiter:2.1.0'
+		implementation 'io.github.resilience4j:resilience4j-micrometer:2.1.0'
+		implementation 'io.micrometer:micrometer-registry-prometheus' // Use Spring Boot 3.5.7 managed version (1.15.0)
+		
+		// Oracle Database Driver
+		implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
+		
+		// Flyway runtime dependencies
+		flyway 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'
+		
+		// JWT
+		implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+		runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+		runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+		
+		// BCrypt
+		implementation 'org.mindrot:jbcrypt:0.4'
+		
+		// MinIO
+		implementation 'io.minio:minio:8.6.0'
+		
+		compileOnly 'org.projectlombok:lombok:1.18.32'
+		annotationProcessor 'org.projectlombok:lombok:1.18.32'
+		annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+		
+		testCompileOnly 'org.projectlombok:lombok:1.18.32'
+		testAnnotationProcessor 'org.projectlombok:lombok:1.18.32'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.graphql:spring-graphql-test'
 	testImplementation 'org.springframework.security:spring-security-test'
@@ -93,6 +95,7 @@ configurations {
 	testImplementation 'com.h2database:h2:2.2.224'
 	testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
 	testImplementation 'org.mockito:mockito-core:5.11.0'
+	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'io.gatling:gatling-app:3.10.5'
 	testImplementation 'io.gatling.highcharts:gatling-charts-highcharts:3.10.5'
 }
@@ -130,21 +133,20 @@ flyway {
     def pwd = System.getenv('ORACLE_PASSWORD')
     // Only enforce for Flyway tasks; other Gradle tasks can run without DB credentials
     gradle.taskGraph.whenReady { graph ->
-        if (graph.allTasks.any { it.name.toLowerCase().startsWith('flyway') }) {
-            if (pwd == null || pwd.isEmpty()) {
-                throw new GradleException(
-                    "ORACLE_PASSWORD must be set before running Flyway migrations " +
-                    "(export ORACLE_PASSWORD='your_password')."
-                )
-            }
+        if (graph.allTasks.any { it.name.toLowerCase().startsWith('flyway') } && pwd?.isEmpty() != false) {
+            throw new GradleException(
+                "ORACLE_PASSWORD must be set before running Flyway migrations " +
+                "(export ORACLE_PASSWORD='your_password')."
+            )
         }
     }
     password = pwd
-    locations = ['filesystem:./db/migration']
+    locations = ['filesystem:./db/migration'
+	]
     failOnMissingLocations = true
 }
 configurations {
 	all {
         exclude group: 'org.springframework.boot', module: 'spring-boot-starter-tomcat'
-    }
+	}
 }

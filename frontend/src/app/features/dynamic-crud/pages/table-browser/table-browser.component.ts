@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormGroup } from '@angular/forms';
 import { Router } from '@angular/router';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -10,23 +10,19 @@ import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzPaginationModule } from 'ng-zorro-antd/pagination';
 import { NzIconModule } from 'ng-zorro-antd/icon';
-import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzMessageService, NzMessageModule } from 'ng-zorro-antd/message';
 import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
+import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { Subject, Observable, of } from 'rxjs';
 import { takeUntil, catchError } from 'rxjs/operators';
 import { HttpClient } from '@angular/common/http';
 import { ModalService } from '../../../../core/services/modal.service';
 import { KeyboardService } from '../../../../core/services/keyboard.service';
+import { DynamicFormService, ColumnMeta } from '../../services/dynamic-form.service';
+import { DynamicFormFieldComponent } from '../../components/dynamic-form-field.component';
 
 interface TableData {
   [key: string]: any;
-}
-
-interface TableColumn {
-  name: string;
-  type: string;
-  nullable: boolean;
-  primaryKey?: boolean;
 }
 
 interface DynamicCrudRequest {
@@ -47,7 +43,7 @@ interface DynamicCrudRequest {
 interface DynamicCrudResponse {
   rows: TableData[];
   totalCount: number;
-  columns: TableColumn[];
+  columns: ColumnMeta[];
 }
 
 @Component({
@@ -56,6 +52,7 @@ interface DynamicCrudResponse {
   imports: [
     CommonModule,
     FormsModule,
+    ReactiveFormsModule,
     NzTableModule,
     NzButtonModule,
     NzInputModule,
@@ -64,7 +61,10 @@ interface DynamicCrudResponse {
     NzFormModule,
     NzPaginationModule,
     NzIconModule,
-    NzPopconfirmModule
+    NzMessageModule,
+    NzPopconfirmModule,
+    NzAlertModule,
+    DynamicFormFieldComponent
   ],
   templateUrl: './table-browser.component.html',
   styleUrls: ['./table-browser.component.css']
@@ -73,7 +73,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   availableTables: string[] = [];
   selectedTable: string = '';
   tableData: TableData[] = [];
-  columns: TableColumn[] = [];
+  columns: ColumnMeta[] = [];
   loading = false;
   totalRecords = 0;
   pageSize = 10;
@@ -87,7 +87,9 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   isCreateModalVisible = false;
   isEditModalVisible = false;
   editingRecord: TableData | null = null;
-  formData: { [key: string]: any } = {};
+  createFormGroup: FormGroup | null = null;
+  editFormGroup: FormGroup | null = null;
+  formColumnError: string | null = null;
 
   private destroy$ = new Subject<void>();
   private createModalCloseHandler?: () => void;
@@ -95,6 +97,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   private readonly modalService = inject(ModalService);
   private readonly nzModalService = inject(NzModalService);
   private readonly keyboardService = inject(KeyboardService);
+  private readonly dynamicFormService = inject(DynamicFormService);
   
   // In-memory cache for primary key metadata (keyed by table name)
   private primaryKeyCache: Map<string, string[]> = new Map();
@@ -151,8 +154,10 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
           this.availableTables = tables;
         },
         error: (error) => {
-          this.message.error('Failed to load available tables');
           console.error('Error loading tables:', error);
+          console.error('Status:', error?.status);
+          console.error('Response:', error?.error);
+          this.message.error('Failed to load available tables. Please check backend connectivity.');
         }
       });
   }
@@ -249,31 +254,45 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   showCreateModal(): void {
-    this.formData = {};
-    this.columns.forEach(col => {
-      if (!col.nullable) {
-        this.formData[col.name] = '';
-      }
-    });
-    this.isCreateModalVisible = true;
-    this.createModalCloseHandler = () => this.isCreateModalVisible = false;
-    this.modalService.registerCloseHandler(this.createModalCloseHandler);
+    try {
+      this.formColumnError = null;
+      this.createFormGroup = this.dynamicFormService.generateFormGroup(this.columns);
+      this.isCreateModalVisible = true;
+      this.createModalCloseHandler = () => this.isCreateModalVisible = false;
+      this.modalService.registerCloseHandler(this.createModalCloseHandler);
+    } catch (error) {
+      this.formColumnError = 'Failed to generate form';
+      this.message.error('Failed to generate create form');
+      console.error('Error generating form:', error);
+    }
   }
 
   showEditModal(record: TableData): void {
-    this.editingRecord = record;
-    this.formData = { ...record };
-    this.isEditModalVisible = true;
-    this.editModalCloseHandler = () => this.isEditModalVisible = false;
-    this.modalService.registerCloseHandler(this.editModalCloseHandler);
+    try {
+      this.formColumnError = null;
+      this.editingRecord = record;
+      this.editFormGroup = this.dynamicFormService.generateFormGroup(this.columns, record);
+      this.isEditModalVisible = true;
+      this.editModalCloseHandler = () => this.isEditModalVisible = false;
+      this.modalService.registerCloseHandler(this.editModalCloseHandler);
+    } catch (error) {
+      this.formColumnError = 'Failed to generate form';
+      this.message.error('Failed to generate edit form');
+      console.error('Error generating form:', error);
+    }
   }
 
   handleCreate(): void {
-    if (!this.selectedTable) return;
+    if (!this.selectedTable || !this.createFormGroup) return;
 
-    const columns = Object.keys(this.formData).map(key => ({
+    if (this.createFormGroup.invalid) {
+      this.message.error('Please fix validation errors in the form');
+      return;
+    }
+
+    const columns = Object.keys(this.createFormGroup.value).map(key => ({
       name: key,
-      value: this.formData[key]
+      value: this.createFormGroup!.get(key)?.value
     }));
 
     const request: DynamicCrudRequest = {
@@ -302,7 +321,12 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   handleUpdate(): void {
-    if (!this.selectedTable || !this.editingRecord) return;
+    if (!this.selectedTable || !this.editingRecord || !this.editFormGroup) return;
+
+    if (this.editFormGroup.invalid) {
+      this.message.error('Please fix validation errors in the form');
+      return;
+    }
 
     // Async resolution of primary keys before proceeding
     this.resolvePrimaryKeys(this.selectedTable).then(resolvedPKNames => {
@@ -326,15 +350,14 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
         return;
       }
 
-      // Derive primary key column names from the resolved filters (not stale metadata)
-      // This ensures PKs resolved at runtime (e.g., via user prompt) are never included in editable columns
+      // Derive primary key column names from the resolved filters
       const primaryKeyNames = new Set(filters.map(f => f.column));
       
-      const columns = Object.keys(this.formData)
+      const columns = Object.keys(this.editFormGroup!.value)
         .filter(key => !primaryKeyNames.has(key))
         .map(key => ({
           name: key,
-          value: this.formData[key]
+          value: this.editFormGroup!.get(key)?.value
         }));
 
       if (columns.length === 0) {
@@ -496,7 +519,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
     return lowerType.includes('char') || lowerType.includes('varchar') || lowerType.includes('text') || lowerType.includes('clob');
   }
 
-  private getPrimaryKeyColumns(): TableColumn[] {
+  private getPrimaryKeyColumns(): ColumnMeta[] {
     return this.columns.filter(column => Boolean(column.primaryKey));
   }
 
