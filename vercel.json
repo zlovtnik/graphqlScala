@@ -1,17 +1,13 @@
 {
   "buildCommand": "cd frontend && yarn install && yarn build",
   "installCommand": "cd frontend && yarn install",
-  "outputDirectory": "frontend/dist/frontend/server",
+  "outputDirectory": "frontend/dist/frontend/browser",
   "framework": "angular",
-  "serverless": {
-    "nodejs": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "functions": {
     "api/[...path].js": {
       "maxDuration": 60,
-      "memory": 1024
+      "memory": 1024,
+      "runtime": "nodejs20.x"
     }
   },
   "routes": [
