@@ -366,19 +366,34 @@ describe('MainComponent - WebSocket Subscription Integration', () => {
 
     it('should stop emitting stats after destroy', (done) => {
       // Arrange
+      const statsSubject = new Subject<DashboardStats>();
+      dashboardService.getStats.and.returnValue(statsSubject.asObservable());
+      
+      fixture = TestBed.createComponent(MainComponent);
+      component = fixture.componentInstance;
       fixture.detectChanges();
       
       let statsEmitted = false;
       const statsSubscription = component.stats$.subscribe({
         next: () => { statsEmitted = true; }
       });
+      
+      // Emit initial value to verify subscription works
+      statsSubject.next(mockStats);
+      expect(statsEmitted).toBe(true);
 
-      // Act
+      // Act: Destroy component
       component.ngOnDestroy();
+      
+      // Reset flag to test post-destroy emissions
+      statsEmitted = false;
 
-      // Assert
-      statsSubscription.unsubscribe();
-      expect(statsEmitted).toBe(true); // Should have emitted at least once during ngOnInit
+      // Assert: Emit new value and verify no subscribers receive it
+      statsSubject.next({ ...mockStats, totalUsers: 200 });
+      expect(statsEmitted).toBe(false); // Should not emit after destroy
+      
+      // Cleanup
+      statsSubject.complete();
       done();
     });
   });

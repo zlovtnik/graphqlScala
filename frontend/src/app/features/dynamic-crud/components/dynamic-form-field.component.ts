@@ -68,7 +68,7 @@ import { DynamicFormService, ColumnMeta } from '../services/dynamic-form.service
             [nzMax]="getNumberMax()"
             [nzStep]="getNumberStep(column)"
             [nzPrecision]="column.scale ?? 0"
-            [nzReadOnly]="column.primaryKey">
+            [disabled]="column.primaryKey">
           </nz-input-number>
 
           <!-- Date/DateTime Input -->

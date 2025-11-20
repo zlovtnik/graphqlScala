@@ -40,8 +40,13 @@ export const graphqlProvider = provideApollo(() => {
   // Create WebSocket link for subscriptions (only in browser context)
   let wsLink: GraphQLWsLink | null = null;
   if (typeof window !== 'undefined') {
-    // Use separate /graphql-ws endpoint for WebSocket subscriptions
-    const wsEndpoint = environment.graphqlEndpoint.replace('https', 'wss').replace('/graphql', '/graphql-ws');
+    // Parse HTTP/HTTPS endpoint and convert to WS/WSS with /graphql-ws path
+    const url = new URL(environment.graphqlEndpoint);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.pathname = url.pathname.replace('/graphql', '') || '/';
+    url.pathname = (url.pathname === '/' ? '' : url.pathname) + '/graphql-ws';
+    const wsEndpoint = url.toString();
+    
     wsLink = new GraphQLWsLink(createClient({
       url: wsEndpoint,
       connectionParams: () => {
