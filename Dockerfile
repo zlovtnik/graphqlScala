@@ -15,7 +15,7 @@ RUN chmod +x gradlew \
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=build /app/build/libs/ssf-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /app/build/libs/oracle-graphql-1.0.0-RELEASE.jar app.jar
 
 # Install curl for healthcheck
 RUN apk add --no-cache curl

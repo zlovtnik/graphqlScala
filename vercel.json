@@ -1,5 +1,7 @@
 {
+  "projectName": "oracle-graphql-frontend",
   "buildCommand": "yarn install --frozen-lockfile && yarn build && ls -la dist/frontend/",
   "outputDirectory": "dist/frontend/browser",
   "framework": "angular"
 }
+

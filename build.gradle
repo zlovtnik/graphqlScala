@@ -6,8 +6,8 @@ plugins {
 	id 'jacoco'
 }
 
-group = 'com.rcs'
-version = '0.0.1-SNAPSHOT'
+group = 'com.oracle.graphql'
+version = '1.0.0-RELEASE'
 
 java {
 	toolchain {

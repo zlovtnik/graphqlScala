@@ -22,7 +22,6 @@ import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 
-
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -103,9 +102,16 @@ public class SecurityConfig {
     }
 
     /**
-     * Define role hierarchy: ROLE_SUPER_ADMIN > ROLE_ADMIN > ROLE_MFA_ADMIN/ROLE_USER
-     * This allows checking roles at different levels using hasRole() and grants
-     * inherited permissions from parent roles.
+     * Define role hierarchy: ROLE_SUPER_ADMIN > ROLE_ADMIN >
+     * ROLE_MFA_ADMIN/ROLE_USER
+     *
+     * This bean is injected into MethodSecurityExpressionHandler (via MethodSecurityConfig)
+     * so that @PreAuthorize, @Secured, and @PostAuthorize annotations honor the hierarchy.
+     *
+     * Example: A user with ROLE_SUPER_ADMIN can perform actions restricted to ROLE_ADMIN
+     * or ROLE_USER without explicit role duplication in authorization rules.
+     *
+     * Also used for expression-based HTTP security checks if switched to expression-based rules.
      */
     @Bean
     public RoleHierarchy roleHierarchy() {
@@ -166,7 +172,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // WebSocket subscriptions on /graphql-ws (GET for upgrade, OPTIONS for preflight)
+                        // WebSocket subscriptions on /graphql-ws (GET for upgrade, OPTIONS for
+                        // preflight)
                         // MUST be first to ensure proper priority matching
                         .requestMatchers(HttpMethod.GET, "/graphql-ws").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/graphql-ws").permitAll()
