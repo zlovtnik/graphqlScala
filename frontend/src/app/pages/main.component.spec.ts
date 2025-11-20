@@ -8,6 +8,7 @@ import { ThemeService } from '../core/services/theme.service';
 import { DashboardService, DashboardStats, HealthStatusEnum } from '../core/services/dashboard.service';
 import { PwaService } from '../core/services/pwa.service';
 import { of, Subject } from 'rxjs';
+import { NGX_ECHARTS_CONFIG } from 'ngx-echarts';
 
 describe('MainComponent - WebSocket Subscription Integration', () => {
   let component: MainComponent;
