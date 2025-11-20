@@ -35,12 +35,15 @@ describe('MainComponent - WebSocket Subscription Integration', () => {
   beforeEach(async () => {
     const dashboardServiceSpy = jasmine.createSpyObj('DashboardService', ['getStats', 'getHealthPolling']);
     const authServiceSpy = jasmine.createSpyObj('AuthService', ['getCurrentUser$']);
-    const themeServiceSpy = jasmine.createSpyObj('ThemeService', ['toggleTheme']);
+    const themeServiceSpy = jasmine.createSpyObj('ThemeService', ['toggleTheme', 'getAvailableThemes', 'setTheme', 'getCurrentTheme$']);
     const pwaServiceSpy = jasmine.createSpyObj('PwaService', ['installPwa']);
 
     dashboardServiceSpy.getStats.and.returnValue(of(mockStats));
     dashboardServiceSpy.getHealthPolling.and.returnValue(of(mockStats));
     authServiceSpy.getCurrentUser$.and.returnValue(of(null));
+    themeServiceSpy.getAvailableThemes.and.returnValue(['blue', 'purple', 'emerald', 'amber', 'system']);
+    themeServiceSpy.getCurrentTheme$.and.returnValue(of('blue'));
+    themeServiceSpy.setTheme.and.returnValue(undefined);
     pwaServiceSpy.installPromptVisible$ = of(false);
 
     await TestBed.configureTestingModule({
