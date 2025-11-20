@@ -217,7 +217,7 @@
         }
       }
 
-      &.theme-purple {
+      &.theme-neo-dark {
         color: var(--theme-purple);
 
         &:hover {

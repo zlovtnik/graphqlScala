@@ -41,7 +41,7 @@ describe('MainComponent - WebSocket Subscription Integration', () => {
     dashboardServiceSpy.getStats.and.returnValue(of(mockStats));
     dashboardServiceSpy.getHealthPolling.and.returnValue(of(mockStats));
     authServiceSpy.getCurrentUser$.and.returnValue(of(null));
-    themeServiceSpy.getAvailableThemes.and.returnValue(['blue', 'purple', 'emerald', 'amber', 'system']);
+    themeServiceSpy.getAvailableThemes.and.returnValue(['blue', 'neo-dark', 'emerald', 'amber', 'system']);
     themeServiceSpy.getCurrentTheme$.and.returnValue(of('blue'));
     themeServiceSpy.setTheme.and.returnValue(undefined);
     pwaServiceSpy.installPromptVisible$ = of(false);

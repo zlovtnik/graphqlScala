@@ -91,14 +91,14 @@
               <h3>System Health</h3>
               <div class="health-status">
                 <nz-tag 
-                  [nzColor]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'green' : 'red'"
+                  [nzColor]="(stats$ | async)?.systemHealth === 'UP' ? 'green' : (stats$ | async)?.systemHealth === 'DEGRADED' ? 'orange' : 'red'"
                   class="health-tag">
                   {{ (stats$ | async)?.systemHealth || 'UNKNOWN' }}
                 </nz-tag>
               </div>
             </div>
             <span nz-icon 
-              [nzType]="(stats$ | async)?.systemHealth === 'HEALTHY' ? 'check-circle' : 'close-circle'" 
+              [nzType]="(stats$ | async)?.systemHealth === 'UP' ? 'check-circle' : 'close-circle'" 
               nzTheme="outline" 
               class="stat-icon icon-quaternary">
             </span>
