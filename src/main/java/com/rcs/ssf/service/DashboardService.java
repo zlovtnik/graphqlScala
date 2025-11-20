@@ -2,6 +2,7 @@ package com.rcs.ssf.service;
 
 import com.rcs.ssf.dto.DashboardStatsDto;
 import com.rcs.ssf.dto.LoginAttemptTrendPointDto;
+import com.rcs.ssf.graphql.type.HealthStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -67,7 +68,7 @@ public class DashboardService {
         DashboardStatsDto stats = new DashboardStatsDto();
 
         if (jdbcTemplate.isEmpty()) {
-            stats.setSystemHealth("UNAVAILABLE");
+            stats.setSystemHealth(HealthStatus.DOWN);
             return stats;
         }
 
@@ -98,7 +99,7 @@ public class DashboardService {
         stats.setTotalAuditLogs(totalAuditLogs != null ? totalAuditLogs : 0);
 
         // System health - for now, assume healthy if we can connect to DB
-        stats.setSystemHealth("HEALTHY");
+        stats.setSystemHealth(HealthStatus.UP);
 
         // Login attempts today
         String loginAttemptsTodaySql = Objects.requireNonNull(String.format(

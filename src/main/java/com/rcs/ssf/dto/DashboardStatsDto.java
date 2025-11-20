@@ -1,5 +1,6 @@
 package com.rcs.ssf.dto;
 
+import com.rcs.ssf.graphql.type.HealthStatus;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,7 +11,7 @@ public class DashboardStatsDto {
     private long totalUsers;
     private long activeSessions;
     private long totalAuditLogs;
-    private String systemHealth;
+    private HealthStatus systemHealth;
     private long loginAttemptsToday;
     private long failedLoginAttempts;
     private long totalLoginAttempts;
