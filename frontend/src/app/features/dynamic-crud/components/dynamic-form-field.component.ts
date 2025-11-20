@@ -8,6 +8,7 @@ import { NzDatePickerModule } from 'ng-zorro-antd/date-picker';
 import { NzCheckboxModule } from 'ng-zorro-antd/checkbox';
 import { NzSelectModule } from 'ng-zorro-antd/select';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
+import { NzToolTipModule } from 'ng-zorro-antd/tooltip';
 import { DynamicFormService, ColumnMeta } from '../services/dynamic-form.service';
 
 @Component({
@@ -22,7 +23,8 @@ import { DynamicFormService, ColumnMeta } from '../services/dynamic-form.service
     NzDatePickerModule,
     NzCheckboxModule,
     NzSelectModule,
-    NzAlertModule
+    NzAlertModule,
+    NzToolTipModule
   ],
   template: `
     <div [formGroup]="formGroup">
@@ -63,12 +65,11 @@ import { DynamicFormService, ColumnMeta } from '../services/dynamic-form.service
           <nz-input-number
             *ngIf="isNumberInput(column.type)"
             [formControlName]="column.name"
-            [placeholder]="formService.getPlaceholder(column)"
             [nzMin]="getNumberMin()"
             [nzMax]="getNumberMax()"
             [nzStep]="getNumberStep(column)"
             [nzPrecision]="column.scale ?? 0"
-            [disabled]="column.primaryKey">
+            [disabled]="column.primaryKey ?? false">
           </nz-input-number>
 
           <!-- Date/DateTime Input -->
@@ -80,7 +81,7 @@ import { DynamicFormService, ColumnMeta } from '../services/dynamic-form.service
           </nz-date-picker>
 
           <!-- Checkbox (Boolean) -->
-          <label nz-checkbox *ngIf="isBooleanInput(column.type)" [formControlName]="column.name" [attr.aria-label]="formService.getFieldLabel(column.name)">
+          <label nz-checkbox *ngIf="isBooleanInput(column.type) && !hasForeignKey(column)" [formControlName]="column.name" [attr.aria-label]="formService.getFieldLabel(column.name)">
           </label>
 
           <!-- Foreign Key Dropdown (placeholder for future enhancement) -->

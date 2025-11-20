@@ -2,7 +2,7 @@ import { Injectable, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { BehaviorSubject, Observable } from 'rxjs';
 
-export type ThemeType = 'blue' | 'purple' | 'emerald' | 'amber' | 'system';
+export type ThemeType = 'blue' | 'neo-dark' | 'emerald' | 'amber' | 'system';
 
 @Injectable({
   providedIn: 'root'
@@ -27,7 +27,7 @@ export class ThemeService implements OnDestroy {
    * Get all available themes
    */
   getAvailableThemes(): ThemeType[] {
-    return ['blue', 'purple', 'emerald', 'amber', 'system'];
+    return ['blue', 'neo-dark', 'emerald', 'amber', 'system'];
   }
 
   /**

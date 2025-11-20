@@ -119,7 +119,7 @@ describe('DashboardService - WebSocket/Subscription Tests', () => {
         // Assert
         expect(stats.totalUsers).toBe(150);
         expect(stats.activeSessions).toBe(15);
-        expect(stats.systemHealth).toBe('DEGRADED');
+        expect(stats.systemHealth).toBe(HealthStatusEnum.DEGRADED);
         expect(stats.loginAttemptTrends.length).toBe(2);
         done();
       });
@@ -213,7 +213,7 @@ describe('DashboardService - WebSocket/Subscription Tests', () => {
       service.getStats().subscribe(stats => {
         // Assert - should receive mock stats
         expect(stats).toBeDefined();
-        expect(stats.systemHealth).toBe('HEALTHY');
+        expect(stats.systemHealth).toBe(HealthStatusEnum.UP);
       });
 
       // Simulate HTTP error on first poll

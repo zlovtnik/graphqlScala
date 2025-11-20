@@ -114,7 +114,7 @@ describe('MainComponent - WebSocket Subscription Integration', () => {
       component.stats$.subscribe(stats => {
         expect(stats.totalUsers).toBe(100);
         expect(stats.activeSessions).toBe(10);
-        expect(stats.systemHealth).toBe('HEALTHY');
+        expect(stats.systemHealth).toBe(HealthStatusEnum.UP);
         done();
       });
     });

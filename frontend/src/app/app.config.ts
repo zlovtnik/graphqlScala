@@ -16,6 +16,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { environment } from '../environments/environment';
 import { provideEcharts } from 'ngx-echarts';
 import { jwtInterceptor } from './core/interceptors/jwt.interceptor';
+import { NzModalService } from 'ng-zorro-antd/modal';
 
 registerLocaleData(en);
 
@@ -31,6 +32,7 @@ export const appConfig: ApplicationConfig = {
     graphqlProvider,
     HttpLink,
     provideEcharts(),
+    NzModalService,
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000'

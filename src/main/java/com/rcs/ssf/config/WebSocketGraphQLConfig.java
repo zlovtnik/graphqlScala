@@ -139,10 +139,14 @@ public class WebSocketGraphQLConfig implements WebSocketConfigurer {
 
         // For now, just acknowledge the subscription without routing to GraphQL
         // In a full implementation, this would execute the GraphQL subscription
-        JsonNode dataMessage = objectMapper.createObjectNode()
+        com.fasterxml.jackson.databind.node.ObjectNode payload = objectMapper.createObjectNode();
+        payload.set("data", objectMapper.createObjectNode());
+        
+        com.fasterxml.jackson.databind.node.ObjectNode dataMessage = objectMapper.createObjectNode()
             .put("type", PROTOCOL_DATA)
             .put("id", id);
-        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(dataMessage)));
+        dataMessage.set("payload", payload);
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(dataMessage)));;
     }
 
     private void handleUnknownMessage(WebSocketSession session, JsonNode json) throws Exception {

@@ -268,16 +268,28 @@ export class DynamicFormService {
    * Parse default value based on column type
    */
   private parseDefaultValue(defaultValue: string | undefined, columnType: string): any {
-    if (!defaultValue) return '';
+    // Handle null/undefined explicitly (0 is a valid default)
+    if (defaultValue === null || defaultValue === undefined || defaultValue === '') return '';
 
     const type = columnType.toUpperCase();
 
     if (type === 'NUMBER' || type.includes('INT')) {
-      return parseFloat(defaultValue) || '';
+      const parsed = parseFloat(defaultValue);
+      // Preserve 0 as a valid default
+      return isNaN(parsed) ? '' : parsed;
     } else if (type === 'BOOLEAN') {
       return defaultValue.toUpperCase() === 'TRUE' || defaultValue === '1';
     } else if (type.includes('DATE') || type.includes('TIMESTAMP')) {
-      return new Date(defaultValue).toISOString().slice(0, 16);
+      try {
+        const date = new Date(defaultValue);
+        // Validate that date parsing was successful
+        if (isNaN(date.getTime())) {
+          return '';
+        }
+        return date.toISOString().slice(0, 16);
+      } catch (error) {
+        return '';
+      }
     }
 
     return defaultValue;
@@ -291,10 +303,10 @@ export class DynamicFormService {
 
     if (errors['required']) {
       return `${this.getFieldLabel(column.name)} is required`;
-    } else if (errors['maxLength']) {
-      return `Maximum length is ${errors['maxLength'].requiredLength} characters`;
-    } else if (errors['minLength']) {
-      return `Minimum length is ${errors['minLength'].requiredLength} characters`;
+    } else if (errors['maxlength']) {
+      return `Maximum length is ${errors['maxlength'].requiredLength} characters`;
+    } else if (errors['minlength']) {
+      return `Minimum length is ${errors['minlength'].requiredLength} characters`;
     } else if (errors['min']) {
       return `Minimum value is ${errors['min'].min}`;
     } else if (errors['max']) {

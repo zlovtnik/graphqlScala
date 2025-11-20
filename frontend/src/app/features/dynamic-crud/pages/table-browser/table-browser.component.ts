@@ -10,7 +10,7 @@ import { NzModalModule, NzModalService } from 'ng-zorro-antd/modal';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzPaginationModule } from 'ng-zorro-antd/pagination';
 import { NzIconModule } from 'ng-zorro-antd/icon';
-import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzMessageService, NzMessageModule } from 'ng-zorro-antd/message';
 import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
 import { Subject, Observable, of } from 'rxjs';
@@ -61,6 +61,7 @@ interface DynamicCrudResponse {
     NzFormModule,
     NzPaginationModule,
     NzIconModule,
+    NzMessageModule,
     NzPopconfirmModule,
     NzAlertModule,
     DynamicFormFieldComponent
@@ -153,8 +154,10 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
           this.availableTables = tables;
         },
         error: (error) => {
-          this.message.error('Failed to load available tables');
           console.error('Error loading tables:', error);
+          console.error('Status:', error?.status);
+          console.error('Response:', error?.error);
+          this.message.error('Failed to load available tables. Please check backend connectivity.');
         }
       });
   }
@@ -516,7 +519,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
     return lowerType.includes('char') || lowerType.includes('varchar') || lowerType.includes('text') || lowerType.includes('clob');
   }
 
-  private getPrimaryKeyColumns(): TableColumn[] {
+  private getPrimaryKeyColumns(): ColumnMeta[] {
     return this.columns.filter(column => Boolean(column.primaryKey));
   }
 

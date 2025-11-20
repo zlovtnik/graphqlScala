@@ -104,7 +104,7 @@
 
   <!-- Shared CRUD Form Template -->
   <ng-template #crudForm>
-    <div *ngIf="formColumnError" nz-alert nzType="error" [nzMessage]="formColumnError" nzShowIcon nzCloseable></div>
+    <nz-alert *ngIf="formColumnError" nzType="error" [nzMessage]="formColumnError" nzShowIcon nzCloseable></nz-alert>
     <form nz-form nzLayout="vertical">
       <app-dynamic-form-field
         *ngFor="let column of columns"

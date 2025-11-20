@@ -15,7 +15,10 @@ public enum SystemStatus {
     DOWN("DOWN"),
     
     @JsonProperty("DEGRADED")
-    DEGRADED("DEGRADED");
+    DEGRADED("DEGRADED"),
+    
+    @JsonProperty("UNKNOWN")
+    UNKNOWN("UNKNOWN");
 
     private final String value;
 
@@ -24,7 +27,9 @@ public enum SystemStatus {
     }
 
     /**
-     * Convert string value to enum, handling case-insensitive lookup
+     * Convert string value to enum, handling case-insensitive lookup.
+     * Returns UP for null input, UNKNOWN for unrecognized values to distinguish
+     * between valid and invalid data.
      */
     public static SystemStatus fromValue(String value) {
         if (value == null) {
@@ -35,6 +40,7 @@ public enum SystemStatus {
                 return status;
             }
         }
-        return UP;
+        // Return UNKNOWN for unrecognized values instead of silently defaulting to UP
+        return UNKNOWN;
     }
 }
