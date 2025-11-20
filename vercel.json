@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd frontend && yarn install && yarn build",
-  "installCommand": "cd frontend && yarn install",
+  "buildCommand": "yarn --cwd frontend install && yarn --cwd frontend build",
+  "installCommand": "yarn install",
   "outputDirectory": "frontend/dist/frontend/browser",
   "framework": "angular",
   "functions": {
