@@ -112,8 +112,8 @@ public class BulkCrudResponse {
         private final String errorType;
 
         public RowError(int rowNumber, String message, String errorType) {
-            if (rowNumber <= 0) {
-                throw new IllegalArgumentException("rowNumber must be greater than zero");
+            if (rowNumber < 0) {
+                throw new IllegalArgumentException("rowNumber must be non-negative");
             }
             this.message = requireNonBlank(message, "message must not be blank");
             this.errorType = requireNonBlank(errorType, "errorType must not be blank");

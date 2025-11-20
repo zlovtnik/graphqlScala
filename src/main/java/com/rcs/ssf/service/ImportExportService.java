@@ -72,6 +72,7 @@ public class ImportExportService {
             bulkRequest.setOperation(request.getOperation());
             bulkRequest.setRows(rows);
             bulkRequest.setDryRun(request.isDryRun());
+            bulkRequest.setSkipOnError(request.isSkipOnError());
             bulkRequest.setBatchSize(100);
             bulkRequest.setMetadata("import_" + request.getFormat().name().toLowerCase() 
                     + "_" + UUID.randomUUID().toString());

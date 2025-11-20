@@ -2,6 +2,7 @@ package com.rcs.ssf.service;
 
 import com.rcs.ssf.dto.BulkCrudRequest;
 import com.rcs.ssf.dto.BulkCrudResponse;
+import com.rcs.ssf.dto.BulkCrudResponse.Status;
 import com.rcs.ssf.dto.DynamicCrudRequest;
 import com.rcs.ssf.dynamic.DynamicCrudGateway;
 import com.rcs.ssf.dynamic.DynamicCrudResponse;
@@ -35,7 +36,7 @@ public class BulkCrudServiceTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-        bulkCrudService = new BulkCrudService(dynamicCrudGateway, "ROLE_ADMIN");
+        bulkCrudService = new BulkCrudService(dynamicCrudGateway, "ROLE_ADMIN", true, "audit_login_attempts,audit_sessions,audit_dynamic_crud,audit_error_log");
         setupSecurityContext();
     }
 
@@ -62,7 +63,7 @@ public class BulkCrudServiceTest {
         // Then
         assertNotNull(response);
         assertEquals(5, response.getTotalRows());
-        assertEquals("SUCCESS", response.getStatus());
+        assertEquals(Status.SUCCESS, response.getStatus());
     }
 
     @Test
@@ -96,7 +97,7 @@ public class BulkCrudServiceTest {
 
         // Then
         assertNotNull(response);
-        assertEquals("DRY_RUN_PREVIEW", response.getStatus());
+        assertEquals(Status.DRY_RUN_PREVIEW, response.getStatus());
         assertNotNull(response.getDryRunPreview());
     }
 
@@ -152,7 +153,7 @@ public class BulkCrudServiceTest {
 
         // Then
         assertNotNull(response);
-        assertEquals("SUCCESS", response.getStatus());
+        assertEquals(Status.SUCCESS, response.getStatus());
     }
 
     @Test
@@ -219,7 +220,7 @@ public class BulkCrudServiceTest {
 
         // Then
         assertNotNull(response);
-        assertEquals("SUCCESS", response.getStatus());
+        assertEquals(Status.SUCCESS, response.getStatus());
     }
 
     private BulkCrudRequest createBulkInsertRequest(int rowCount) {

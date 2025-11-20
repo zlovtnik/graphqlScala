@@ -1,6 +1,7 @@
 package com.rcs.ssf.service;
 
 import com.rcs.ssf.dto.*;
+import com.rcs.ssf.dto.BulkCrudResponse.Status;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -35,7 +36,7 @@ public class ImportExportServiceTest {
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
-        importExportService = new ImportExportService(bulkCrudService, dynamicCrudService, "ROLE_ADMIN");
+        importExportService = new ImportExportService(bulkCrudService, dynamicCrudService, "ROLE_ADMIN", "audit_login_attempts,audit_sessions,audit_dynamic_crud,audit_error_log");
         setupSecurityContext();
     }
 
@@ -57,7 +58,7 @@ public class ImportExportServiceTest {
         request.setData("user_id,status\n1,success\n2,failed");
         request.setDryRun(true);
 
-        BulkCrudResponse mockResponse = new BulkCrudResponse(2, 0, 0, 0, "DRY_RUN_PREVIEW", List.of(), 0);
+        BulkCrudResponse mockResponse = new BulkCrudResponse(2, 0, 0, 0, Status.DRY_RUN_PREVIEW, List.of(), 0L);
         when(bulkCrudService.executeBulkOperation(any())).thenReturn(mockResponse);
 
         // When
@@ -65,7 +66,7 @@ public class ImportExportServiceTest {
 
         // Then
         assertNotNull(response);
-        assertEquals("DRY_RUN_PREVIEW", response.getStatus());
+        assertEquals(Status.DRY_RUN_PREVIEW, response.getStatus());
     }
 
     @Test
@@ -79,7 +80,7 @@ public class ImportExportServiceTest {
         request.setData("[{\"user_id\": \"1\", \"status\": \"success\"}, {\"user_id\": \"2\", \"status\": \"failed\"}]");
         request.setDryRun(true);
 
-        BulkCrudResponse mockResponse = new BulkCrudResponse(2, 0, 0, 0, "DRY_RUN_PREVIEW", List.of(), 0);
+        BulkCrudResponse mockResponse = new BulkCrudResponse(2, 0, 0, 0, Status.DRY_RUN_PREVIEW, List.of(), 0L);
         when(bulkCrudService.executeBulkOperation(any())).thenReturn(mockResponse);
 
         // When
@@ -87,7 +88,7 @@ public class ImportExportServiceTest {
 
         // Then
         assertNotNull(response);
-        assertEquals("DRY_RUN_PREVIEW", response.getStatus());
+        assertEquals(Status.DRY_RUN_PREVIEW, response.getStatus());
     }
 
     @Test
@@ -112,10 +113,10 @@ public class ImportExportServiceTest {
         request.setFormat(ImportRequest.ImportFormat.CSV);
         request.setOperation(DynamicCrudRequest.Operation.INSERT);
         request.setData("col1,col2\nvalue1,value2");
-        request.setColumnMapping(List.of("user_id", "status"));
+        request.setColumnMapping(Map.of("col1", "user_id", "col2", "status"));
         request.setDryRun(true);
 
-        BulkCrudResponse mockResponse = new BulkCrudResponse(1, 0, 0, 0, "DRY_RUN_PREVIEW", List.of(), 0);
+        BulkCrudResponse mockResponse = new BulkCrudResponse(1, 0, 0, 0, Status.DRY_RUN_PREVIEW, List.of(), 0L);
         when(bulkCrudService.executeBulkOperation(any())).thenReturn(mockResponse);
 
         // When
@@ -233,7 +234,7 @@ public class ImportExportServiceTest {
         request.setData("user_id,message\n1,\"Contains, comma\"\n2,\"Contains \"\" quote\"");
         request.setDryRun(true);
 
-        BulkCrudResponse mockResponse = new BulkCrudResponse(2, 0, 0, 0, "DRY_RUN_PREVIEW", List.of(), 0);
+        BulkCrudResponse mockResponse = new BulkCrudResponse(2, 0, 0, 0, Status.DRY_RUN_PREVIEW, List.of(), 0L);
         when(bulkCrudService.executeBulkOperation(any())).thenReturn(mockResponse);
 
         // When

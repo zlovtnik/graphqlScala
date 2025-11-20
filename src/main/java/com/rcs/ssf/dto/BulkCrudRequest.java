@@ -1,6 +1,7 @@
 package com.rcs.ssf.dto;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -26,6 +27,7 @@ public class BulkCrudRequest {
 
     private boolean skipOnError = false;
 
+    @Min(1)
     private Integer batchSize = 100;
 
     private String metadata;
@@ -76,6 +78,9 @@ public class BulkCrudRequest {
     }
 
     public void setBatchSize(Integer batchSize) {
+        if (batchSize != null && batchSize < 1) {
+            throw new IllegalArgumentException("batchSize must be at least 1");
+        }
         this.batchSize = batchSize;
     }
 

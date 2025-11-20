@@ -261,7 +261,13 @@ public class BulkCrudService {
                 .collect(Collectors.toList())
                 : new ArrayList<>();
 
-        return new DynamicCrudRow(columns);
+        List<DynamicCrudFilter> filters = bulkRow.getFilters() != null
+                ? bulkRow.getFilters().stream()
+                .map(f -> new DynamicCrudFilter(f.getColumn(), f.getOperator().getSymbol(), f.getValue()))
+                .collect(Collectors.toList())
+                : new ArrayList<>();
+
+        return new DynamicCrudRow(columns, filters);
     }
 
     /**
@@ -361,6 +367,6 @@ public class BulkCrudService {
      * Determines if bulk operation should skip on error.
      */
     private boolean isSkipOnError(BulkCrudRequest request) {
-        return request.isDryRun() || (request.getOperation() != DynamicCrudRequest.Operation.DELETE);
+        return request.isSkipOnError() || request.isDryRun() || (request.getOperation() != DynamicCrudRequest.Operation.DELETE);
     }
 }
