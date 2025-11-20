@@ -53,7 +53,7 @@ export const graphqlProvider = provideApollo(() => {
         const token = tokenStorage.getToken();
         return token ? { Authorization: `Bearer ${token}` } : {};
       },
-    }));
+    } as any));
   }
 
   // Split link: use WebSocket for subscriptions if available, HTTP otherwise
