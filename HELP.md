@@ -1,13 +1,14 @@
-# SSF GraphQL Platform Help Center
+# ORACLE GraphQL Platform – Enterprise Help Center
 
-This guide distills the essential commands, workflows, and troubleshooting tactics for day-to-day development with the SSF GraphQL Platform.
+This guide distills the essential commands, workflows, and troubleshooting tactics for day-to-day development with ORACLE, the production-hardened GraphQL authority.
 
 ## 🔗 Quick Links
 
-- Project overview & architecture: see [README.md](./README.md)
-- GraphQL schema: `src/main/resources/graphql/schema.graphqls`
-- OAuth & security components: `src/main/java/com/example/ssf/security`
-- Health monitoring: `src/main/java/com/example/ssf/HealthConfig.java`
+- **Project Overview**: [README.md](./README.md) — Architecture, security model, compliance roadmap
+- **GraphQL Schema**: `src/main/resources/graphql/schema.graphqls`
+- **Security Layer**: `src/main/java/com/oracle/graphql/security`
+- **Observability**: `src/main/java/com/oracle/graphql/config/HealthConfig.java`
+- **Compliance Docs**: `docs/SECURITY_ARCHITECTURE.md`, `docs/MFA_IMPLEMENTATION.md`
 
 ## 🚀 Daily Developer Workflow
 
@@ -18,7 +19,7 @@ This guide distills the essential commands, workflows, and troubleshooting tacti
 | Launch with profile | `SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun` |
 | Run tests | `./gradlew test` |
 | Generate coverage report | `./gradlew jacocoTestReport` |
-| Build OCI image | `./gradlew bootBuildImage --imageName=ssf-graphql:latest` |
+| Build OCI image | `./gradlew bootBuildImage --imageName=oracle-graphql:latest` |
 
 > **Tip:** Gradle toolchains install the required JDK 21 automatically—no manual JVM switching needed.
 

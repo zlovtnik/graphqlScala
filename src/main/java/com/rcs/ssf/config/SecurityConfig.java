@@ -17,9 +17,10 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
-
 
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -100,6 +101,27 @@ public class SecurityConfig {
         return new CspHeaderFilter();
     }
 
+    /**
+     * Define role hierarchy: ROLE_SUPER_ADMIN > ROLE_ADMIN >
+     * ROLE_MFA_ADMIN/ROLE_USER
+     *
+     * This bean is injected into MethodSecurityExpressionHandler (via MethodSecurityConfig)
+     * so that @PreAuthorize, @Secured, and @PostAuthorize annotations honor the hierarchy.
+     *
+     * Example: A user with ROLE_SUPER_ADMIN can perform actions restricted to ROLE_ADMIN
+     * or ROLE_USER without explicit role duplication in authorization rules.
+     *
+     * Also used for expression-based HTTP security checks if switched to expression-based rules.
+     */
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role("SUPER_ADMIN").implies("ADMIN")
+                .role("ADMIN").implies("MFA_ADMIN")
+                .role("ADMIN").implies("USER")
+                .build();
+    }
+
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
         return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService);
@@ -143,14 +165,15 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, CspHeaderFilter cspHeaderFilter,
             JwtAuthenticationFilter jwtAuthenticationFilter, GraphQLRequestLoggingFilter graphQLRequestLoggingFilter,
-            RegistrationRateLimitingFilter registrationRateLimitingFilter)
+            RegistrationRateLimitingFilter registrationRateLimitingFilter, RoleHierarchy roleHierarchy)
             throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authz -> authz
-                        // WebSocket subscriptions on /graphql-ws (GET for upgrade, OPTIONS for preflight)
+                        // WebSocket subscriptions on /graphql-ws (GET for upgrade, OPTIONS for
+                        // preflight)
                         // MUST be first to ensure proper priority matching
                         .requestMatchers(HttpMethod.GET, "/graphql-ws").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/graphql-ws").permitAll()

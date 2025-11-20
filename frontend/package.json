@@ -1,6 +1,7 @@
 {
-  "name": "frontend",
-  "version": "0.0.0",
+  "name": "oracle-graphql-frontend",
+  "version": "1.0.0",
+  "description": "Enterprise GraphQL Dashboard – Real-time data orchestration powered by ORACLE",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

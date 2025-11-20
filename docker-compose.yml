@@ -1,5 +1,8 @@
 version: '3.9'
 
+# ORACLE - Enterprise GraphQL Authority
+# Production-ready service mesh with Oracle DB, MinIO, Redis, and Spring Boot 3
+
 services:
   # Oracle Database Free
   oracle:
@@ -17,7 +20,7 @@ services:
       - ./docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
       - ./healthcheck.sh:/opt/oracle/healthcheck.sh
     networks:
-      - ssf-network
+      - oracle-network
     healthcheck:
       test: ["CMD", "/opt/oracle/healthcheck.sh"]
       interval: 30s
@@ -39,7 +42,7 @@ services:
     volumes:
       - minio_data:/data
     networks:
-      - ssf-network
+      - oracle-network
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -57,7 +60,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - ssf-network
+      - oracle-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -69,7 +72,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ssf-app
+    container_name: oracle-app
     depends_on:
       oracle:
         condition: service_healthy
@@ -95,7 +98,7 @@ services:
     volumes:
       - ./data:/app/data
     networks:
-      - ssf-network
+      - oracle-network
     healthcheck:
       test: ["CMD", "curl", "-f", "https://localhost:8443/actuator/health", "-k"]
       interval: 30s
@@ -109,5 +112,5 @@ volumes:
   redis_data:
 
 networks:
-  ssf-network:
+  oracle-network:
     driver: bridge
