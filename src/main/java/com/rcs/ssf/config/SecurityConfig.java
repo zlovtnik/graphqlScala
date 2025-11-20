@@ -17,6 +17,8 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 
@@ -100,6 +102,20 @@ public class SecurityConfig {
         return new CspHeaderFilter();
     }
 
+    /**
+     * Define role hierarchy: ROLE_SUPER_ADMIN > ROLE_ADMIN > ROLE_MFA_ADMIN/ROLE_USER
+     * This allows checking roles at different levels using hasRole() and grants
+     * inherited permissions from parent roles.
+     */
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role("SUPER_ADMIN").implies("ADMIN")
+                .role("ADMIN").implies("MFA_ADMIN")
+                .role("ADMIN").implies("USER")
+                .build();
+    }
+
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
         return new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService);
@@ -143,7 +159,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, CspHeaderFilter cspHeaderFilter,
             JwtAuthenticationFilter jwtAuthenticationFilter, GraphQLRequestLoggingFilter graphQLRequestLoggingFilter,
-            RegistrationRateLimitingFilter registrationRateLimitingFilter)
+            RegistrationRateLimitingFilter registrationRateLimitingFilter, RoleHierarchy roleHierarchy)
             throws Exception {
         http
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
