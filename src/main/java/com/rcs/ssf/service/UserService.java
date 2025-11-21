@@ -403,6 +403,11 @@ public class UserService {
             throw new IllegalArgumentException("USER_ID_NULL");
         }
 
+        // Validate current password before attempting to use it
+        if (currentPassword == null || currentPassword.isBlank()) {
+            throw new IllegalArgumentException("PASSWORD_REQUIRED");
+        }
+
         validateRawPassword(newPassword);
 
         User user = findById(userId)

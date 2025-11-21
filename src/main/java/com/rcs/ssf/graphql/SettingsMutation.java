@@ -10,6 +10,7 @@ import com.rcs.ssf.service.AccountService;
 import com.rcs.ssf.service.ApiKeyService;
 import com.rcs.ssf.service.UserPreferencesService;
 import com.rcs.ssf.service.UserService;
+import com.rcs.ssf.util.AccountConstants;
 import io.micrometer.core.annotation.Timed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.graphql.data.method.annotation.Argument;
@@ -73,16 +74,20 @@ public class SettingsMutation {
 
     /**
      * Query: Get account status for current user.
-     * Fully reactive resolver that returns Mono<String> without explicit blocking.
-     * GraphQL transport layer handles the Mono subscription and emission.
+     * Returns the user's current account status (ACTIVE, DEACTIVATED, or SUSPENDED).
      */
     @QueryMapping
     @Timed(value = "graphql.resolver.duration", percentiles = { 0.5, 0.95, 0.99 })
-    public Mono<String> getAccountStatus() {
+    public Mono<AccountStatusResponse> getAccountStatus() {
         Long userId = getCurrentUserId();
         log.debug("Fetching account status for user: {}", userId);
         return accountService.getAccountStatus(userId)
-                .map(dto -> dto.getStatus() != null ? dto.getStatus() : "ACTIVE");
+                .map(dto -> new AccountStatusResponse(
+                        userId,
+                        dto.getStatus() != null ? dto.getStatus() : "ACTIVE",
+                        dto.getDeactivatedAt(),
+                        "Account status retrieved"
+                ));
     }
 
     /**
@@ -166,7 +171,7 @@ public class SettingsMutation {
         log.info("Deactivating account for user: {} - Reason Code: {}", userId, reasonCode);
 
         DeactivationReasonDto reason = new DeactivationReasonDto();
-        reason.setReasonCode(reasonCode != null ? reasonCode : "USER_INITIATED");
+        reason.setReasonCode(reasonCode != null ? reasonCode : AccountConstants.DEFAULT_REASON_CODE);
         reason.setJustification(justification);
 
         return accountService.deactivateAccount(userId, reason)

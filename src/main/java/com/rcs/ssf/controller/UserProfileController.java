@@ -6,6 +6,7 @@ import com.rcs.ssf.repository.UserRepository;
 import com.rcs.ssf.service.AvatarUploadService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -103,34 +104,24 @@ public class UserProfileController {
     logger.info("Downloading avatar with key: {}", avatarKey);
 
     // Wrap blocking I/O operations in Mono.fromCallable and schedule on boundedElastic
-    return Mono.fromCallable(() -> {
-          java.util.Optional<InputStream> avatarDataOpt = avatarUploadService.downloadAvatar(avatarKey);
-          
-          if (avatarDataOpt.isEmpty()) {
-            return null;  // Will be converted to notFound below
-          }
-
-          try (InputStream is = avatarDataOpt.get()) {
-            // Read all bytes with try-with-resources for automatic cleanup
-            return is.readAllBytes();
-          }
-        })
+    return Mono.fromCallable(() -> avatarUploadService.downloadAvatar(avatarKey))
         .subscribeOn(Schedulers.boundedElastic())
-        .map(avatarData -> {
-          if (avatarData == null) {
+        .flatMap(avatarDataOpt -> {
+          if (avatarDataOpt.isEmpty()) {
             logger.warn("Avatar not found for key: {}", avatarKey);
-            return (ResponseEntity<?>) ResponseEntity.notFound().build();
+            return Mono.just((ResponseEntity<?>) ResponseEntity.notFound().build());
           }
 
-          // Determine content type from avatarKey extension (non-blocking)
+          InputStream stream = avatarDataOpt.get();
           String contentType = determineContentType(avatarKey);
+          InputStreamResource resource = new InputStreamResource(stream);
 
           logger.info("Avatar downloaded successfully for key: {}", avatarKey);
 
-          return (ResponseEntity<?>) ResponseEntity.ok()
+          return Mono.just((ResponseEntity<?>) ResponseEntity.ok()
               .header("Content-Type", contentType)
               .header("Cache-Control", "public, max-age=86400")
-              .body(avatarData);
+              .body(resource));
         })
         .doOnError(e -> logger.error("Error downloading avatar for key: {}", avatarKey, e))
         .onErrorResume(e -> {

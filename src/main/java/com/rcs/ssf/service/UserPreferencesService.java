@@ -63,17 +63,23 @@ public class UserPreferencesService {
 
     /**
      * Update user preferences with cache eviction.
+     * Uses upsert semantics: if preferences don't exist, creates default preferences first.
+     * This ensures the first call to updateUserPreferences succeeds even for new accounts.
      * Sets updatedAt timestamp to track when preferences were last modified.
      */
     @CacheEvict(value = CACHE_NAME, key = "#userId")
     public UserPreferencesDto updatePreferences(Long userId, UserPreferencesDto dto) {
         log.debug("Updating preferences for user: {}", userId);
 
+        // Upsert: fetch existing or create new default preferences
         UserPreferences existing = userPreferencesRepository
                 .findByUserId(userId)
                 .timeout(OPERATION_TIMEOUT)
                 .blockOptional()
-                .orElseThrow(() -> new IllegalArgumentException("User preferences not found for userId: " + userId));
+                .orElseGet(() -> {
+                    log.debug("Creating default preferences for user: {} during update", userId);
+                    return new UserPreferences(userId);
+                });
 
         existing.setTheme(dto.getTheme() != null ? dto.getTheme() : existing.getTheme());
         existing.setLanguage(dto.getLanguage() != null ? dto.getLanguage() : existing.getLanguage());

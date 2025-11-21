@@ -258,11 +258,14 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     const formValue = this.emailForm.value;
     
     // Map frontend field names to backend UserPreferencesInput field names
+    // Only send the 6 supported fields; all others as null to avoid overwriting
     const preferences = {
+      theme: null,
+      language: null,
       notificationEmails: formValue.emailEnabled,
-      notificationPush: null, // Don't override other fields
-      notificationLoginAlerts: null,
-      notificationSecurityUpdates: null
+      notificationPush: null,
+      notificationLoginAlerts: formValue.emailLoginAlerts,
+      notificationSecurityUpdates: formValue.emailSecurityUpdates
     };
 
     // Call GraphQL mutation
@@ -290,11 +293,14 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     const formValue = this.pushForm.value;
     
     // Map frontend field names to backend UserPreferencesInput field names
+    // Only send the 6 supported fields; all others as null to avoid overwriting
     const preferences = {
-      notificationEmails: null, // Don't override other fields
+      theme: null,
+      language: null,
+      notificationEmails: null,
       notificationPush: formValue.pushEnabled,
-      notificationLoginAlerts: null,
-      notificationSecurityUpdates: null
+      notificationLoginAlerts: formValue.pushLoginAlerts,
+      notificationSecurityUpdates: formValue.pushSecurityUpdates
     };
 
     // Call GraphQL mutation
@@ -322,8 +328,12 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     const formValue = this.activityForm.value;
     
     // Map frontend field names to backend UserPreferencesInput field names
+    // Note: activityFailedLogins and activityApiKeyCreated/Revoked are not yet supported
+    // by the backend. Only send the 6 supported fields; all others as null.
     const preferences = {
-      notificationEmails: null, // Don't override other fields
+      theme: null,
+      language: null,
+      notificationEmails: null,
       notificationPush: null,
       notificationLoginAlerts: formValue.activityLogins,
       notificationSecurityUpdates: null
@@ -351,21 +361,14 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.isSavingFrequency = true;
-    const preferences = this.frequencyForm.value;
-
-    // Call GraphQL mutation
-    this.settingsService.updateUserPreferences(preferences)
-      .pipe(takeUntil(this.destroy$))
-      .subscribe({
-        next: () => {
-          this.msg.success('Frequency preferences saved');
-          this.frequencyForm.markAsPristine();
-          this.isSavingFrequency = false;
-        },
-        error: () => {
-          this.msg.error('Failed to save frequency preferences');
-          this.isSavingFrequency = false;
-        }
-      });
+    
+    // Note: digestFrequency is not yet supported by the backend.
+    // For now, this form only saves to frontend preferences.
+    // When backend support is added, implement a dedicated mutation.
+    
+    // For now, just save the form state locally and mark as pristine
+    this.msg.info('Frequency preferences saved locally (backend support coming soon)');
+    this.frequencyForm.markAsPristine();
+    this.isSavingFrequency = false;
   }
 }

@@ -39,30 +39,20 @@ public class CacheMetricsController {
     public Map<String, Object> getCaffeineStats() {
         Map<String, Object> allStats = new HashMap<>();
 
-        for (String cacheName : cacheManager.getCacheNames()) {
-            org.springframework.cache.Cache cache = cacheManager.getCache(cacheName);
-            if (cache != null) {
-                Object nativeCache = cache.getNativeCache();
-                if (nativeCache instanceof Cache) {
-                    @SuppressWarnings("unchecked")
-                    Cache<Object, Object> caffeineCache = (Cache<Object, Object>) nativeCache;
+        for (CacheEntry entry : getCaffeineCacheEntries()) {
+            var stats = entry.cache().stats();
 
-                    // Reuse stats instance to avoid duplicate calls
-                    var stats = caffeineCache.stats();
-                    
-                    Map<String, Object> cacheStats = new HashMap<>();
-                    cacheStats.put("stats", stats.toString());
-                    cacheStats.put("estimatedSize", caffeineCache.estimatedSize());
-                    cacheStats.put("hitCount", stats.hitCount());
-                    cacheStats.put("missCount", stats.missCount());
-                    cacheStats.put("loadSuccessCount", stats.loadSuccessCount());
-                    cacheStats.put("loadFailureCount", stats.loadFailureCount());
-                    cacheStats.put("evictionCount", stats.evictionCount());
-                    cacheStats.put("hitRate", stats.hitRate());
+            Map<String, Object> cacheStats = new HashMap<>();
+            cacheStats.put("stats", stats.toString());
+            cacheStats.put("estimatedSize", entry.cache().estimatedSize());
+            cacheStats.put("hitCount", stats.hitCount());
+            cacheStats.put("missCount", stats.missCount());
+            cacheStats.put("loadSuccessCount", stats.loadSuccessCount());
+            cacheStats.put("loadFailureCount", stats.loadFailureCount());
+            cacheStats.put("evictionCount", stats.evictionCount());
+            cacheStats.put("hitRate", stats.hitRate());
 
-                    allStats.put(cacheName, cacheStats);
-                }
-            }
+            allStats.put(entry.cacheName(), cacheStats);
         }
 
         return allStats;
@@ -70,17 +60,16 @@ public class CacheMetricsController {
 
     /**
      * Returns Micrometer cache metrics (requires metrics to be enabled in actuator).
-     * Metric names like cache.hits, cache.misses, and cache.puts are exposed as gauges.
-     * Note: Verify metric names against running app's /actuator/metrics output,
-     * as some setups may use cache.gets with result=hit|miss tags instead.
+     * Uses cache.gets with result tags (hit|miss) and cache.puts counter.
+     * Note: Metrics names and tags depend on Micrometer and cache provider configuration.
+     * For Caffeine, Spring exposes: cache.gets (with result tag), cache.puts.
      */
     @GetMapping("/micrometer")
     public Map<String, Object> getMicrometerMetrics() {
         Map<String, Object> metrics = new HashMap<>();
 
-        // Extract metrics for cache hits, misses, and puts
-        metrics.put("cache.hits", extractMicrometerMetrics("cache.hits"));
-        metrics.put("cache.misses", extractMicrometerMetrics("cache.misses"));
+        // Extract metrics for cache hits/misses (from cache.gets with result tags) and puts
+        metrics.put("cache.gets", extractMicrometerMetrics("cache.gets"));
         metrics.put("cache.puts", extractMicrometerMetrics("cache.puts"));
 
         return metrics;
@@ -88,24 +77,39 @@ public class CacheMetricsController {
 
     /**
      * Helper method to extract and format Micrometer metrics by name.
-     * Reduces duplication and makes it easier to add more cache metrics later.
+     * Queries meters (counters, function counters, and other meter types) instead of just gauges.
+     * Includes tag information for filtering and categorization.
      *
-     * @param metricName the metric name (e.g., "cache.hits")
-     * @return list of formatted metric maps
+     * @param metricName the metric name (e.g., "cache.gets", "cache.puts")
+     * @return list of formatted metric maps with tag information
      */
     private List<Map<String, Object>> extractMicrometerMetrics(String metricName) {
         return meterRegistry.find(metricName)
-                .gauges()
+                .meters()
                 .stream()
-                .map(g -> Map.of(
-                        "name", g.getId().getName(),
-                        "value", g.value(),
-                        "tags", g.getId().getTags().stream()
-                                .collect(java.util.stream.Collectors.toMap(
-                                        t -> t.getKey(),
-                                        t -> t.getValue()
-                                ))
-                ))
+                .map(meter -> {
+                    Map<String, Object> meterData = new HashMap<>();
+                    meterData.put("name", meter.getId().getName());
+                    
+                    // Extract numeric value based on meter type
+                    if (meter instanceof io.micrometer.core.instrument.Counter) {
+                        meterData.put("value", ((io.micrometer.core.instrument.Counter) meter).count());
+                    } else if (meter instanceof io.micrometer.core.instrument.Gauge) {
+                        meterData.put("value", ((io.micrometer.core.instrument.Gauge) meter).value());
+                    } else if (meter instanceof io.micrometer.core.instrument.FunctionCounter) {
+                        meterData.put("value", ((io.micrometer.core.instrument.FunctionCounter) meter).count());
+                    } else {
+                        // For other meter types, try to extract a numeric value
+                        meterData.put("value", "N/A");
+                    }
+                    
+                    // Include tags for categorization (e.g., result=hit|miss)
+                    Map<String, String> tags = new HashMap<>();
+                    meter.getId().getTags().forEach(tag -> tags.put(tag.getKey(), tag.getValue()));
+                    meterData.put("tags", tags);
+                    
+                    return meterData;
+                })
                 .toList();
     }
 
@@ -146,7 +150,7 @@ public class CacheMetricsController {
         summary.put("totalEvictions", totalEvictions);
         
         // Compute overall hit rate with clear semantics
-        Object overallHitRate = computeOverallHitRate(totalHits, totalMisses);
+        String overallHitRate = computeOverallHitRate(totalHits, totalMisses);
         summary.put("overallHitRate", overallHitRate);
 
         return summary;
@@ -189,7 +193,7 @@ public class CacheMetricsController {
      * @param totalMisses total cache misses across all caches
      * @return hit rate as percentage string or N/A if no data
      */
-    private Object computeOverallHitRate(long totalHits, long totalMisses) {
+    private String computeOverallHitRate(long totalHits, long totalMisses) {
         if (totalHits == 0 && totalMisses == 0) {
             return "N/A (no data)";  // Cache has not been accessed yet
         }

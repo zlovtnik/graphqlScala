@@ -24,7 +24,7 @@ type Query {
     getDashboardStats: DashboardStats!
     getUserPreferences: UserPreferences
     getApiKeys: [ApiKeyInfo!]!
-    getAccountStatus: AccountStatus!
+    getAccountStatus: AccountStatusResponse!
 }
 
 type Mutation {
