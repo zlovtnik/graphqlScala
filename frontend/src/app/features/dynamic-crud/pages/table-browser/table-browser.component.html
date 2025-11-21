@@ -51,7 +51,7 @@
           [ngModelOptions]="{ standalone: true }"
           [(ngModel)]="globalSearchColumns"
           nzPlaceHolder="Limit search to columns"
-          nzMaxTagCount="3"
+          [nzMaxTagCount]="3"
           (ngModelChange)="onGlobalSearchColumnsChange($event)">
           <nz-option *ngFor="let column of columns" [nzValue]="column.name" [nzLabel]="column.name"></nz-option>
         </nz-select>

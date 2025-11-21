@@ -10,10 +10,11 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 /**
- * Wraps PL/SQL calls with DBMS_APPLICATION_INFO and DBMS_MONITOR hooks so the
- * DBA team
- * can tie stored procedure latency back to specific GraphQL resolvers and REST
- * endpoints.
+ * Wraps PL/SQL calls with DBMS_APPLICATION_INFO so the DBA team can tie stored
+ * procedure latency back to specific GraphQL resolvers and REST endpoints.
+ * DBMS_MONITOR hooks remain disabled (see enableMonitor/disableMonitor) because
+ * most lower environments lack the required privileges; the stubs remain as a
+ * TODO for future re-enablement when those grants are available.
  */
 @Slf4j
 @Component
