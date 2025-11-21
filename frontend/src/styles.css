@@ -1,1 +1,6 @@
 /* You can add global styles to this file, and also import other style files */
+
+/* ng-zorro tabs styling */
+nz-tabset .ant-tabs-tabpane {
+    padding: 16px 0;
+}

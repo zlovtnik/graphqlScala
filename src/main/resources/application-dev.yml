@@ -1,0 +1,26 @@
+# Development-specific logging configuration
+# This profile enables verbose DEBUG/TRACE logging for development and debugging
+
+logging:
+  level:
+    # Database operations - verbose for development
+    org.springframework.data.r2dbc: DEBUG
+    org.springframework.jdbc: DEBUG
+    org.springframework.data.jpa: DEBUG
+    oracle.r2dbc: DEBUG
+    oracle.jdbc: DEBUG
+    # Redis operations
+    org.springframework.data.redis: DEBUG
+    # MinIO operations
+    io.minio: DEBUG
+    # Custom application logs
+    com.rcs.ssf: DEBUG
+    # DBMS_MONITOR instrumentation - trace level for detailed debugging
+    '[com.rcs.ssf.dynamic.PlsqlInstrumentationSupport]': TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/ssf-application.log
+    max-size: 10MB
+    max-history: 10

@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterOutlet } from '@angular/router';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
 import { NzMenuModule } from 'ng-zorro-antd/menu';
@@ -38,6 +38,7 @@ export class AppComponent {
 
   protected authService = inject(AuthService);
   protected themeService = inject(ThemeService);
+  private router = inject(Router);
 
   async logout(): Promise<void> {
     try {
@@ -45,6 +46,7 @@ export class AppComponent {
     } catch (error) {
       console.warn('Logout failed:', error);
     }
+    await this.router.navigate(['/login']);
   }
 }
 

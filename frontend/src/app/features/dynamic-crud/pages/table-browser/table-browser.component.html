@@ -23,14 +23,100 @@
   <!-- Table Actions -->
   <div class="table-actions" *ngIf="selectedTable">
     <div class="action-left">
-      <nz-input-group nzSearch [nzAddOnAfter]="suffixIconButton">
-        <input #searchInput type="text" nz-input [(ngModel)]="searchValue" placeholder="Search..." data-shortcut="search" />
-      </nz-input-group>
-      <ng-template #suffixIconButton>
-        <button nz-button nzType="primary" nzSearch (click)="onSearch()">
-          <span nz-icon nzType="search"></span>
-        </button>
-      </ng-template>
+      <div class="search-builder">
+        <label class="section-label">Global search</label>
+        <div class="global-search-row">
+          <nz-input-group nzSearch [nzAddOnAfter]="searchButton">
+            <input
+              #searchInput
+              type="text"
+              nz-input
+              [formControl]="globalSearchControl"
+              placeholder="Search across columns"
+              data-shortcut="search" />
+          </nz-input-group>
+          <button
+            nz-button
+            nzType="default"
+            nzSize="small"
+            type="button"
+            (click)="clearGlobalSearch()"
+            [disabled]="!searchValue && globalSearchColumns.length === 0">
+            Clear
+          </button>
+        </div>
+        <nz-select
+          nzMode="multiple"
+          nzAllowClear
+          [ngModelOptions]="{ standalone: true }"
+          [(ngModel)]="globalSearchColumns"
+          nzPlaceHolder="Limit search to columns"
+          nzMaxTagCount="3"
+          (ngModelChange)="onGlobalSearchColumnsChange($event)">
+          <nz-option *ngFor="let column of columns" [nzValue]="column.name" [nzLabel]="column.name"></nz-option>
+        </nz-select>
+        <ng-template #searchButton>
+          <button nz-button nzType="primary" nzSearch (click)="onSearch()">
+            <span nz-icon nzType="search"></span>
+          </button>
+        </ng-template>
+      </div>
+
+      <div class="filter-builder">
+        <div class="filter-builder-header">
+          <label class="section-label">Advanced filters</label>
+          <div class="filter-operator-selector">
+            <span>Combine with</span>
+            <nz-select
+              nzSize="small"
+              [ngModelOptions]="{ standalone: true }"
+              [(ngModel)]="filterGroupOperator"
+              (ngModelChange)="onFilterGroupOperatorChange($event)">
+              <nz-option nzValue="AND" nzLabel="AND"></nz-option>
+              <nz-option nzValue="OR" nzLabel="OR"></nz-option>
+            </nz-select>
+          </div>
+        </div>
+        <form nz-form nzLayout="inline" [formGroup]="filterBuilderForm" class="filter-form" (ngSubmit)="addFilterChip()">
+          <nz-form-item>
+            <nz-form-control>
+              <nz-select formControlName="column" nzPlaceHolder="Column" nzAllowClear>
+                <nz-option *ngFor="let column of columns" [nzValue]="column.name" [nzLabel]="column.name"></nz-option>
+              </nz-select>
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item>
+            <nz-form-control>
+              <nz-select formControlName="operator" nzPlaceHolder="Operator">
+                <nz-option *ngFor="let option of operatorOptions" [nzValue]="option.value" [nzLabel]="option.label"></nz-option>
+              </nz-select>
+            </nz-form-control>
+          </nz-form-item>
+          <nz-form-item class="value-field">
+            <nz-form-control>
+              <input nz-input type="text" formControlName="value" placeholder="Value" />
+            </nz-form-control>
+          </nz-form-item>
+          <button nz-button nzType="dashed" type="submit">
+            <span nz-icon nzType="plus"></span>
+            Add
+          </button>
+        </form>
+
+        <div class="filter-chips" *ngIf="filterChips.length > 0">
+          <nz-tag
+            *ngFor="let chip of filterChips"
+            nzMode="closeable"
+            (nzOnClose)="removeFilterChip(chip.id)">
+            <span class="chip-column">{{ chip.column }}</span>
+            <span class="chip-operator">{{ chip.operator }}</span>
+            <span class="chip-value">{{ chip.value }}</span>
+          </nz-tag>
+          <button nz-button nzType="link" nzSize="small" type="button" (click)="clearFilterChips()">
+            Clear filters
+          </button>
+        </div>
+      </div>
     </div>
 
     <div class="action-right">

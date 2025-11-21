@@ -120,7 +120,7 @@ app:
   jwt:
     secret: ${JWT_SECRET}
   security:
-    enable-default-user-role: false  # Least-privilege: no implicit roles unless explicitly enabled
+    enable-default-user-role: true  # Enable default ROLE_USER for all authenticated users
   minio:
     url: http://localhost:9000
     access-key: ${MINIO_ACCESS_KEY}
@@ -161,3 +161,32 @@ schema:
   bootstrap:
     enabled: true
     continue-on-error: true
+
+# Logging configuration - production defaults
+# For verbose DEBUG/TRACE logging, use: --spring.profiles.active=dev
+logging:
+  level:
+    # Production defaults: INFO/WARN for external libraries
+    org.springframework.data.r2dbc: WARN
+    org.springframework.jdbc: WARN
+    org.springframework.data.jpa: WARN
+    oracle.r2dbc: DEBUG
+    oracle.jdbc: WARN
+    # Redis operations
+    com.rcs.ssf.http.filter.CompressionFilter: DEBUG
+    com.rcs.ssf.service.DynamicCrudService: DEBUG      # Oracle streaming logs
+    com.rcs.ssf.config.MinioConfig: DEBUG              # MinIO metrics/interceptors
+    org.springframework.data.redis: DEBUG    
+    # MinIO operations
+    io.minio: INFO
+    # Custom application logs - INFO for production
+    com.rcs.ssf: INFO
+    # Suppress DBMS_MONITOR warnings when package is unavailable
+    '[com.rcs.ssf.dynamic.PlsqlInstrumentationSupport]': WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/ssf-application.log
+    max-size: 10MB
+    max-history: 30

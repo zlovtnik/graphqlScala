@@ -300,6 +300,14 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
 
         v_table_name := normalize_table_name(p_table_name);
 
+        -- Normalize SQL operation names to internal constants
+        -- Map: INSERT -> CREATE, SELECT -> READ
+        IF v_operation = 'INSERT' THEN
+            v_operation := c_op_create;
+        ELSIF v_operation = 'SELECT' THEN
+            v_operation := c_op_read;
+        END IF;
+
         IF NOT is_table_allowed(v_table_name) THEN
             RAISE_APPLICATION_ERROR(-20906, 'Table not allowed: ' || v_table_name);
         END IF;
@@ -410,7 +418,7 @@ CREATE OR REPLACE PACKAGE BODY dynamic_crud_pkg AS
 
     EXCEPTION
         WHEN OTHERS THEN
-            v_status := 'ERROR';
+            v_status := 'FAILURE';
             v_error_code := TO_CHAR(SQLCODE);
             p_message := SUBSTR(SQLERRM, 1, 4000);
             record_audit(v_table_name, v_operation, p_audit, v_status, p_message, v_error_code, p_affected_rows);

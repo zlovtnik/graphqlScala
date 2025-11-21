@@ -81,6 +81,8 @@ public class JwtTokenProvider {
 
     public boolean validateToken(String token) {
         try {
+            logger.debug("Validating JWT token: length={}", 
+                token != null ? token.length() : 0);
             Jwts.parser()
                     .verifyWith(key)
                     .build()
@@ -89,7 +91,10 @@ public class JwtTokenProvider {
         } catch (SecurityException e) {
             logger.error("Invalid JWT signature: {}", e.getMessage(), e);
         } catch (MalformedJwtException e) {
-            logger.error("Invalid JWT token: {}", e.getMessage(), e);
+            logger.error("Invalid JWT token (length={}, token='{}'): {}", 
+                token != null ? token.length() : 0, 
+                token != null && token.length() <= 50 ? token : (token != null ? token.substring(0, 50) + "..." : "null"),
+                e.getMessage(), e);
         } catch (ExpiredJwtException e) {
             logger.error("Expired JWT token: {}", e.getMessage(), e);
         } catch (UnsupportedJwtException e) {

@@ -64,4 +64,16 @@ public interface UserRoleRepository extends R2dbcRepository<UserRole, Long> {
         AND (ur.expires_at IS NULL OR ur.expires_at > CURRENT_TIMESTAMP)
         """)
     Mono<Boolean> userHasRole(Long userId, String roleName);
+
+        /**
+         * Return the names of all active roles assigned to a user.
+         */
+        @Query("""
+                SELECT r.name FROM user_roles ur
+                INNER JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = :userId
+                    AND (ur.expires_at IS NULL OR ur.expires_at > CURRENT_TIMESTAMP)
+                ORDER BY ur.granted_at DESC
+                """)
+        Flux<String> findActiveRoleNamesByUserId(Long userId);
 }

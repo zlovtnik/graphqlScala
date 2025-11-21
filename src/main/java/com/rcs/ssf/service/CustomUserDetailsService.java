@@ -3,6 +3,7 @@ package com.rcs.ssf.service;
 import com.rcs.ssf.SecurityProperties;
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.repository.UserRepository;
+import com.rcs.ssf.repository.UserRoleRepository;
 import com.rcs.ssf.security.AuthenticatedUser;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,6 +15,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Reactive user details service for Spring Security.
@@ -26,9 +30,13 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final SecurityProperties securityProperties;
+    private final UserRoleRepository userRoleRepository;
 
-    public CustomUserDetailsService(UserRepository userRepository, SecurityProperties securityProperties) {
+    public CustomUserDetailsService(UserRepository userRepository,
+            UserRoleRepository userRoleRepository,
+            SecurityProperties securityProperties) {
         this.userRepository = userRepository;
+        this.userRoleRepository = userRoleRepository;
         this.securityProperties = securityProperties;
     }
 
@@ -40,8 +48,9 @@ public class CustomUserDetailsService implements UserDetailsService {
      */
     public Mono<UserDetails> findByUsername(String username) {
         return userRepository.findByUsername(username)
-                .switchIfEmpty(Mono.error(() -> new UsernameNotFoundException("User not found: " + username)))
-                .map(this::buildUserDetails);
+            .switchIfEmpty(Mono.error(() -> new UsernameNotFoundException("User not found: " + username)))
+            .flatMap(user -> loadUserAuthorities(user)
+                .map(authorities -> buildUserDetails(user, authorities)));
     }
 
     /**
@@ -68,15 +77,11 @@ public class CustomUserDetailsService implements UserDetailsService {
      * @param user the user entity
      * @return AuthenticatedUser with authorities
      */
-    private UserDetails buildUserDetails(User user) {
-        // Fetch user's roles and convert to GrantedAuthority instances
-        List<GrantedAuthority> authorities = getUserAuthorities(user);
-
-        // Make authorities immutable to prevent post-authentication mutation
+    private UserDetails buildUserDetails(User user, List<GrantedAuthority> authorities) {
         List<GrantedAuthority> immutableAuthorities = List.copyOf(authorities);
 
         return new AuthenticatedUser(
-                user.getId(),
+                Objects.requireNonNull(user.getId(), "User ID must not be null"),
                 user.getUsername(),
                 user.getPassword(),
                 immutableAuthorities);
@@ -108,22 +113,35 @@ public class CustomUserDetailsService implements UserDetailsService {
      * @return list of GrantedAuthority instances for the user (may be empty if no
      *         roles assigned and flag disabled)
      */
-    private List<GrantedAuthority> getUserAuthorities(User user) {
-        List<GrantedAuthority> authorities = new ArrayList<>();
-
-        // TODO: Once User entity has roles field, replace this with:
-        // if (user.getRoles() != null && !user.getRoles().isEmpty()) {
-        // authorities = user.getRoles().stream()
-        // .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getName()))
-        // .collect(Collectors.toList());
-        // }
-
-        // Apply least-privilege principle: only grant implicit default role if
-        // explicitly enabled
-        if (authorities.isEmpty() && securityProperties.isEnableDefaultUserRole()) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+    private Mono<List<GrantedAuthority>> loadUserAuthorities(User user) {
+        if (user.getId() == null) {
+            return Mono.just(applyDefaultRoleIfNeeded(List.of()));
         }
 
-        return authorities;
+        return userRoleRepository.findActiveRoleNamesByUserId(user.getId())
+                .map(this::normalizeRoleName)
+                .filter(name -> name != null && !name.isBlank())
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toCollection(ArrayList::new))
+                .map(this::applyDefaultRoleIfNeeded);
+    }
+
+    private List<GrantedAuthority> applyDefaultRoleIfNeeded(List<? extends GrantedAuthority> authorities) {
+        if (!authorities.isEmpty()) {
+            return List.copyOf(authorities);
+        }
+        if (securityProperties.isEnableDefaultUserRole()) {
+            return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        }
+        return List.of();
+    }
+
+    private String normalizeRoleName(String roleName) {
+        if (roleName == null || roleName.isBlank()) {
+            return null;
+        }
+        String trimmed = roleName.trim();
+        String upper = trimmed.toUpperCase(Locale.ROOT);
+        return upper.startsWith("ROLE_") ? upper : "ROLE_" + upper;
     }
 }

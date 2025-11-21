@@ -23,8 +23,9 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.zip.GZIPOutputStream;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.LongAdder;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * Custom compression filter for HTTP responses.
@@ -231,6 +232,8 @@ public class CompressionFilter extends OncePerRequestFilter {
         private GZIPOutputStream gzipStream;
         private ServletOutputStream wrappedStream;
         private PrintWriter wrappedWriter;
+        private final LongAdder uncompressedBytes = new LongAdder();
+        private final LongAdder compressedBytes = new LongAdder();
 
         public CompressingResponseWrapper(HttpServletResponse response, String algorithm) {
             super(response);
@@ -250,12 +253,13 @@ public class CompressionFilter extends OncePerRequestFilter {
 
             if (GZIP.equals(algorithm)) {
                 // Wrap with GZIP compression
-                gzipStream = new GZIPOutputStream(originalStream, true); // true = syncFlush mode
-                wrappedStream = new ServletOutputStreamWrapper(gzipStream);
+                CountingOutputStream compressionSink = new CountingOutputStream(originalStream, compressedBytes);
+                gzipStream = new GZIPOutputStream(compressionSink, true); // true = syncFlush mode
+                wrappedStream = new ServletOutputStreamWrapper(gzipStream, uncompressedBytes);
 
                 // Set Content-Encoding header now that we're wrapping with compression
                 super.setHeader(HttpHeaders.CONTENT_ENCODING, GZIP);
-                log.debug("Initialized GZIP compression stream");
+                log.debug("Initialized GZIP compression stream; awaiting size stats");
             } else if (BROTLI.equals(algorithm)) {
                 // Brotli is not currently implemented/available.
                 // If selectCompressionAlgorithm() correctly gates BROTLI selection,
@@ -348,6 +352,16 @@ public class CompressionFilter extends OncePerRequestFilter {
                     throw e;
                 }
             }
+
+            if (log.isDebugEnabled()) {
+                long plainBytes = uncompressedBytes.sum();
+                long gzipBytes = compressedBytes.sum();
+                double ratio = plainBytes == 0 ? 1d : (double) gzipBytes / plainBytes;
+                log.debug("Completed GZIP compression - plainBytes={} gzipBytes={} ratio={}",
+                        plainBytes,
+                        gzipBytes,
+                        ratio);
+            }
         }
     }
 
@@ -380,24 +394,29 @@ public class CompressionFilter extends OncePerRequestFilter {
      */
     private static class ServletOutputStreamWrapper extends ServletOutputStream {
         private final OutputStream delegate;
+        private final LongAdder counter;
 
-        public ServletOutputStreamWrapper(OutputStream delegate) {
+        public ServletOutputStreamWrapper(OutputStream delegate, LongAdder counter) {
             this.delegate = delegate;
+            this.counter = counter;
         }
 
         @Override
         public void write(int b) throws IOException {
             delegate.write(b);
+            counter.increment();
         }
 
         @Override
         public void write(byte[] b) throws IOException {
             delegate.write(b);
+            counter.add(b.length);
         }
 
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
             delegate.write(b, off, len);
+            counter.add(len);
         }
 
         @Override
@@ -421,6 +440,34 @@ public class CompressionFilter extends OncePerRequestFilter {
         public void setWriteListener(WriteListener listener) {
             // Async I/O (WriteListener) is not supported on compressed output streams;
             // no-op for defensive compatibility
+        }
+    }
+
+    private static class CountingOutputStream extends OutputStream {
+        private final OutputStream delegate;
+        private final LongAdder counter;
+
+        CountingOutputStream(OutputStream delegate, LongAdder counter) {
+            this.delegate = delegate;
+            this.counter = counter;
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            delegate.write(b);
+            counter.increment();
+        }
+
+        @Override
+        public void write(byte[] b) throws IOException {
+            delegate.write(b);
+            counter.add(b.length);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            delegate.write(b, off, len);
+            counter.add(len);
         }
     }
 }

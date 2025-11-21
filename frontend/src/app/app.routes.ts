@@ -30,6 +30,12 @@ export const routes: Routes = [
     canActivate: [authGuard],
   },
   {
+    path: 'dashboard',
+    loadComponent: () =>
+      import('./pages/main.component').then((m) => m.MainComponent),
+    canActivate: [authGuard],
+  },
+  {
     path: 'dynamic-crud',
     loadComponent: () =>
       import(

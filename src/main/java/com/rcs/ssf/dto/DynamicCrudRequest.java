@@ -4,6 +4,7 @@ import java.util.List;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
@@ -42,6 +43,10 @@ public class DynamicCrudRequest {
     private List<ColumnValue> columns;
     @Valid
     private List<Filter> filters;
+    @Valid
+    private List<FilterGroup> filterGroups;
+    @Valid
+    private GlobalSearch globalSearch;
     @Positive
     private Integer limit;
     @Min(0)
@@ -62,6 +67,12 @@ public class DynamicCrudRequest {
 
     public List<Filter> getFilters() { return filters; }
     public void setFilters(List<Filter> filters) { this.filters = filters; }
+
+    public List<FilterGroup> getFilterGroups() { return filterGroups; }
+    public void setFilterGroups(List<FilterGroup> filterGroups) { this.filterGroups = filterGroups; }
+
+    public GlobalSearch getGlobalSearch() { return globalSearch; }
+    public void setGlobalSearch(GlobalSearch globalSearch) { this.globalSearch = globalSearch; }
 
     public Integer getLimit() { return limit; }
     public void setLimit(Integer limit) { this.limit = limit; }
@@ -105,5 +116,50 @@ public class DynamicCrudRequest {
 
         public Object getValue() { return value; }
         public void setValue(Object value) { this.value = value; }
+    }
+
+    public enum LogicalOperator {
+        AND, OR
+    }
+
+    public static class FilterGroup {
+        @NotNull
+        private LogicalOperator operator = LogicalOperator.OR;
+        @Valid
+        @NotEmpty
+        private List<Filter> filters;
+
+        public LogicalOperator getOperator() { return operator; }
+        public void setOperator(LogicalOperator operator) { this.operator = operator; }
+
+        public List<Filter> getFilters() { return filters; }
+        public void setFilters(List<Filter> filters) { this.filters = filters; }
+    }
+
+    public enum MatchMode {
+        CONTAINS,
+        STARTS_WITH,
+        ENDS_WITH,
+        EXACT
+    }
+
+    public static class GlobalSearch {
+        @NotBlank
+        private String term;
+        private List<@Pattern(regexp = "^[A-Za-z0-9_.]+$", message = "column must contain only alphanumeric characters, underscores, and dots") String> columns;
+        private MatchMode matchMode = MatchMode.CONTAINS;
+        private boolean caseSensitive;
+
+        public String getTerm() { return term; }
+        public void setTerm(String term) { this.term = term; }
+
+        public List<String> getColumns() { return columns; }
+        public void setColumns(List<String> columns) { this.columns = columns; }
+
+        public MatchMode getMatchMode() { return matchMode; }
+        public void setMatchMode(MatchMode matchMode) { this.matchMode = matchMode; }
+
+        public boolean isCaseSensitive() { return caseSensitive; }
+        public void setCaseSensitive(boolean caseSensitive) { this.caseSensitive = caseSensitive; }
     }
 }

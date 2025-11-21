@@ -181,6 +181,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // Allow user creation for bootstrap
                         .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
+                        // CORS preflight for all API endpoints
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        // Dynamic CRUD endpoints - explicit GET and POST
+                        .requestMatchers(HttpMethod.GET, "/api/dynamic-crud/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/dynamic-crud/**").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/dynamic-crud/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/dynamic-crud/**").authenticated()
                         // Dashboard endpoints require authentication
                         .requestMatchers("/api/dashboard/**").authenticated()
                         // GraphQL IDE requires authentication in production

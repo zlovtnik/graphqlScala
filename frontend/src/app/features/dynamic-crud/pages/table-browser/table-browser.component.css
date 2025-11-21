@@ -33,17 +33,95 @@
 .table-actions {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 16px;
 }
 
-.action-left,
+.action-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1 1 60%;
+}
+
 .action-right {
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+.section-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--neutral-dark);
+  letter-spacing: 0.5px;
+}
+
+.search-builder,
+.filter-builder {
+  background: var(--neutral-light);
+  border-radius: var(--border-radius);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.global-search-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.filter-builder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.filter-operator-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--neutral-dark);
+}
+
+.filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-form .value-field {
+  flex: 1;
+  min-width: 150px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.chip-column {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.chip-operator {
+  margin-right: 4px;
+  color: var(--neutral-dark);
+}
+
+.chip-value {
+  font-style: italic;
 }
 
 .table-container {
@@ -110,9 +188,13 @@ nz-form-label {
     align-items: stretch;
   }
 
-  .action-left,
   .action-right {
     justify-content: center;
+  }
+
+  .global-search-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   nz-modal {
