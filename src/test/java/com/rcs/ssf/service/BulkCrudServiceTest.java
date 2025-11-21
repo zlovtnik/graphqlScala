@@ -223,6 +223,46 @@ public class BulkCrudServiceTest {
         assertEquals(Status.SUCCESS, response.getStatus());
     }
 
+    @Test
+    @DisplayName("DELETE operations must fail as a whole when errors occur")
+    public void testBulkDeleteAllOrNothingOnError() {
+        // Given
+        BulkCrudRequest request = new BulkCrudRequest();
+        request.setTableName("audit_login_attempts");
+        request.setOperation(DynamicCrudRequest.Operation.DELETE);
+        request.setSkipOnError(true); // should be ignored for DELETE
+        request.setBatchSize(2);
+
+        BulkCrudRequest.BulkRow row1 = new BulkCrudRequest.BulkRow();
+        row1.setFilters(List.of(buildIdFilter("1")));
+
+        BulkCrudRequest.BulkRow row2 = new BulkCrudRequest.BulkRow();
+        row2.setFilters(List.of(buildIdFilter("2")));
+
+        request.setRows(List.of(row1, row2));
+
+        when(dynamicCrudGateway.execute(any()))
+                .thenThrow(new RuntimeException("delete failed"));
+
+        // When
+        BulkCrudResponse response = bulkCrudService.executeBulkOperation(request);
+
+        // Then
+        assertEquals(Status.FAILURE, response.getStatus());
+        assertEquals(0, response.getSuccessfulRows());
+        assertEquals(2, response.getFailedRows());
+        assertEquals(0, response.getProcessedRows());
+        assertEquals(2, response.getErrors().size());
+    }
+
+    private DynamicCrudRequest.Filter buildIdFilter(String value) {
+        DynamicCrudRequest.Filter filter = new DynamicCrudRequest.Filter();
+        filter.setColumn("id");
+        filter.setOperator(DynamicCrudRequest.Operator.EQ);
+        filter.setValue(value);
+        return filter;
+    }
+
     private BulkCrudRequest createBulkInsertRequest(int rowCount) {
         BulkCrudRequest request = new BulkCrudRequest();
         request.setTableName("audit_login_attempts");

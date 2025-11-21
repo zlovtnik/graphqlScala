@@ -370,11 +370,13 @@ public class BulkCrudService {
 
     /**
      * Determines if bulk operation should skip on error.
-     * Forces skip-on-error for DELETE operations to prevent partial deletions.
+     * DELETE operations are always all-or-nothing, so skip-on-error is disabled.
      * For INSERT/UPDATE, respects the explicit skipOnError flag and dryRun mode.
      */
     private boolean isSkipOnError(BulkCrudRequest request) {
-        return request.isSkipOnError() || request.isDryRun()
-                || (request.getOperation() == DynamicCrudRequest.Operation.DELETE);
+        if (request.getOperation() == DynamicCrudRequest.Operation.DELETE) {
+            return false;
+        }
+        return request.isSkipOnError() || request.isDryRun();
     }
 }
