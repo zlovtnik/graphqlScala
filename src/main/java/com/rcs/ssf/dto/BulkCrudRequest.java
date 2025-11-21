@@ -78,9 +78,6 @@ public class BulkCrudRequest {
     }
 
     public void setBatchSize(Integer batchSize) {
-        if (batchSize != null && batchSize < 1) {
-            throw new IllegalArgumentException("batchSize must be at least 1");
-        }
         this.batchSize = batchSize;
     }
 

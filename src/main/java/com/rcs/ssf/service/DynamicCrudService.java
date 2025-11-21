@@ -6,6 +6,8 @@ import com.rcs.ssf.dynamic.*;
 import com.rcs.ssf.dynamic.streaming.QueryStreamOptions;
 import com.rcs.ssf.dynamic.streaming.QueryStreamingService;
 import lombok.extern.slf4j.Slf4j;
+import oracle.sql.TIMESTAMP;
+import oracle.sql.TIMESTAMPTZ;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -16,7 +18,17 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.io.Reader;
+import java.sql.Clob;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -29,6 +41,7 @@ public class DynamicCrudService {
     private final DynamicCrudGateway dynamicCrudGateway;
     private final QueryStreamingService queryStreamingService;
     private final String requiredRole;
+    private static final int DEFAULT_GLOBAL_SEARCH_COLUMN_LIMIT = 8;
 
     private static final Set<String> ALLOWED_TABLES = Set.of(
             "audit_login_attempts", "audit_sessions", "audit_dynamic_crud", "audit_error_log");
@@ -67,21 +80,10 @@ public class DynamicCrudService {
         List<String> whereClauses = new ArrayList<>();
         List<Object> filterParams = new ArrayList<>();
 
-        if (request.getFilters() != null && !request.getFilters().isEmpty()) {
-            for (DynamicCrudRequest.Filter filter : request.getFilters()) {
-                String columnName = resolveColumnName(columnLookup, filter.getColumn());
-                DynamicCrudRequest.Operator operator = filter.getOperator();
-
-                // Validate operator is not null (should not happen with @NotNull but be
-                // defensive)
-                if (operator == null) {
-                    throw new IllegalArgumentException("Operator cannot be null in filter");
-                }
-
-                whereClauses.add(columnName + " " + operator.getSymbol() + " ?");
-                filterParams.add(filter.getValue());
-            }
-        }
+        appendFilters(whereClauses, filterParams, request.getFilters(), columnLookup);
+        appendFilterGroups(whereClauses, filterParams, request.getFilterGroups(), columnLookup);
+        appendGlobalSearchClause(whereClauses, filterParams, request.getGlobalSearch(), columnMetadata, columnLookup,
+                request.getTableName());
 
         if (!whereClauses.isEmpty()) {
             sql.append(" WHERE ").append(String.join(" AND ", whereClauses));
@@ -113,7 +115,7 @@ public class DynamicCrudService {
                 if (!visibleColumns.contains(columnName.toUpperCase(Locale.ROOT))) {
                     continue;
                 }
-                row.put(columnName, rs.getObject(i));
+                row.put(columnName, readColumnValue(rs, i));
             }
             return row;
         };
@@ -144,6 +146,140 @@ public class DynamicCrudService {
         return new DynamicCrudResponseDto(rows, totalCount, columnMetadata, !jdbcTemplate.isEmpty());
     }
 
+    private void appendFilters(List<String> whereClauses,
+                               List<Object> filterParams,
+                               List<DynamicCrudRequest.Filter> filters,
+                               Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup) {
+        if (filters == null || filters.isEmpty()) {
+            return;
+        }
+        for (DynamicCrudRequest.Filter filter : filters) {
+            FilterSql sql = buildFilterSql(filter, columnLookup);
+            whereClauses.add(sql.clause());
+            filterParams.add(sql.value());
+        }
+    }
+
+    private void appendFilterGroups(List<String> whereClauses,
+                                    List<Object> filterParams,
+                                    List<DynamicCrudRequest.FilterGroup> groups,
+                                    Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup) {
+        if (groups == null || groups.isEmpty()) {
+            return;
+        }
+
+        for (DynamicCrudRequest.FilterGroup group : groups) {
+            if (group == null || group.getFilters() == null || group.getFilters().isEmpty()) {
+                continue;
+            }
+
+            List<String> groupedClauses = new ArrayList<>();
+            List<Object> groupedParams = new ArrayList<>();
+
+            for (DynamicCrudRequest.Filter filter : group.getFilters()) {
+                FilterSql sql = buildFilterSql(filter, columnLookup);
+                groupedClauses.add(sql.clause());
+                groupedParams.add(sql.value());
+            }
+
+            if (groupedClauses.isEmpty()) {
+                continue;
+            }
+
+            DynamicCrudRequest.LogicalOperator operator = group.getOperator() != null
+                    ? group.getOperator()
+                    : DynamicCrudRequest.LogicalOperator.OR;
+            String joiner = " " + operator.name() + " ";
+            whereClauses.add("(" + String.join(joiner, groupedClauses) + ")");
+            filterParams.addAll(groupedParams);
+        }
+    }
+
+    private void appendGlobalSearchClause(List<String> whereClauses,
+                                          List<Object> filterParams,
+                                          DynamicCrudRequest.GlobalSearch globalSearch,
+                                          List<DynamicCrudResponseDto.ColumnMeta> columnMetadata,
+                                          Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup,
+                                          String tableName) {
+        if (globalSearch == null) {
+            return;
+        }
+
+        String rawTerm = globalSearch.getTerm();
+        if (rawTerm == null) {
+            return;
+        }
+
+        String trimmedTerm = rawTerm.trim();
+        if (trimmedTerm.isEmpty()) {
+            return;
+        }
+
+        List<String> resolvedColumns;
+        if (globalSearch.getColumns() != null && !globalSearch.getColumns().isEmpty()) {
+            resolvedColumns = globalSearch.getColumns().stream()
+                    .map(column -> resolveColumnName(columnLookup, column))
+                    .distinct()
+                    .collect(Collectors.toList());
+        } else {
+            resolvedColumns = columnMetadata.stream()
+                    .filter(this::isTextColumn)
+                    .map(DynamicCrudResponseDto.ColumnMeta::getName)
+                    .limit(DEFAULT_GLOBAL_SEARCH_COLUMN_LIMIT)
+                    .collect(Collectors.toList());
+        }
+
+        if (resolvedColumns.isEmpty()) {
+            log.debug("Skipping global search for table {} because no searchable columns were resolved", tableName);
+            return;
+        }
+
+        DynamicCrudRequest.MatchMode matchMode = globalSearch.getMatchMode() != null
+                ? globalSearch.getMatchMode()
+                : DynamicCrudRequest.MatchMode.CONTAINS;
+
+        String pattern = switch (matchMode) {
+            case EXACT -> trimmedTerm;
+            case STARTS_WITH -> trimmedTerm + "%";
+            case ENDS_WITH -> "%" + trimmedTerm;
+            case CONTAINS -> "%" + trimmedTerm + "%";
+        };
+
+        boolean caseSensitive = globalSearch.isCaseSensitive();
+        String normalizedPattern = caseSensitive ? pattern : pattern.toUpperCase(Locale.ROOT);
+
+        List<String> columnExpressions = new ArrayList<>();
+        List<Object> params = new ArrayList<>();
+
+        for (String column : resolvedColumns) {
+            String targetColumn = caseSensitive ? column : "UPPER(" + column + ")";
+            columnExpressions.add(targetColumn + " LIKE ?");
+            params.add(normalizedPattern);
+        }
+
+        if (columnExpressions.isEmpty()) {
+            return;
+        }
+
+        whereClauses.add("(" + String.join(" OR ", columnExpressions) + ")");
+        filterParams.addAll(params);
+    }
+
+    private FilterSql buildFilterSql(DynamicCrudRequest.Filter filter,
+                                     Map<String, DynamicCrudResponseDto.ColumnMeta> columnLookup) {
+        if (filter == null) {
+            throw new IllegalArgumentException("Filter cannot be null");
+        }
+        String columnName = resolveColumnName(columnLookup, filter.getColumn());
+        DynamicCrudRequest.Operator operator = filter.getOperator();
+        if (operator == null) {
+            throw new IllegalArgumentException("Operator cannot be null in filter");
+        }
+        return new FilterSql(columnName + " " + operator.getSymbol() + " ?", filter.getValue());
+    }
+
+    private record FilterSql(String clause, Object value) {}
+
     public DynamicCrudResponseDto executeMutation(DynamicCrudRequest request) {
         assertAuthorizedForDynamicCrud();
         validateTable(request.getTableName());
@@ -161,10 +297,11 @@ public class DynamicCrudService {
                 .toList() : List.of();
 
         DynamicCrudOperation op = switch (request.getOperation()) {
+            case SELECT -> throw new IllegalArgumentException(
+                    "SELECT operations must use executeSelect() method, not executeMutation()");
             case INSERT -> DynamicCrudOperation.CREATE;
             case UPDATE -> DynamicCrudOperation.UPDATE;
             case DELETE -> DynamicCrudOperation.DELETE;
-            default -> throw new IllegalArgumentException("Unsupported operation: " + request.getOperation());
         };
 
         com.rcs.ssf.dynamic.DynamicCrudRequest crudRequest = new com.rcs.ssf.dynamic.DynamicCrudRequest(
@@ -249,7 +386,7 @@ public class DynamicCrudService {
                        fkc.ref_table_name,
                        fkc.ref_column_name
                 FROM user_tab_columns utc
-                LEFT JOIN user_col_comments ucc ON utc.table_name = ucc.table_name 
+                LEFT JOIN user_col_comments ucc ON utc.table_name = ucc.table_name
                                                 AND utc.column_name = ucc.column_name
                 LEFT JOIN (
                     SELECT ucc1.table_name,
@@ -267,21 +404,21 @@ public class DynamicCrudService {
                 """;
 
         List<DynamicCrudResponseDto.ColumnMeta> columns = jdbcTemplate.get().query(
-                sql,
-                (rs, rowNum) -> new DynamicCrudResponseDto.ColumnMeta(
-                        rs.getString("column_name"),
-                        rs.getString("data_type"),
-                        "Y".equals(rs.getString("nullable")),
-                        "Y".equals(rs.getString("is_primary_key")),
-                        rs.getObject("data_length") != null ? rs.getInt("data_length") : null,
-                        rs.getString("data_default"),
-                        rs.getObject("data_precision") != null ? rs.getInt("data_precision") : null,
-                        rs.getObject("data_scale") != null ? rs.getInt("data_scale") : null,
-                        "Y".equals(rs.getString("is_unique")),
-                        rs.getString("column_comment"),
-                        rs.getString("ref_table_name"),
-                        rs.getString("ref_column_name")),
-                tableName);
+            sql,
+            (rs, rowNum) -> new DynamicCrudResponseDto.ColumnMeta(
+                rs.getString("column_name"),
+                rs.getString("data_type"),
+                "Y".equals(rs.getString("nullable")),
+                "Y".equals(rs.getString("is_primary_key")),
+                rs.getObject("data_length") != null ? rs.getInt("data_length") : null,
+                safeReadColumnDefault(rs),
+                rs.getObject("data_precision") != null ? rs.getInt("data_precision") : null,
+                rs.getObject("data_scale") != null ? rs.getInt("data_scale") : null,
+                "Y".equals(rs.getString("is_unique")),
+                rs.getString("column_comment"),
+                rs.getString("ref_table_name"),
+                rs.getString("ref_column_name")),
+            tableName);
 
         return columns.stream()
                 .filter(meta -> !isSensitiveColumn(meta.getName()))
@@ -325,5 +462,82 @@ public class DynamicCrudService {
             return false;
         }
         return SENSITIVE_COLUMN_NAMES.contains(columnName.toUpperCase(Locale.ROOT));
+    }
+
+    private boolean isTextColumn(DynamicCrudResponseDto.ColumnMeta columnMeta) {
+        if (columnMeta == null || columnMeta.getType() == null) {
+            return false;
+        }
+        String type = columnMeta.getType().toUpperCase(Locale.ROOT);
+        return type.contains("CHAR") || type.contains("CLOB") || type.contains("TEXT") || type.contains("VARCHAR");
+    }
+
+    private String safeReadColumnDefault(ResultSet rs) throws SQLException {
+        try {
+            return rs.getString("data_default");
+        } catch (SQLException ex) {
+            if (ex.getErrorCode() == 17027) {
+                log.debug("Skipping data_default for column {} due to ORA-17027", rs.getString("column_name"));
+                return null;
+            }
+            throw ex;
+        }
+    }
+
+    private Object readColumnValue(ResultSet rs, int columnIndex) throws SQLException {
+        Object value = rs.getObject(columnIndex);
+        if (value == null) {
+            return null;
+        }
+
+        if (value instanceof TIMESTAMPTZ timestamptz) {
+            Connection connection = resolveConnection(rs);
+            if (connection != null) {
+                return timestamptz.offsetDateTimeValue(connection);
+            }
+            return timestamptz.stringValue();
+        }
+
+        if (value instanceof TIMESTAMP timestamp) {
+            Timestamp ts = timestamp.timestampValue();
+            return ts != null ? ts.toInstant() : null;
+        }
+
+        if (value instanceof Timestamp ts) {
+            return ts.toInstant();
+        }
+
+        if (value instanceof Date date) {
+            return date.toLocalDate();
+        }
+
+        if (value instanceof Time time) {
+            return time.toLocalTime();
+        }
+
+        if (value instanceof Clob clob) {
+            return readClob(clob);
+        }
+
+        return value;
+    }
+
+    private Connection resolveConnection(ResultSet rs) throws SQLException {
+        Statement statement = rs.getStatement();
+        return statement != null ? statement.getConnection() : null;
+    }
+
+    private String readClob(Clob clob) throws SQLException {
+        try (Reader reader = clob.getCharacterStream()) {
+            StringBuilder sb = new StringBuilder();
+            char[] buffer = new char[2048];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                sb.append(buffer, 0, read);
+            }
+            return sb.toString();
+        } catch (IOException ex) {
+            throw new SQLException("Failed to read CLOB value", ex);
+        }
     }
 }

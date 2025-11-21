@@ -32,20 +32,24 @@ public class ImportExportService {
     private final Set<String> allowedTables;
 
     public ImportExportService(BulkCrudService bulkCrudService,
-                               DynamicCrudService dynamicCrudService,
-                               @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole,
-                               @Value("${importExport.allowedTables:audit_login_attempts,audit_sessions,audit_dynamic_crud,audit_error_log}") String allowedTablesStr) {
+            DynamicCrudService dynamicCrudService,
+            ObjectMapper objectMapper,
+            @Value("${security.dynamicCrud.requiredRole:ROLE_ADMIN}") String requiredRole,
+            @Value("${importExport.allowedTables:audit_login_attempts,audit_sessions,audit_dynamic_crud,audit_error_log}") String allowedTablesStr) {
         this.bulkCrudService = bulkCrudService;
         this.dynamicCrudService = dynamicCrudService;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
         this.requiredRole = requiredRole;
+        // allowedTables normalized to lowercase for case-insensitive lookups
         this.allowedTables = Arrays.stream(allowedTablesStr.split(","))
                 .map(String::trim)
+                .map(String::toLowerCase)
                 .collect(Collectors.toSet());
     }
 
     /**
-     * Imports data from JSON or CSV format with validation, optional dry-run, and conversion to bulk operations.
+     * Imports data from JSON or CSV format with validation, optional dry-run, and
+     * conversion to bulk operations.
      * Supports flexible column mapping and error handling strategies.
      *
      * @param request Import request with format, data, and operation details
@@ -61,7 +65,7 @@ public class ImportExportService {
 
         try {
             List<BulkCrudRequest.BulkRow> rows = parseData(request);
-            
+
             // Apply column mapping if provided
             if (request.getColumnMapping() != null && !request.getColumnMapping().isEmpty()) {
                 rows = applyColumnMapping(rows, request.getColumnMapping());
@@ -74,19 +78,20 @@ public class ImportExportService {
             bulkRequest.setDryRun(request.isDryRun());
             bulkRequest.setSkipOnError(request.isSkipOnError());
             bulkRequest.setBatchSize(100);
-            bulkRequest.setMetadata("import_" + request.getFormat().name().toLowerCase() 
+            bulkRequest.setMetadata("import_" + request.getFormat().name().toLowerCase()
                     + "_" + UUID.randomUUID().toString());
 
             return bulkCrudService.executeBulkOperation(bulkRequest);
         } catch (Exception ex) {
             log.error("Import failed for table '{}'", request.getTableName(), ex);
-            return new BulkCrudResponse(0, 0, 1, 0, Status.IMPORT_FAILED, 
+            return new BulkCrudResponse(0, 0, 1, 0, Status.IMPORT_FAILED,
                     List.of(new BulkCrudResponse.RowError(0, ex.getMessage(), "IMPORT_ERROR")), 0L);
         }
     }
 
     /**
-     * Exports table data in specified format (CSV, JSON, JSONL) for roundtrip operations.
+     * Exports table data in specified format (CSV, JSON, JSONL) for roundtrip
+     * operations.
      * Respects column filtering and authentication-based access control.
      *
      * @param request Export request with format and table specifications
@@ -106,7 +111,7 @@ public class ImportExportService {
             selectRequest.setFilters(request.getFilters());
 
             DynamicCrudResponseDto response = dynamicCrudService.executeSelect(selectRequest);
-            
+
             // Filter columns if specified
             List<String> columnsToExport = request.getColumns();
             if (columnsToExport == null || columnsToExport.isEmpty()) {
@@ -119,10 +124,9 @@ public class ImportExportService {
                     response.getRows(),
                     columnsToExport,
                     request.getFormat(),
-                    request.isIncludeHeaders()
-            );
+                    request.isIncludeHeaders());
 
-            String fileName = request.getFileName() != null 
+            String fileName = request.getFileName() != null
                     ? request.getFileName()
                     : request.getTableName() + "_export." + getFileExtension(request.getFormat());
 
@@ -140,7 +144,7 @@ public class ImportExportService {
         if (request.getTableName() == null || request.getTableName().isBlank()) {
             throw new IllegalArgumentException("Table name is required");
         }
-        if (!allowedTables.contains(request.getTableName().toLowerCase(Locale.ROOT))) {
+        if (!allowedTables.contains(request.getTableName().toLowerCase())) {
             throw new IllegalArgumentException("Table not allowed: " + request.getTableName());
         }
         if (request.getFormat() == null) {
@@ -161,7 +165,7 @@ public class ImportExportService {
         if (request.getTableName() == null || request.getTableName().isBlank()) {
             throw new IllegalArgumentException("Table name is required");
         }
-        if (!allowedTables.contains(request.getTableName().toLowerCase(Locale.ROOT))) {
+        if (!allowedTables.contains(request.getTableName().toLowerCase())) {
             throw new IllegalArgumentException("Table not allowed: " + request.getTableName());
         }
         if (request.getFormat() == null) {
@@ -202,8 +206,8 @@ public class ImportExportService {
 
             for (int j = 0; j < Math.min(headers.length, values.length); j++) {
                 String originalName = headers[j];
-                String columnName = columnMapping != null && columnMapping.containsKey(originalName) 
-                        ? columnMapping.get(originalName) 
+                String columnName = columnMapping != null && columnMapping.containsKey(originalName)
+                        ? columnMapping.get(originalName)
                         : originalName;
                 DynamicCrudRequest.ColumnValue col = new DynamicCrudRequest.ColumnValue();
                 col.setName(columnName);
@@ -219,7 +223,10 @@ public class ImportExportService {
     }
 
     /**
-     * Parses a CSV line respecting quoted fields.
+     * Parses a CSV line respecting quoted fields and handling escaped quotes ("" ->
+     * ").
+     * Properly handles fields like "He said ""Hello""" which should parse as: He
+     * said "Hello"
      */
     private String[] parseCSVLine(String line) {
         List<String> values = new ArrayList<>();
@@ -228,9 +235,16 @@ public class ImportExportService {
 
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
-            
+
             if (c == '"') {
-                inQuotes = !inQuotes;
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    // Escaped quote: "" -> append single "
+                    current.append('"');
+                    i++; // Skip next quote
+                } else {
+                    // Toggle quote state
+                    inQuotes = !inQuotes;
+                }
             } else if (c == ',' && !inQuotes) {
                 values.add(current.toString().trim());
                 current = new StringBuilder();
@@ -246,7 +260,8 @@ public class ImportExportService {
     /**
      * Parses JSON array format data.
      */
-    private List<BulkCrudRequest.BulkRow> parseJSON(String jsonData, Map<String, String> columnMapping) throws IOException {
+    private List<BulkCrudRequest.BulkRow> parseJSON(String jsonData, Map<String, String> columnMapping)
+            throws IOException {
         List<BulkCrudRequest.BulkRow> rows = new ArrayList<>();
         JsonNode root = objectMapper.readTree(jsonData);
 
@@ -271,9 +286,30 @@ public class ImportExportService {
 
                 DynamicCrudRequest.ColumnValue col = new DynamicCrudRequest.ColumnValue();
                 col.setName(columnName);
-                
+
                 JsonNode value = item.get(fieldName);
-                col.setValue(value.isNull() ? null : value.asText());
+                // Preserve type information instead of coercing to String
+                Object typedValue = null;
+                if (value.isNull()) {
+                    typedValue = null;
+                } else if (value.isBoolean()) {
+                    typedValue = value.asBoolean();
+                } else if (value.isNumber()) {
+                    // Check if it's an integer or floating point
+                    if (value.isIntegralNumber()) {
+                        typedValue = value.asLong();
+                    } else {
+                        typedValue = value.asDouble();
+                    }
+                } else if (value.isTextual()) {
+                    typedValue = value.asText();
+                } else if (value.isArray() || value.isObject()) {
+                    // For complex types, keep as JsonNode or convert to string representation
+                    typedValue = value.toString();
+                } else {
+                    typedValue = value.asText();
+                }
+                col.setValue(typedValue);
                 columns.add(col);
             }
 
@@ -288,12 +324,12 @@ public class ImportExportService {
      * Applies column mapping transformation to rows.
      */
     private List<BulkCrudRequest.BulkRow> applyColumnMapping(List<BulkCrudRequest.BulkRow> rows,
-                                                             Map<String, String> mapping) {
+            Map<String, String> mapping) {
         return rows.stream()
                 .map(row -> {
                     List<DynamicCrudRequest.ColumnValue> newColumns = new ArrayList<>();
                     List<DynamicCrudRequest.ColumnValue> oldColumns = row.getColumns();
-                    
+
                     for (DynamicCrudRequest.ColumnValue old : oldColumns) {
                         String newName = mapping.getOrDefault(old.getName(), old.getName());
                         DynamicCrudRequest.ColumnValue mapped = new DynamicCrudRequest.ColumnValue();
@@ -301,7 +337,7 @@ public class ImportExportService {
                         mapped.setValue(old.getValue());
                         newColumns.add(mapped);
                     }
-                    
+
                     BulkCrudRequest.BulkRow newRow = new BulkCrudRequest.BulkRow();
                     newRow.setColumns(newColumns);
                     newRow.setFilters(row.getFilters());
@@ -314,7 +350,7 @@ public class ImportExportService {
      * Formats row data into specified export format.
      */
     private String formatExport(List<Map<String, Object>> rows, List<String> columns,
-                                ExportRequest.ExportFormat format, boolean includeHeaders) {
+            ExportRequest.ExportFormat format, boolean includeHeaders) {
         return switch (format) {
             case CSV -> formatAsCSV(rows, columns, includeHeaders);
             case JSON -> formatAsJSON(rows, columns);
@@ -411,7 +447,8 @@ public class ImportExportService {
 
     /**
      * Estimates row count from data string for logging.
-     * Note: This is an estimate and may overcount for CSV data with embedded newlines in quoted fields.
+     * Note: This is an estimate and may overcount for CSV data with embedded
+     * newlines in quoted fields.
      */
     private int estimateRowCount(String data) {
         return Math.max(1, data.split("\n").length - 1);
@@ -449,8 +486,16 @@ public class ImportExportService {
             this.format = format;
         }
 
-        public String getFileName() { return fileName; }
-        public String getData() { return data; }
-        public String getFormat() { return format; }
+        public String getFileName() {
+            return fileName;
+        }
+
+        public String getData() {
+            return data;
+        }
+
+        public String getFormat() {
+            return format;
+        }
     }
 }

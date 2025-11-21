@@ -23,6 +23,7 @@ public class ComplianceMetricsService {
     private volatile double soxControlStatus = 0.0;
 
     private Counter successfulLoginCounter;
+    private Counter successfulRegistrationCounter;
     private Counter logoutCounter;
 
     public ComplianceMetricsService(MeterRegistry meterRegistry) {
@@ -50,6 +51,11 @@ public class ComplianceMetricsService {
         // Counter for successful login attempts
         successfulLoginCounter = Counter.builder("ssf_successful_login_attempts_total")
                 .description("Total number of successful login attempts")
+                .register(meterRegistry);
+
+        // Counter for successful registration attempts
+        successfulRegistrationCounter = Counter.builder("ssf_successful_registration_attempts_total")
+                .description("Total number of successful registration attempts")
                 .register(meterRegistry);
 
         // Counter for logout events
@@ -88,18 +94,23 @@ public class ComplianceMetricsService {
 
     /**
      * Increment the failed login attempts counter with a specific reason.
-     * Uses tagged counters for detailed breakdown by failure reason (e.g., INVALID_CREDENTIALS, MFA_FAILED).
-     * Note: This creates a new counter per unique tag combination; for high-cardinality reasons,
+     * Uses tagged counters for detailed breakdown by failure reason (e.g.,
+     * INVALID_CREDENTIALS, MFA_FAILED).
+     * Note: This creates a new counter per unique tag combination; for
+     * high-cardinality reasons,
      * consider caching counters to avoid metric explosion.
      */
     public void incrementFailedLoginAttempts(String reason) {
-        meterRegistry.counter("ssf_failed_login_attempts_total", "reason", reason != null ? reason : "UNKNOWN").increment();
+        meterRegistry.counter("ssf_failed_login_attempts_total", "reason", reason != null ? reason : "UNKNOWN")
+                .increment();
     }
 
     /**
      * Increment the successful login attempts counter.
-     * Uses a pre-registered counter for consistency and to avoid per-request counter creation overhead.
-     * Unlike failed attempts, successful logins don't require reason-based tagging as they are uniform.
+     * Uses a pre-registered counter for consistency and to avoid per-request
+     * counter creation overhead.
+     * Unlike failed attempts, successful logins don't require reason-based tagging
+     * as they are uniform.
      */
     public void incrementSuccessfulLoginAttempts() {
         if (successfulLoginCounter != null) {
@@ -108,8 +119,20 @@ public class ComplianceMetricsService {
     }
 
     /**
+     * Increment the successful registration attempts counter.
+     * Uses a pre-registered counter for consistency and to track user registration
+     * events.
+     */
+    public void incrementSuccessfulRegistrationAttempts() {
+        if (successfulRegistrationCounter != null) {
+            successfulRegistrationCounter.increment();
+        }
+    }
+
+    /**
      * Increment the logout attempts counter.
-     * Uses a pre-registered counter for consistency and to track user session termination events.
+     * Uses a pre-registered counter for consistency and to track user session
+     * termination events.
      */
     public void incrementLogoutAttempts() {
         if (logoutCounter != null) {

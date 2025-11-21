@@ -8,6 +8,8 @@ import com.rcs.ssf.dynamic.DynamicCrudRequest;
 import com.rcs.ssf.dynamic.DynamicCrudResponse;
 import com.rcs.ssf.dynamic.PlsqlInstrumentationSupport;
 import com.rcs.ssf.entity.User;
+import com.rcs.ssf.exception.UsernameAlreadyExistsException;
+import com.rcs.ssf.exception.EmailAlreadyExistsException;
 import com.rcs.ssf.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.ConnectionCallback;
@@ -143,8 +145,7 @@ public class UserService {
                     .ifPresentOrElse(
                             user::setId,
                             () -> log.warn("No generated ID returned from JDBC CREATE operation for user: {}",
-                                    user.getUsername())
-                    );
+                                    user.getUsername()));
             if (user.getId() == null) {
                 log.error("JDBC createUser failed to populate ID. Response: {}", response);
                 throw new IllegalStateException("GENERATED_ID_NOT_FOUND");
@@ -161,7 +162,7 @@ public class UserService {
             return new IllegalStateException("USER_PERSIST_FAILED");
         });
         log.debug("R2DBC saved user: username={}, id={}", savedUser.getUsername(), savedUser.getId());
-        
+
         // Fetch the persisted user by username to populate the generated ID
         // R2DBC doesn't return generated IDs for sequence-based PKs, so we refetch
         User persistedUser = findByUsername(user.getUsername())
@@ -171,12 +172,12 @@ public class UserService {
                 });
         log.debug("R2DBC fetched persisted user: username={}, id={}", persistedUser.getUsername(),
                 persistedUser.getId());
-        
+
         if (persistedUser.getId() == null) {
             log.error("R2DBC createUser failed to populate ID. User: {}", persistedUser);
             throw new IllegalStateException("GENERATED_ID_NOT_FOUND");
         }
-        
+
         return persistedUser;
     }
 
@@ -328,7 +329,7 @@ public class UserService {
             User found = existingUser.get();
             // If a user with this username exists and is NOT the current user, it's in use
             if (!Objects.equals(found.getId(), currentUserId)) {
-                throw new IllegalArgumentException("USERNAME_IN_USE");
+                throw new UsernameAlreadyExistsException("Username '" + username + "' is already in use");
             }
         }
     }
@@ -336,7 +337,7 @@ public class UserService {
     private void ensureEmailAvailable(String email, Long currentUserId) {
         Optional<User> existingUser = findByEmail(email);
         if (existingUser.isPresent() && !Objects.equals(existingUser.get().getId(), currentUserId)) {
-            throw new IllegalArgumentException("EMAIL_IN_USE");
+            throw new EmailAlreadyExistsException("Email '" + email + "' is already in use");
         }
     }
 
@@ -354,10 +355,11 @@ public class UserService {
 
     /**
      * Block a Mono on the operation timeout, returning an Optional.
-     * Centralizes the common pattern of mono.timeout(OPERATION_TIMEOUT).blockOptional()
+     * Centralizes the common pattern of
+     * mono.timeout(OPERATION_TIMEOUT).blockOptional()
      * used throughout this service for R2DBC operations.
      *
-     * @param <T> the type of element emitted by the mono
+     * @param <T>  the type of element emitted by the mono
      * @param mono the mono to block
      * @return Optional containing the result, or empty if mono completes empty
      */

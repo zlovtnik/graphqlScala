@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ElementRef, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormGroup } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormGroup, FormBuilder, Validators, FormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzButtonModule } from 'ng-zorro-antd/button';
@@ -13,16 +13,33 @@ import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzMessageService, NzMessageModule } from 'ng-zorro-antd/message';
 import { NzPopconfirmModule } from 'ng-zorro-antd/popconfirm';
 import { NzAlertModule } from 'ng-zorro-antd/alert';
+import { NzTagModule } from 'ng-zorro-antd/tag';
 import { Subject, Observable, of } from 'rxjs';
-import { takeUntil, catchError } from 'rxjs/operators';
+import { takeUntil, catchError, debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { HttpClient } from '@angular/common/http';
 import { ModalService } from '../../../../core/services/modal.service';
 import { KeyboardService } from '../../../../core/services/keyboard.service';
 import { DynamicFormService, ColumnMeta } from '../../services/dynamic-form.service';
 import { DynamicFormFieldComponent } from '../../components/dynamic-form-field.component';
+import { environment } from '../../../../../environments/environment';
 
 interface TableData {
   [key: string]: any;
+}
+
+type ComparisonOperator = 'EQ' | 'NE' | 'GT' | 'LT' | 'GE' | 'LE' | 'LIKE';
+type LogicalOperator = 'AND' | 'OR';
+
+interface GlobalSearchDescriptor {
+  term: string;
+  columns?: string[];
+  matchMode?: 'CONTAINS' | 'STARTS_WITH' | 'ENDS_WITH' | 'EXACT';
+  caseSensitive?: boolean;
+}
+
+interface FilterGroup {
+  operator: LogicalOperator;
+  filters: Array<{column: string; operator: ComparisonOperator; value: any}>;
 }
 
 interface DynamicCrudRequest {
@@ -31,9 +48,11 @@ interface DynamicCrudRequest {
   columns?: Array<{name: string, value: any}>;
   filters?: Array<{
     column: string;
-    operator: 'EQ' | 'NE' | 'GT' | 'LT' | 'GE' | 'LE' | 'LIKE';
+    operator: ComparisonOperator;
     value: any;
   }>;
+  filterGroups?: FilterGroup[];
+  globalSearch?: GlobalSearchDescriptor;
   limit?: number;
   offset?: number;
   orderBy?: string;
@@ -44,6 +63,13 @@ interface DynamicCrudResponse {
   rows: TableData[];
   totalCount: number;
   columns: ColumnMeta[];
+}
+
+interface QueryFilterChip {
+  id: string;
+  column: string;
+  operator: ComparisonOperator;
+  value: string;
 }
 
 @Component({
@@ -64,12 +90,15 @@ interface DynamicCrudResponse {
     NzMessageModule,
     NzPopconfirmModule,
     NzAlertModule,
+    NzTagModule,
     DynamicFormFieldComponent
   ],
   templateUrl: './table-browser.component.html',
   styleUrls: ['./table-browser.component.css']
 })
 export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
+  private readonly apiBaseUrl = environment.apiUrl;
+
   availableTables: string[] = [];
   selectedTable: string = '';
   tableData: TableData[] = [];
@@ -79,7 +108,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   pageSize = 10;
   currentPage = 1;
   searchValue = '';
-  selectedSearchColumn = '';
+  globalSearchColumns: string[] = [];
   sortField = '';
   sortOrder: 'ASC' | 'DESC' = 'ASC';
 
@@ -90,6 +119,19 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   createFormGroup: FormGroup | null = null;
   editFormGroup: FormGroup | null = null;
   formColumnError: string | null = null;
+  filterBuilderForm: FormGroup;
+  filterChips: QueryFilterChip[] = [];
+  filterGroupOperator: LogicalOperator = 'AND';
+  operatorOptions: Array<{ label: string; value: ComparisonOperator }> = [
+    { label: 'Contains', value: 'LIKE' },
+    { label: 'Equals', value: 'EQ' },
+    { label: 'Not equals', value: 'NE' },
+    { label: 'Greater than', value: 'GT' },
+    { label: 'Greater or equal', value: 'GE' },
+    { label: 'Less than', value: 'LT' },
+    { label: 'Less or equal', value: 'LE' }
+  ];
+  globalSearchControl = new FormControl<string>('', { nonNullable: true });
 
   private destroy$ = new Subject<void>();
   private createModalCloseHandler?: () => void;
@@ -111,11 +153,25 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   constructor(
     private http: HttpClient,
     private message: NzMessageService,
-    private router: Router
-  ) {}
+    private router: Router,
+    private formBuilder: FormBuilder
+  ) {
+    this.filterBuilderForm = this.formBuilder.group({
+      column: [null, Validators.required],
+      operator: ['LIKE', Validators.required],
+      value: ['', Validators.required]
+    });
+  }
 
   ngOnInit(): void {
     this.loadAvailableTables();
+    this.globalSearchControl.valueChanges
+      .pipe(debounceTime(350), distinctUntilChanged(), takeUntil(this.destroy$))
+      .subscribe(value => {
+        this.searchValue = value ?? '';
+        this.currentPage = 1;
+        this.loadTableData();
+      });
   }
 
     ngAfterViewInit(): void {
@@ -147,7 +203,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   loadAvailableTables(): void {
-    this.http.get<string[]>('/api/dynamic-crud/tables')
+    this.http.get<string[]>(this.apiUrl('/api/dynamic-crud/tables'))
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (tables) => {
@@ -165,7 +221,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   onTableSelect(table: string): void {
     this.selectedTable = table;
     this.currentPage = 1;
-    this.searchValue = '';
+    this.resetSearchBuilderState();
     this.sortField = '';
     this.loadTableData();
   }
@@ -183,11 +239,33 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
       orderDirection: this.sortOrder
     };
 
-    if (this.searchValue && this.columns.length > 0) {
+    const globalSearch = this.buildGlobalSearchDescriptor();
+    if (globalSearch) {
+      request.globalSearch = globalSearch;
+    } else if (this.searchValue && this.columns.length > 0) {
       request.filters = this.buildSearchFilters();
     }
 
-    this.http.post<DynamicCrudResponse>('/api/dynamic-crud/execute', request)
+    const filterGroups = this.buildFilterGroupPayload();
+    if (filterGroups) {
+      request.filterGroups = filterGroups;
+    }
+
+    const executeEndpoint = this.apiUrl('/api/dynamic-crud/execute');
+    const absoluteEndpoint = executeEndpoint;
+    // eslint-disable-next-line no-console
+    console.debug('[DynamicCrudDebug] loadTableData issuing execute request', {
+      executeEndpoint,
+      absoluteEndpoint,
+      selectedTable: this.selectedTable,
+      pagination: { page: this.currentPage, pageSize: this.pageSize },
+      sort: { field: this.sortField, order: this.sortOrder },
+      hasFilters: Boolean(request.filters?.length),
+      hasFilterGroups: Boolean(request.filterGroups?.length),
+      hasGlobalSearch: Boolean(request.globalSearch)
+    });
+
+    this.http.post<DynamicCrudResponse>(executeEndpoint, request)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
@@ -249,8 +327,87 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onSearch(): void {
-    this.currentPage = 1;
+    this.searchValue = this.globalSearchControl.value ?? '';
+    this.triggerSearch();
+  }
+
+  private triggerSearch(resetPage: boolean = true): void {
+    if (resetPage) {
+      this.currentPage = 1;
+    }
     this.loadTableData();
+  }
+
+  clearGlobalSearch(): void {
+    const hadSearch = Boolean(this.searchValue?.trim());
+    const hadColumnOverrides = this.globalSearchColumns.length > 0;
+    if (!hadSearch && !hadColumnOverrides) {
+      return;
+    }
+
+    this.searchValue = '';
+    this.globalSearchColumns = [];
+    this.globalSearchControl.setValue('', { emitEvent: hadSearch });
+
+    if (hadColumnOverrides && !hadSearch) {
+      this.triggerSearch();
+    }
+  }
+
+  onGlobalSearchColumnsChange(columns: string[] | null): void {
+    this.globalSearchColumns = columns ?? [];
+    this.triggerSearch();
+  }
+
+  addFilterChip(): void {
+    if (this.filterBuilderForm.invalid) {
+      this.filterBuilderForm.markAllAsTouched();
+      return;
+    }
+
+    const { column, operator, value } = this.filterBuilderForm.value;
+    if (!column || !operator || value === null || value === undefined || value === '') {
+      return;
+    }
+
+    const chipValue = typeof value === 'string' ? value.trim() : String(value);
+    if (chipValue === '') {
+      return;
+    }
+
+    const newChip: QueryFilterChip = {
+      id: this.createChipId(),
+      column,
+      operator,
+      value: chipValue
+    };
+
+    this.filterChips = [...this.filterChips, newChip];
+    this.filterBuilderForm.patchValue({ value: '' });
+    this.triggerSearch();
+  }
+
+  removeFilterChip(chipId: string): void {
+    this.filterChips = this.filterChips.filter(chip => chip.id !== chipId);
+    this.triggerSearch(false);
+  }
+
+  clearFilterChips(): void {
+    if (!this.filterChips.length) {
+      return;
+    }
+    this.filterChips = [];
+    this.triggerSearch();
+  }
+
+  onFilterGroupOperatorChange(operator: LogicalOperator): void {
+    if (this.filterGroupOperator === operator) {
+      return;
+    }
+    this.filterGroupOperator = operator;
+    if (this.filterChips.length) {
+      this.triggerSearch(false);
+    }
   }
 
   showCreateModal(): void {
@@ -301,7 +458,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
       columns
     };
 
-    this.http.post('/api/dynamic-crud/execute', request)
+    this.http.post(this.apiUrl('/api/dynamic-crud/execute'), request)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: () => {
@@ -372,7 +529,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
         filters
       };
 
-      this.http.post('/api/dynamic-crud/execute', request)
+      this.http.post(this.apiUrl('/api/dynamic-crud/execute'), request)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: () => {
@@ -424,7 +581,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
         filters
       };
 
-      this.http.post('/api/dynamic-crud/execute', request)
+      this.http.post(this.apiUrl('/api/dynamic-crud/execute'), request)
         .pipe(takeUntil(this.destroy$))
         .subscribe({
           next: () => {
@@ -501,22 +658,71 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
     this.router.navigate(['/dashboard']);
   }
 
-  private buildSearchFilters(): Array<{column: string, operator: 'EQ' | 'NE' | 'GT' | 'LT' | 'GE' | 'LE' | 'LIKE', value: any}> {
-    if (this.selectedSearchColumn) {
-      return [{ column: this.selectedSearchColumn, operator: 'LIKE', value: `%${this.searchValue}%` }];
-    } else {
-      const textColumns = this.columns.filter(col => this.isTextColumn(col.type));
-      if (textColumns.length > 0) {
-        return textColumns.map(col => ({ column: col.name, operator: 'LIKE' as const, value: `%${this.searchValue}%` }));
-      } else {
-        return [];
-      }
+  private buildGlobalSearchDescriptor(): GlobalSearchDescriptor | undefined {
+    const trimmedValue = this.searchValue?.trim();
+    if (!trimmedValue) {
+      return undefined;
     }
+
+    const descriptor: GlobalSearchDescriptor = {
+      term: trimmedValue,
+      matchMode: 'CONTAINS'
+    };
+
+    if (this.globalSearchColumns.length > 0) {
+      descriptor.columns = [...this.globalSearchColumns];
+    }
+
+    return descriptor;
+  }
+
+  private buildFilterGroupPayload(): FilterGroup[] | undefined {
+    if (!this.filterChips.length) {
+      return undefined;
+    }
+
+    return [{
+      operator: this.filterGroupOperator,
+      filters: this.filterChips.map(chip => ({
+        column: chip.column,
+        operator: chip.operator,
+        value: chip.value
+      }))
+    }];
+  }
+
+  private buildSearchFilters(): Array<{column: string, operator: ComparisonOperator, value: any}> {
+    const fallbackColumns = this.globalSearchColumns.length > 0
+      ? this.globalSearchColumns
+      : this.columns.filter(col => this.isTextColumn(col.type)).map(col => col.name);
+
+    if (fallbackColumns.length === 0) {
+      return [];
+    }
+
+    return fallbackColumns.map(column => ({ column, operator: 'LIKE', value: `%${this.searchValue}%` }));
   }
 
   private isTextColumn(type: string): boolean {
     const lowerType = type.toLowerCase();
     return lowerType.includes('char') || lowerType.includes('varchar') || lowerType.includes('text') || lowerType.includes('clob');
+  }
+
+  private resetSearchBuilderState(): void {
+    this.searchValue = '';
+    this.globalSearchColumns = [];
+    this.filterChips = [];
+    this.filterGroupOperator = 'AND';
+    this.globalSearchControl.setValue('', { emitEvent: false });
+    this.filterBuilderForm.reset({ column: null, operator: 'LIKE', value: '' });
+  }
+
+  private createChipId(): string {
+    const cryptoApi = globalThis.crypto;
+    if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+      return cryptoApi.randomUUID();
+    }
+    return `chip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   private getPrimaryKeyColumns(): ColumnMeta[] {
@@ -538,7 +744,7 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
     // Step 1: Try to fetch from backend
     try {
       const result = await this.http.get<{ primaryKeys: string[] }>(
-        `/api/dynamic-crud/primary-keys?table=${encodeURIComponent(tableName)}`
+        this.apiUrl(`/api/dynamic-crud/primary-keys?table=${encodeURIComponent(tableName)}`)
       ).pipe(
         takeUntil(this.destroy$),
         catchError(() => of(null))
@@ -660,5 +866,12 @@ export class TableBrowserComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     return filters;
+  }
+
+  private apiUrl(path: string): string {
+    if (!path.startsWith('/')) {
+      return `${this.apiBaseUrl}/${path}`;
+    }
+    return `${this.apiBaseUrl}${path}`;
   }
 }

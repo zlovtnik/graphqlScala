@@ -20,6 +20,8 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -39,8 +41,12 @@ public class AuthController {
     @Autowired
     private UserService userService;
 
+    @Value("${app.jwt.expiration:86400000}")
+    private long jwtExpirationInMs;
+
     @PostMapping("/login")
-    public ResponseEntity<?> authenticateUser(@RequestBody AuthRequest loginRequest, HttpServletRequest request) {
+    public ResponseEntity<?> authenticateUser(@RequestBody AuthRequest loginRequest, HttpServletRequest request,
+            HttpServletResponse response) {
         String username = loginRequest.getUsername();
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader("User-Agent");
@@ -48,19 +54,23 @@ public class AuthController {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             username,
-                            loginRequest.getPassword()
-                    )
-            );
+                            loginRequest.getPassword()));
 
             String jwt = jwtTokenProvider.generateToken(authentication);
             auditService.logLoginAttempt(username, true, ipAddress, userAgent, null);
 
             var user = userService.findByUsername(username).orElseThrow(() -> {
-                LOGGER.error("Authenticated user missing in datastore for session start. username={}, ipAddress={}, userAgent={}",
+                LOGGER.error(
+                        "Authenticated user missing in datastore for session start. username={}, ipAddress={}, userAgent={}",
                         username, ipAddress, userAgent);
-                return new AuthenticationCredentialsNotFoundException("Authenticated user record not found for session start");
+                return new AuthenticationCredentialsNotFoundException(
+                        "Authenticated user record not found for session start");
             });
             auditService.logSessionStart(user.getId().toString(), jwt, ipAddress, userAgent);
+
+            // Set JWT token as httpOnly cookie for production environments
+            setAuthTokenCookie(response, jwt);
+
             return ResponseEntity.ok(new AuthResponse(jwt, UserDto.from(user)));
         } catch (AuthenticationException e) {
             auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
@@ -106,5 +116,39 @@ public class AuthController {
         return request.getRemoteAddr();
     }
 
-    public record TokenValidationResponse(boolean valid, String username) {}
+    /**
+     * Sets the JWT token as an httpOnly cookie in the response.
+     * The cookie is:
+     * - httpOnly: Not accessible from JavaScript (prevents XSS attacks)
+     * - Secure: Only sent over HTTPS in production
+     * - SameSite: Strict to prevent CSRF attacks
+     * 
+     * @param response The HTTP response to set the cookie on
+     * @param token    The JWT token to store
+     */
+    private void setAuthTokenCookie(HttpServletResponse response, String token) {
+        // Calculate max age in seconds (jwtExpirationInMs is in milliseconds)
+        int maxAgeSeconds = (int) (jwtExpirationInMs / 1000);
+
+        // Build the Set-Cookie header value
+        StringBuilder cookieValue = new StringBuilder();
+        cookieValue.append("auth-token=").append(token);
+        cookieValue.append("; Max-Age=").append(maxAgeSeconds);
+        cookieValue.append("; Path=/");
+        cookieValue.append("; HttpOnly");
+        cookieValue.append("; SameSite=Strict");
+
+        // Only set Secure flag in production (when scheme is https)
+        // For development, we allow http
+        if ("https".equalsIgnoreCase(System.getenv("SCHEME")) ||
+                "true".equalsIgnoreCase(System.getenv("SECURE_COOKIES"))) {
+            cookieValue.append("; Secure");
+        }
+
+        response.addHeader("Set-Cookie", cookieValue.toString());
+        LOGGER.debug("JWT token set as httpOnly cookie with max age {} seconds", maxAgeSeconds);
+    }
+
+    public record TokenValidationResponse(boolean valid, String username) {
+    }
 }

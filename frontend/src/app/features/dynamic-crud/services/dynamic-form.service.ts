@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, FormControl, Validators, AsyncValidator, Abstra
 import { Observable, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../environments/environment';
 
 export interface ColumnMeta {
   name: string;
@@ -28,6 +29,8 @@ export interface TableSchema {
   providedIn: 'root'
 })
 export class DynamicFormService {
+  private readonly apiBaseUrl = environment.apiUrl;
+
   constructor(
     private formBuilder: FormBuilder,
     private http: HttpClient
@@ -37,7 +40,7 @@ export class DynamicFormService {
    * Fetch table schema from backend
    */
   getTableSchema(tableName: string): Observable<TableSchema> {
-    return this.http.get<TableSchema>(`/api/dynamic-crud/schema/${tableName}`);
+    return this.http.get<TableSchema>(`${this.apiBaseUrl}/api/dynamic-crud/schema/${tableName}`);
   }
 
   /**

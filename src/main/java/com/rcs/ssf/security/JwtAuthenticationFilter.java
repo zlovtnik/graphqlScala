@@ -32,10 +32,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter implements Ord
     }
 
     @Override
-    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
+    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
+            @NonNull FilterChain filterChain)
             throws ServletException, IOException {
         try {
             String jwt = getJwtFromRequest(request);
+            String requestPath = request.getRequestURI();
+            log.debug("[JWT-FILTER] Processing {} request to {}", request.getMethod(), requestPath);
 
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
                 String username = tokenProvider.getUsernameFromJwt(jwt);
@@ -47,14 +50,26 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter implements Ord
                         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                         SecurityContextHolder.getContext().setAuthentication(authentication);
+                        log.debug("JWT authentication set for user: {} on path: {}", username, requestPath);
                     } catch (UsernameNotFoundException e) {
                         // User referenced in valid JWT token no longer exists in database
                         // This can happen if:
                         // 1. User account was deleted after JWT was issued
                         // 2. Database state is inconsistent with JWT
-                        // Token is valid but user doesn't exist - don't set authentication (graceful degradation)
-                        log.debug("User from valid JWT not found in database. This token will not be used for authentication. username: {}", username);
+                        // Token is valid but user doesn't exist - don't set authentication (graceful
+                        // degradation)
+                        log.debug(
+                                "User from valid JWT not found in database. This token will not be used for authentication. username: {}",
+                                username);
                     }
+                } else {
+                    log.debug("Could not extract username from valid JWT token on path: {}", requestPath);
+                }
+            } else {
+                if (!StringUtils.hasText(jwt)) {
+                    log.info("[JWT-FILTER] No JWT token found in request on path: {}", requestPath);
+                } else {
+                    log.info("[JWT-FILTER] JWT token validation failed on path: {}", requestPath);
                 }
             }
         } catch (Exception ex) {
@@ -65,10 +80,31 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter implements Ord
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {
+        // First, try to get token from Authorization header (development or explicit
+        // Bearer token)
         String bearerToken = request.getHeader("Authorization");
-        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
+        if (StringUtils.hasText(bearerToken)) {
+            log.debug("[JWT-FILTER] Authorization header is present");
+            if (bearerToken.startsWith("Bearer ")) {
+                String token = bearerToken.substring(7);
+                return token;
+            } else {
+                log.warn("[JWT-FILTER] Authorization header does not start with 'Bearer '");
+            }
+        } else {
+            log.debug("[JWT-FILTER] Authorization header is missing");
         }
+
+        // Fall back to checking for httpOnly cookie (production environment)
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if ("auth-token".equals(cookie.getName())) {
+                    log.debug("[JWT-FILTER] JWT token found in httpOnly cookie");
+                    return cookie.getValue();
+                }
+            }
+        }
+
         return null;
     }
 

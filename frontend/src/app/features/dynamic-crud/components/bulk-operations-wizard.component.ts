@@ -2,6 +2,7 @@ import { Component, OnInit, ViewChild, ElementRef, Input, OnDestroy } from '@ang
 import { CommonModule } from '@angular/common';
 import { FormsModule, ReactiveFormsModule, FormGroup, FormBuilder, FormControl, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { environment } from '../../../../environments/environment';
 import { Subject, takeUntil } from 'rxjs';
 
 import { NzTableModule } from 'ng-zorro-antd/table';
@@ -99,7 +100,7 @@ interface ImportRequest {
   template: `
     <div class="bulk-operations-container">
       <!-- Bulk Operations Tabs -->
-      <nz-tabset>
+      <nz-tabset #tabset>
         <!-- Bulk Execute Tab -->
         <nz-tab nzTitle="Bulk Operations">
           <div class="bulk-operations-section">
@@ -446,23 +447,21 @@ interface ImportRequest {
       max-height: 400px;
       overflow-y: auto;
     }
-
-    nz-tabset ::ng-deep .ant-tabs-tabpane {
-      padding: 16px 0;
-    }
   `]
 })
-export class BulkOperationsWizardComponent implements OnInit {
+export class BulkOperationsWizardComponent implements OnInit, OnDestroy {
+  private readonly apiBaseUrl = environment.apiUrl;
   @ViewChild('fileInput') fileInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('tabset') tabset?: any;
+  @Input() selectedTable = '';
 
   bulkForm: FormGroup;
   importForm: FormGroup;
-  exportForm: FormGroup;
+  exportForm!: FormGroup;
   rowEditorForm: FormGroup;
 
   bulkRows: BulkRow[] = [];
   columns: ColumnMeta[] = [];
-  selectedTable = '';
 
   isRowEditorVisible = false;
   bulkExecuting = false;
@@ -494,17 +493,21 @@ export class BulkOperationsWizardComponent implements OnInit {
       skipOnError: [false]
     });
 
+    this.rowEditorForm = this.fb.group({});
+  }
+
+  ngOnInit(): void {
+    // Initialize exportForm with resolved selectedTable
     this.exportForm = this.fb.group({
       format: ['CSV', Validators.required],
       includeHeaders: [true],
       fileName: [this.selectedTable + '_export']
     });
-
-    this.rowEditorForm = this.fb.group({});
   }
 
-  ngOnInit(): void {
-    // Component initialization
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   showBulkRowEditor(): void {
@@ -516,7 +519,7 @@ export class BulkOperationsWizardComponent implements OnInit {
     const formValue = this.rowEditorForm.value;
     const columns: Array<{ name: string; value: any }> = Object.keys(formValue)
       .map(key => ({ name: key, value: formValue[key] }))
-      .filter(col => col.value !== null && col.value !== '');
+      .filter(col => col.value !== null && col.value !== undefined);
 
     this.bulkRows.push({ columns });
     this.isRowEditorVisible = false;
@@ -545,13 +548,75 @@ export class BulkOperationsWizardComponent implements OnInit {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
-      this.importForm.patchValue({ data: content });
-      this.message.success('File loaded');
+
+      // Detect active tab - if Bulk Operations tab is active, parse into bulkRows
+      const activeTabIndex = this.tabset?.nzSelectedIndex ?? 1;
+      if (activeTabIndex === 0) {
+        // Bulk Operations tab - parse CSV/JSON into bulkRows
+        try {
+          const format = file.name.endsWith('.json') ? 'JSON' : 'CSV';
+          const parsedRows = format === 'JSON'
+            ? this.parseJSONForBulk(content)
+            : this.parseCSVForBulk(content);
+
+          this.bulkRows = parsedRows;
+          this.message.success(`Loaded ${parsedRows.length} rows into Bulk Operations`);
+        } catch (error) {
+          this.message.error(`Failed to parse file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      } else {
+        // Import tab - load into importForm.data
+        this.importForm.patchValue({ data: content });
+        this.message.success('File loaded');
+      }
     };
     reader.readAsText(file);
   }
 
+  private parseCSVForBulk(content: string): BulkRow[] {
+    const lines = content.split('\n').filter(line => line.trim());
+    if (lines.length < 2) {
+      throw new Error('CSV must have header and at least one data row');
+    }
+
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows: BulkRow[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      const columns = headers.map((header, idx) => ({
+        name: header,
+        value: values[idx] || ''
+      })).filter(col => col.value !== null && col.value !== undefined);
+
+      rows.push({ columns });
+    }
+
+    return rows;
+  }
+
+  private parseJSONForBulk(content: string): BulkRow[] {
+    const data = JSON.parse(content);
+    if (!Array.isArray(data)) {
+      throw new Error('JSON must be an array of objects');
+    }
+
+    return data.map(item => {
+      const columns = Object.entries(item).map(([name, value]) => ({
+        name,
+        value
+      })).filter(col => col.value !== null && col.value !== undefined);
+
+      return { columns };
+    });
+  }
+
   executeBulkOperation(): void {
+    if (!this.selectedTable) {
+      this.message.error('Please select a table');
+      return;
+    }
+
     if (!this.bulkForm.valid || this.bulkRows.length === 0) {
       this.message.error('Please select operation and add rows');
       return;
@@ -567,7 +632,7 @@ export class BulkOperationsWizardComponent implements OnInit {
       metadata: this.bulkForm.get('metadata')?.value
     };
 
-    this.http.post<BulkOperationResponse>('/api/dynamic-crud/bulk', request)
+    this.http.post<BulkOperationResponse>(this.apiUrl('/api/dynamic-crud/bulk'), request)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
@@ -578,8 +643,10 @@ export class BulkOperationsWizardComponent implements OnInit {
           }
         },
         error: (error) => {
-          this.message.error('Bulk operation failed');
-          console.error('Error:', error);
+          const errorMessage = error.error?.message || error.message || error.statusText || 'Unknown error';
+          this.message.error(`Bulk operation failed: ${errorMessage}`);
+          console.error('Bulk operation error:', error);
+          this.bulkExecuting = false;
         },
         complete: () => {
           this.bulkExecuting = false;
@@ -588,6 +655,11 @@ export class BulkOperationsWizardComponent implements OnInit {
   }
 
   executeImport(): void {
+    if (!this.selectedTable) {
+      this.message.error('Please select a table');
+      return;
+    }
+
     if (!this.importForm.valid) {
       this.message.error('Please fill all required fields');
       return;
@@ -603,7 +675,7 @@ export class BulkOperationsWizardComponent implements OnInit {
       skipOnError: this.importForm.get('skipOnError')?.value
     };
 
-    this.http.post<BulkOperationResponse>('/api/dynamic-crud/import', request)
+    this.http.post<BulkOperationResponse>(this.apiUrl('/api/dynamic-crud/import'), request)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
@@ -611,8 +683,10 @@ export class BulkOperationsWizardComponent implements OnInit {
           this.message.success('Import completed');
         },
         error: (error) => {
-          this.message.error('Import failed');
-          console.error('Error:', error);
+          const errorMessage = error.error?.message || error.message || error.statusText || 'Unknown error';
+          this.message.error(`Import failed: ${errorMessage}`);
+          console.error('Import error:', error);
+          this.importExecuting = false;
         },
         complete: () => {
           this.importExecuting = false;
@@ -621,34 +695,49 @@ export class BulkOperationsWizardComponent implements OnInit {
   }
 
   executeExport(): void {
+    if (!this.selectedTable) {
+      this.message.error('Please select a table');
+      return;
+    }
+
     if (!this.exportForm.valid) {
       this.message.error('Please select export format');
       return;
     }
 
     this.exportExecuting = true;
+    const format = this.exportForm.get('format')?.value;
+    const extensionMap: { [key: string]: string } = {
+      'CSV': 'csv',
+      'JSON': 'json',
+      'JSONL': 'jsonl'
+    };
+    const extension = extensionMap[format] || format.toLowerCase();
+
     const request = {
       tableName: this.selectedTable,
-      format: this.exportForm.get('format')?.value,
+      format: format,
       includeHeaders: this.exportForm.get('includeHeaders')?.value,
       fileName: this.exportForm.get('fileName')?.value
     };
 
-    this.http.post('/api/dynamic-crud/export', request, { responseType: 'blob' })
+    this.http.post(this.apiUrl('/api/dynamic-crud/export'), request, { responseType: 'blob' })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (blob) => {
           const url = window.URL.createObjectURL(blob);
           const link = document.createElement('a');
           link.href = url;
-          link.download = request.fileName || `export.${request.format.toLowerCase()}`;
+          link.download = request.fileName || `export.${extension}`;
           link.click();
           window.URL.revokeObjectURL(url);
           this.message.success('File exported successfully');
         },
         error: (error) => {
-          this.message.error('Export failed');
-          console.error('Error:', error);
+          const errorMessage = error.error?.message || error.message || error.statusText || 'Unknown error';
+          this.message.error(`Export failed: ${errorMessage}`);
+          console.error('Export error:', error);
+          this.exportExecuting = false;
         },
         complete: () => {
           this.exportExecuting = false;
@@ -670,5 +759,12 @@ export class BulkOperationsWizardComponent implements OnInit {
 
   getRowFieldControl(columnName: string): FormControl {
     return this.rowEditorForm.get(columnName) as FormControl;
+  }
+
+  private apiUrl(path: string): string {
+    if (!path.startsWith('/')) {
+      return `${this.apiBaseUrl}/${path}`;
+    }
+    return `${this.apiBaseUrl}${path}`;
   }
 }

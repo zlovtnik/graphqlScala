@@ -57,16 +57,10 @@ public class BulkCrudResponse {
     private void validateMetrics(int totalRows, int successfulRows, int failedRows,
             int processedRows, long durationMs) {
         if (totalRows < 0 || successfulRows < 0 || failedRows < 0 || processedRows < 0 || durationMs < 0) {
-            throw new IllegalArgumentException("BulkCrudResponse metrics must be non-negative");
-        }
-        if ((long) successfulRows + failedRows > totalRows) {
-            throw new IllegalArgumentException("successfulRows + failedRows cannot exceed totalRows");
+            throw new IllegalArgumentException("BulkCrudResponse metrics must be non-negative values");
         }
         if (processedRows > totalRows) {
-            throw new IllegalArgumentException("processedRows cannot exceed totalRows");
-        }
-        if ((long) successfulRows + failedRows > processedRows) {
-            throw new IllegalArgumentException("processedRows must be >= successfulRows + failedRows");
+            throw new IllegalArgumentException("processedRows must not exceed totalRows");
         }
     }
 

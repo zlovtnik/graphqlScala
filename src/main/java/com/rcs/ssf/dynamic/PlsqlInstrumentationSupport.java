@@ -10,8 +10,10 @@ import java.sql.SQLException;
 import java.util.Objects;
 
 /**
- * Wraps PL/SQL calls with DBMS_APPLICATION_INFO and DBMS_MONITOR hooks so the DBA team
- * can tie stored procedure latency back to specific GraphQL resolvers and REST endpoints.
+ * Wraps PL/SQL calls with DBMS_APPLICATION_INFO and DBMS_MONITOR hooks so the
+ * DBA team
+ * can tie stored procedure latency back to specific GraphQL resolvers and REST
+ * endpoints.
  */
 @Slf4j
 @Component
@@ -33,7 +35,7 @@ public class PlsqlInstrumentationSupport {
         } catch (SQLException ex) {
             throw new DataAccessResourceFailureException("Failed to execute instrumented PL/SQL block", ex);
         } finally {
-            disableMonitor(connection, moduleName, actionName);
+            disableMonitor();
             clearAction(connection);
             if (log.isTraceEnabled()) {
                 long durationMs = (System.nanoTime() - start) / 1_000_000;
@@ -43,32 +45,29 @@ public class PlsqlInstrumentationSupport {
     }
 
     private void setModuleAndAction(Connection connection, String module, String action) {
-        executeQuietly(connection, "begin dbms_application_info.set_module(module_name => ?, action_name => ?); end;", stmt -> {
-            stmt.setString(1, module);
-            stmt.setString(2, action);
-        });
+        executeQuietly(connection, "begin dbms_application_info.set_module(module_name => ?, action_name => ?); end;",
+                stmt -> {
+                    stmt.setString(1, module);
+                    stmt.setString(2, action);
+                });
     }
 
     private void clearAction(Connection connection) {
-        executeQuietly(connection, "begin dbms_application_info.set_action(null); end;", stmt -> { });
+        executeQuietly(connection, "begin dbms_application_info.set_action(null); end;", stmt -> {
+        });
     }
 
     private void enableMonitor(Connection connection, String module, String action) {
-        executeQuietly(connection,
-                "begin dbms_monitor.serv_mod_act_stat_enable(service_name => null, module_name => ?, action_name => ?); end;",
-                stmt -> {
-                    stmt.setString(1, module);
-                    stmt.setString(2, action);
-                });
+        // DBMS_MONITOR service-level monitoring requires DBA privileges, proper service
+        // configuration,
+        // and may not be available in Oracle Free. Skip it for now;
+        // DBMS_APPLICATION_INFO is sufficient
+        // for module/action tracking in v$session. Can be re-enabled in enterprise
+        // environments.
     }
 
-    private void disableMonitor(Connection connection, String module, String action) {
-        executeQuietly(connection,
-                "begin dbms_monitor.serv_mod_act_stat_disable(module_name => ?, action_name => ?); end;",
-                stmt -> {
-                    stmt.setString(1, module);
-                    stmt.setString(2, action);
-                });
+    private void disableMonitor() {
+        // DBMS_MONITOR disabled; see enableMonitor() for details.
     }
 
     private void executeQuietly(Connection connection, String plsql, StatementConfigurer configurer) {
@@ -76,7 +75,8 @@ public class PlsqlInstrumentationSupport {
             configurer.configure(statement);
             statement.execute();
         } catch (SQLException ex) {
-            // Tests running on H2 or environments lacking DBMS_* packages should not fail the request.
+            // Tests running on H2 or environments lacking DBMS_* packages should not fail
+            // the request.
             log.debug("Unable to execute instrumentation block '{}': {}", plsql, ex.getMessage());
         }
     }

@@ -10,6 +10,10 @@ GRANT CREATE TYPE TO APP_USER;
 GRANT EXECUTE ON DBMS_CRYPTO TO APP_USER;
 GRANT UNLIMITED TABLESPACE TO APP_USER;
 
+-- NOTE: DBMS_MONITOR access is restricted to DBA/monitoring roles only
+-- Do not grant EXECUTE on DBMS_MONITOR to application users
+-- If monitoring is required, grant only to a dedicated MONITOR_ROLE account
+
 -- If you need to drop and recreate, also grant DROP ANY TABLE, etc., but be careful
 -- GRANT DROP ANY TABLE TO APP_USER;
 -- GRANT ALTER ANY TABLE TO APP_USER;

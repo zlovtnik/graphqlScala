@@ -7,7 +7,6 @@ import com.rcs.ssf.service.DynamicCrudService;
 import com.rcs.ssf.service.ImportExportService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
@@ -16,7 +15,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/dynamic-crud")
-@PreAuthorize("isAuthenticated()")
 public class DynamicCrudController {
 
     private final DynamicCrudService dynamicCrudService;
@@ -84,5 +82,10 @@ public class DynamicCrudController {
     public ResponseEntity<DynamicCrudResponseDto.SchemaMetadata> getTableSchema(@PathVariable String table) {
         DynamicCrudResponseDto.SchemaMetadata schema = dynamicCrudService.getTableSchema(table);
         return ResponseEntity.ok(schema);
+    }
+
+    @GetMapping("/test-auth")
+    public ResponseEntity<String> testAuth() {
+        return ResponseEntity.ok("Authentication is working!");
     }
 }

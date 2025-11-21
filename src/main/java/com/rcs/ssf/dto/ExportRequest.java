@@ -2,6 +2,7 @@ package com.rcs.ssf.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.Valid;
 
 import java.util.List;
 
@@ -16,6 +17,7 @@ public class ExportRequest {
     @NotNull
     private ExportFormat format;
 
+    @Valid
     private List<DynamicCrudRequest.Filter> filters;
 
     private List<String> columns;
@@ -29,21 +31,51 @@ public class ExportRequest {
     }
 
     // Getters and setters
-    public String getTableName() { return tableName; }
-    public void setTableName(String tableName) { this.tableName = tableName; }
+    public String getTableName() {
+        return tableName;
+    }
 
-    public ExportFormat getFormat() { return format; }
-    public void setFormat(ExportFormat format) { this.format = format; }
+    public void setTableName(String tableName) {
+        this.tableName = tableName;
+    }
 
-    public List<DynamicCrudRequest.Filter> getFilters() { return filters; }
-    public void setFilters(List<DynamicCrudRequest.Filter> filters) { this.filters = filters; }
+    public ExportFormat getFormat() {
+        return format;
+    }
 
-    public List<String> getColumns() { return columns; }
-    public void setColumns(List<String> columns) { this.columns = columns; }
+    public void setFormat(ExportFormat format) {
+        this.format = format;
+    }
 
-    public boolean isIncludeHeaders() { return includeHeaders; }
-    public void setIncludeHeaders(boolean includeHeaders) { this.includeHeaders = includeHeaders; }
+    public List<DynamicCrudRequest.Filter> getFilters() {
+        return filters;
+    }
 
-    public String getFileName() { return fileName; }
-    public void setFileName(String fileName) { this.fileName = fileName; }
+    public void setFilters(List<DynamicCrudRequest.Filter> filters) {
+        this.filters = filters;
+    }
+
+    public List<String> getColumns() {
+        return columns;
+    }
+
+    public void setColumns(List<String> columns) {
+        this.columns = columns;
+    }
+
+    public boolean isIncludeHeaders() {
+        return includeHeaders;
+    }
+
+    public void setIncludeHeaders(boolean includeHeaders) {
+        this.includeHeaders = includeHeaders;
+    }
+
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
 }

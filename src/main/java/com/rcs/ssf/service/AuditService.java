@@ -40,6 +40,36 @@ public class AuditService {
         });
     }
 
+    /**
+     * Log a registration attempt to the audit trail.
+     * Uses the same underlying stored procedure as login attempts but with explicit
+     * event type.
+     *
+     * @param username      username of the registration attempt
+     * @param success       whether the registration succeeded
+     * @param ipAddress     client IP address
+     * @param userAgent     client user agent string
+     * @param failureReason reason for failure (null if successful)
+     */
+    public void logRegistrationAttempt(String username, boolean success, String ipAddress, String userAgent,
+            String failureReason) {
+        if (this.jdbcTemplate == null) {
+            log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_registration_attempt)");
+            return;
+        }
+        this.jdbcTemplate.execute((Connection con) -> {
+            try (CallableStatement cs = con.prepareCall("{ call user_pkg.log_login_attempt(?, ?, ?, ?, ?) }")) {
+                cs.setString(1, username);
+                cs.setInt(2, success ? 1 : 0);
+                cs.setString(3, ipAddress);
+                cs.setString(4, userAgent);
+                cs.setString(5, failureReason);
+                cs.execute();
+            }
+            return null;
+        });
+    }
+
     public void logSessionStart(String userId, String token, String ipAddress, String userAgent) {
         if (this.jdbcTemplate == null) {
             log.warn("Skipping audit log: DataSource/JdbcTemplate not configured (log_session_start)");

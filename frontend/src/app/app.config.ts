@@ -16,6 +16,7 @@ import { provideServiceWorker } from '@angular/service-worker';
 import { environment } from '../environments/environment';
 import { provideEcharts } from 'ngx-echarts';
 import { jwtInterceptor } from './core/interceptors/jwt.interceptor';
+import { dynamicCrudDebugInterceptor } from './core/interceptors/dynamic-crud-debug.interceptor';
 import { NzModalService } from 'ng-zorro-antd/modal';
 
 registerLocaleData(en);
@@ -28,7 +29,7 @@ export const appConfig: ApplicationConfig = {
     provideNzIcons(icons),
     provideNzI18n(en_US),
     provideAnimationsAsync(),
-    provideHttpClient(withFetch(), withInterceptors([jwtInterceptor])),
+    provideHttpClient(withFetch(), withInterceptors([dynamicCrudDebugInterceptor, jwtInterceptor])),
     graphqlProvider,
     HttpLink,
     provideEcharts(),

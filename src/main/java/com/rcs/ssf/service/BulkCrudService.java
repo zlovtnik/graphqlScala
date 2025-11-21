@@ -53,8 +53,10 @@ public class BulkCrudService {
     }
 
     /**
-     * Executes bulk CRUD operations with optional dry-run preview and progress tracking.
-     * All operations are audited through the DynamicCrudGateway with actor info and trace ID.
+     * Executes bulk CRUD operations with optional dry-run preview and progress
+     * tracking.
+     * All operations are audited through the DynamicCrudGateway with actor info and
+     * trace ID.
      *
      * @param request The bulk CRUD request containing rows and operation type
      * @return Response with success/failure counts and detailed error information
@@ -123,7 +125,8 @@ public class BulkCrudService {
         }
 
         long duration = System.currentTimeMillis() - startTime;
-        Status status = failureCount == 0 ? Status.SUCCESS : (successCount > 0 ? Status.PARTIAL_SUCCESS : Status.FAILURE);
+        Status status = failureCount == 0 ? Status.SUCCESS
+                : (successCount > 0 ? Status.PARTIAL_SUCCESS : Status.FAILURE);
 
         log.info("Bulk operation completed: {} rows processed in {} ms. Success: {}, Failures: {}",
                 processedCount.get(), duration, successCount, failureCount);
@@ -133,12 +136,13 @@ public class BulkCrudService {
     }
 
     /**
-     * Executes a single batch of rows, converting them to the internal DynamicCrudRequest format
+     * Executes a single batch of rows, converting them to the internal
+     * DynamicCrudRequest format
      * and routing through the DynamicCrudGateway with audit context.
      */
     private int executeBatch(String tableName, DynamicCrudRequest.Operation operation,
-                            List<BulkCrudRequest.BulkRow> batchRows,
-                            DynamicCrudAuditContext auditContext) {
+            List<BulkCrudRequest.BulkRow> batchRows,
+            DynamicCrudAuditContext auditContext) {
         List<DynamicCrudRow> crudRows = batchRows.stream()
                 .map(row -> convertBulkRowToCrudRow(tableName, row))
                 .collect(Collectors.toList());
@@ -149,8 +153,7 @@ public class BulkCrudService {
                 null, // columns are per-row in bulk operations
                 null, // filters are per-row in bulk operations
                 auditContext,
-                crudRows
-        );
+                crudRows);
 
         DynamicCrudResponse response = dynamicCrudGateway.execute(crudRequest);
         return (int) response.affectedRows();
@@ -161,8 +164,8 @@ public class BulkCrudService {
      * Returns a list of validation errors; empty list means validation passed.
      */
     private List<BulkCrudResponse.RowError> validateRows(String tableName,
-                                                         List<BulkCrudRequest.BulkRow> rows,
-                                                         DynamicCrudRequest.Operation operation) {
+            List<BulkCrudRequest.BulkRow> rows,
+            DynamicCrudRequest.Operation operation) {
         List<BulkCrudResponse.RowError> errors = new ArrayList<>();
 
         if (rows == null || rows.isEmpty()) {
@@ -218,10 +221,11 @@ public class BulkCrudService {
      * Creates a dry-run preview showing what would be executed.
      */
     private BulkCrudResponse.BulkDryRunPreview createDryRunPreview(String tableName,
-                                                                   DynamicCrudRequest.Operation operation,
-                                                                   int totalRows,
-                                                                   List<BulkCrudResponse.RowError> validationErrors) {
-        int estimatedAffected = validationErrors.isEmpty() ? totalRows : Math.max(0, totalRows - validationErrors.size());
+            DynamicCrudRequest.Operation operation,
+            int totalRows,
+            List<BulkCrudResponse.RowError> validationErrors) {
+        int estimatedAffected = validationErrors.isEmpty() ? totalRows
+                : Math.max(0, totalRows - validationErrors.size());
         String plan = String.format(
                 "Execute bulk %s on table '%s': %d rows will be processed, ~%d rows estimated to be affected",
                 operation, tableName, totalRows, estimatedAffected);
@@ -247,8 +251,7 @@ public class BulkCrudService {
                 actor,
                 traceId,
                 clientIp,
-                metadata != null ? metadata : "bulk_operation"
-        );
+                metadata != null ? metadata : "bulk_operation");
     }
 
     /**
@@ -257,14 +260,14 @@ public class BulkCrudService {
     private DynamicCrudRow convertBulkRowToCrudRow(String tableName, BulkCrudRequest.BulkRow bulkRow) {
         List<DynamicCrudColumnValue> columns = bulkRow.getColumns() != null
                 ? bulkRow.getColumns().stream()
-                .map(col -> new DynamicCrudColumnValue(col.getName(), col.getValue()))
-                .collect(Collectors.toList())
+                        .map(col -> new DynamicCrudColumnValue(col.getName(), col.getValue()))
+                        .collect(Collectors.toList())
                 : new ArrayList<>();
 
         List<DynamicCrudFilter> filters = bulkRow.getFilters() != null
                 ? bulkRow.getFilters().stream()
-                .map(f -> new DynamicCrudFilter(f.getColumn(), f.getOperator().getSymbol(), f.getValue()))
-                .collect(Collectors.toList())
+                        .map(f -> new DynamicCrudFilter(f.getColumn(), f.getOperator().getSymbol(), f.getValue()))
+                        .collect(Collectors.toList())
                 : new ArrayList<>();
 
         return new DynamicCrudRow(columns, filters);
@@ -275,10 +278,11 @@ public class BulkCrudService {
      */
     private DynamicCrudOperation toDynamicCrudOperation(DynamicCrudRequest.Operation operation) {
         return switch (operation) {
+            case SELECT ->
+                throw new IllegalArgumentException("SELECT operations are not supported for bulk operations");
             case INSERT -> DynamicCrudOperation.CREATE;
             case UPDATE -> DynamicCrudOperation.UPDATE;
             case DELETE -> DynamicCrudOperation.DELETE;
-            default -> throw new IllegalArgumentException("Unsupported operation: " + operation);
         };
     }
 
@@ -334,7 +338,8 @@ public class BulkCrudService {
      */
     private String getClientIp() {
         try {
-            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+            HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes())
+                    .getRequest();
             if (trustProxyHeaders) {
                 String xForwardedFor = request.getHeader("X-Forwarded-For");
                 if (xForwardedFor != null && !xForwardedFor.trim().isEmpty()) {
@@ -365,8 +370,11 @@ public class BulkCrudService {
 
     /**
      * Determines if bulk operation should skip on error.
+     * Forces skip-on-error for DELETE operations to prevent partial deletions.
+     * For INSERT/UPDATE, respects the explicit skipOnError flag and dryRun mode.
      */
     private boolean isSkipOnError(BulkCrudRequest request) {
-        return request.isSkipOnError() || request.isDryRun() || (request.getOperation() != DynamicCrudRequest.Operation.DELETE);
+        return request.isSkipOnError() || request.isDryRun()
+                || (request.getOperation() == DynamicCrudRequest.Operation.DELETE);
     }
 }
