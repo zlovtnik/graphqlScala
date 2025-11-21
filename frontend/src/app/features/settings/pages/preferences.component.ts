@@ -172,26 +172,32 @@ export class PreferencesSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.isSavingAppearance = true;
-    const preferences = this.appearanceForm.value;
+    const appearancePrefs = this.appearanceForm.value;
 
-    // TODO: Remove this temporary fix when GraphQL integration is complete
-    this.savePreferencesToStorage(preferences);
-    this.applyTheme(preferences.theme);
+    // Read existing preferences and merge appearance changes
+    const stored = localStorage.getItem('user-preferences');
+    const existingPrefs = stored ? JSON.parse(stored) : {};
+    const mergedPrefs = {
+      ...existingPrefs,
+      theme: appearancePrefs.theme,
+      language: appearancePrefs.language
+    };
+
+    // Save merged preferences to storage
+    this.savePreferencesToStorage(mergedPrefs);
+    this.applyTheme(appearancePrefs.theme);
     this.appearanceForm.markAsPristine();
     this.isSavingAppearance = false;
     this.msg.success('Appearance preferences saved locally');
 
     // Call GraphQL mutation to save preferences
-    // this.settingsService.updateUserPreferences(preferences)
+    // this.settingsService.updateUserPreferences(mergedPrefs)
     //   .pipe(takeUntil(this.destroy$))
     //   .subscribe(
     //     () => {
     //       this.msg.success('Appearance preferences saved');
     //       this.appearanceForm.markAsPristine();
     //       this.isSavingAppearance = false;
-    //       this.savePreferencesToStorage(preferences);
-    //       // Apply theme changes
-    //       this.applyTheme(preferences.theme);
     //     },
     //     () => {
     //       this.msg.error('Failed to save preferences');
@@ -206,26 +212,39 @@ export class PreferencesSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.isSavingNotifications = true;
-    const preferences = this.notificationForm.value;
+    const notificationPrefs = this.notificationForm.value;
+
+    // Read existing preferences and merge notification changes
+    const stored = localStorage.getItem('user-preferences');
+    const existingPrefs = stored ? JSON.parse(stored) : {};
+    const mergedPrefs = {
+      ...existingPrefs,
+      notificationEmails: notificationPrefs.notificationEmails,
+      notificationPush: notificationPrefs.notificationPush,
+      notificationLoginAlerts: notificationPrefs.notificationLoginAlerts,
+      notificationSecurityUpdates: notificationPrefs.notificationSecurityUpdates
+    };
+
+    // Save merged preferences to storage
+    this.savePreferencesToStorage(mergedPrefs);
+    this.notificationForm.markAsPristine();
+    this.isSavingNotifications = false;
+    this.msg.success('Notification preferences saved locally');
 
     // Call GraphQL mutation to save preferences
-    // this.settingsService.updateUserPreferences(preferences)
+    // this.settingsService.updateUserPreferences(mergedPrefs)
     //   .pipe(takeUntil(this.destroy$))
     //   .subscribe(
     //     () => {
     //       this.msg.success('Notification preferences saved');
     //       this.notificationForm.markAsPristine();
     //       this.isSavingNotifications = false;
-    //       this.savePreferencesToStorage(preferences);
     //     },
     //     () => {
     //       this.msg.error('Failed to save preferences');
     //       this.isSavingNotifications = false;
     //     }
     //   );
-    
-    // Reset UI state to prevent stuck saving state until mutation is implemented
-    this.isSavingNotifications = false;
   }
 
   private loadPreferences(): void {
@@ -242,6 +261,11 @@ export class PreferencesSettingsComponent implements OnInit, OnDestroy {
         notificationLoginAlerts: preferences.notificationLoginAlerts,
         notificationSecurityUpdates: preferences.notificationSecurityUpdates
       });
+      
+      // Apply theme when preferences are loaded
+      if (preferences.theme !== undefined) {
+        this.applyTheme(preferences.theme);
+      }
     }
   }
 

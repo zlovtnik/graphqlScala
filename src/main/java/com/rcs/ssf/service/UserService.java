@@ -54,6 +54,8 @@ public class UserService {
             user.setId(rs.wasNull() ? null : id);
             user.setUsername(rs.getString("username"));
             user.setEmail(rs.getString("email"));
+            String password = rs.getString("password");
+            user.setPassword(rs.wasNull() ? null : password);
             return user;
         }
     };

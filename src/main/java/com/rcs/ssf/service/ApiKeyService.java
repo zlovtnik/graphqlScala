@@ -322,6 +322,16 @@ public class ApiKeyService {
         dto.setExpiresAt(entity.getExpiresAt());
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
+        
+        // Set status based on revoked/expired state
+        if (entity.isRevoked()) {
+            dto.setStatus("REVOKED");
+        } else if (entity.isExpired()) {
+            dto.setStatus("EXPIRED");
+        } else {
+            dto.setStatus("ACTIVE");
+        }
+        
         return dto;
     }
 }

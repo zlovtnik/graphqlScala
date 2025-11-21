@@ -4,6 +4,7 @@ import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.errors.ErrorResponseException;
 import io.minio.errors.MinioException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -78,6 +79,15 @@ public class AvatarUploadService {
 
     /**
      * Download avatar from MinIO.
+     * Streams the InputStream directly (caller must close to release network resources).
+     * Uses ErrorResponseException for robust 'not found' detection instead of message string matching.
+     *
+     * @param objectKey the object key in MinIO
+     * @return Optional containing InputStream if found, empty if not found
+     * @throws MinioException for server errors or other MinIO operation failures
+     * @throws NoSuchAlgorithmException if MD5 algorithm is unavailable
+     * @throws InvalidKeyException if MinIO credentials are invalid
+     * @throws IOException if I/O errors occur
      */
     public Optional<InputStream> downloadAvatar(String objectKey)
             throws MinioException, InvalidKeyException, NoSuchAlgorithmException, IOException {
@@ -91,11 +101,17 @@ public class AvatarUploadService {
                             .build());
 
             return Optional.of(stream);
-        } catch (MinioException e) {
-            if (e.getMessage() != null && e.getMessage().contains("The specified key does not exist")) {
+        } catch (ErrorResponseException e) {
+            // Use structured error code instead of message string matching
+            // Checks for NoSuchKey error code or HTTP 404 status
+            if ("NoSuchKey".equals(e.errorResponse().code()) || e.response().code() == 404) {
                 log.warn("Avatar not found: {}", objectKey);
                 return Optional.empty();
             }
+            // Re-throw other ErrorResponseException (permission denied, corrupted, etc.)
+            throw e;
+        } catch (MinioException e) {
+            // Let other MinIO exceptions propagate (network, authentication, etc.)
             throw e;
         }
     }

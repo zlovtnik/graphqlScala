@@ -12,7 +12,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.graphql.tester.AutoConfigureGraphQlTester;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.mockito.Mock;
 import org.springframework.graphql.test.tester.GraphQlTester;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
@@ -20,6 +20,9 @@ import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -37,13 +40,13 @@ class AdminMutationIntegrationTest {
     @Autowired
     private GraphQlTester graphQlTester;
     
-    @MockBean
+    @Mock
     private RoleRepository roleRepository;
     
-    @MockBean
+    @Mock
     private UserRoleRepository userRoleRepository;
     
-    @MockBean
+    @Mock
     private AuditRoleChangeRepository auditRoleChangeRepository;
     
     private Role testRole;

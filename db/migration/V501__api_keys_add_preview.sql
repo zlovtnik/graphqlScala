@@ -2,7 +2,7 @@
 -- Stores a masked preview of the API key (e.g., sk_12345678...abcd) for UI display
 -- This avoids hashing already-hashed values (which produces meaningless masks)
 BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE api_keys ADD (key_preview VARCHAR2(20))';
+    EXECUTE IMMEDIATE 'ALTER TABLE api_keys ADD (key_preview VARCHAR2(255))';
 EXCEPTION
     WHEN OTHERS THEN
         IF SQLCODE = -1430 THEN
@@ -17,10 +17,11 @@ END;
 -- Future keys will have specific previews computed from the raw key before hashing
 BEGIN
     EXECUTE IMMEDIATE 'UPDATE api_keys SET key_preview = ''sk_••••••••'' WHERE key_preview IS NULL';
-    COMMIT;
 EXCEPTION
     WHEN OTHERS THEN
-        IF SQLCODE != -904 THEN  -- ORA-00904: invalid identifier (column doesn't exist yet)
+        IF SQLCODE = -904 THEN
+            NULL; -- ORA-00904: invalid identifier (column doesn't exist yet)
+        ELSE
             RAISE;
         END IF;
 END;

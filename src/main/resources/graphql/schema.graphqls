@@ -40,7 +40,7 @@ type Mutation {
     generateApiKey(input: GenerateApiKeyInput!): GenerateApiKeyResponse!
     revokeApiKey(keyId: Long!): ApiKeyInfo!
     deleteApiKey(keyId: Long!): Boolean!
-    deactivateAccount(reason: String): AccountStatusResponse!
+    deactivateAccount(reasonCode: String, justification: String): AccountStatusResponse!
     reactivateAccount: AccountStatusResponse!
     updatePassword(currentPassword: String!, newPassword: String!): Boolean!
 }

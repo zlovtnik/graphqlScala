@@ -18,14 +18,14 @@ import lombok.NoArgsConstructor;
 public class CreateApiKeyRequestDto {
     private static final long DEFAULT_EXPIRY_DAYS = 90;
     private static final long MIN_EXPIRY_DAYS = 1;
-    private static final long MAX_EXPIRY_DAYS = 3650; // ~10 years
+    private static final long MAX_EXPIRY_DAYS = 730; // ~2 years (reduced from 10 years for security)
 
     @NotBlank(message = "Key name must be provided")
     @Size(min = 1, max = 100, message = "Key name must be between 1 and 100 characters")
     private String keyName;
 
     @Min(value = MIN_EXPIRY_DAYS, message = "Expiration days must be at least 1")
-    @Max(value = MAX_EXPIRY_DAYS, message = "Expiration days cannot exceed 3650 days (~10 years)")
+    @Max(value = MAX_EXPIRY_DAYS, message = "Expiration days cannot exceed 730 days (~2 years)")
     private Long expiresInDays; // Optional, defaults to 90 days if null
 
     @Size(max = 500, message = "Description must not exceed 500 characters")

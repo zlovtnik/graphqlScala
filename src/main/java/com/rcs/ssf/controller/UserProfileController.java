@@ -80,9 +80,13 @@ public class UserProfileController {
                 })
         )
         .doOnError(e -> logger.error("Error uploading avatar for user: {}", userId, e))
-        .onErrorResume(e -> Mono.just(
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-        ));
+        .onErrorResume(e -> {
+          String errorMsg = e.getMessage() != null ? e.getMessage() : "Avatar upload failed";
+          return Mono.just(
+              ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                  .body(new AvatarUploadResponseDto(null, null, errorMsg))
+          );
+        });
   }
 
   /**
@@ -129,9 +133,17 @@ public class UserProfileController {
               .body(avatarData);
         })
         .doOnError(e -> logger.error("Error downloading avatar for key: {}", avatarKey, e))
-        .onErrorResume(e -> Mono.just(
-            ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-        ));
+        .onErrorResume(e -> {
+          // Use type-based exception handling instead of string matching
+          if (e instanceof java.io.FileNotFoundException || 
+              (e.getCause() instanceof java.io.FileNotFoundException)) {
+            logger.warn("Avatar not found for key: {}", avatarKey);
+            return Mono.just((ResponseEntity<?>) ResponseEntity.notFound().build());
+          }
+          // For other errors, return 500
+          logger.error("Unexpected error downloading avatar: {}", avatarKey, e);
+          return Mono.just((ResponseEntity<?>) ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+        });
   }
 
   /**
@@ -176,10 +188,13 @@ public class UserProfileController {
         })
         .doOnError(e -> logger.error("Error deleting avatar for user: {}", userId, e))
         .onErrorResume(e -> {
-          // Map exceptions to appropriate HTTP status codes
-          if (e.getMessage() != null && e.getMessage().contains("not found")) {
+          // Use type-based exception handling instead of message string matching
+          if (e instanceof java.io.FileNotFoundException || 
+              (e.getCause() instanceof java.io.FileNotFoundException)) {
+            logger.warn("Avatar file not found during deletion for user: {}", userId);
             return Mono.just((ResponseEntity<?>) ResponseEntity.status(HttpStatus.NOT_FOUND).build());
           }
+          logger.error("Unexpected error deleting avatar: {}", userId, e);
           return Mono.just((ResponseEntity<?>) ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
         })
         .switchIfEmpty(Mono.just((ResponseEntity<?>) ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()));

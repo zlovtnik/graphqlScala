@@ -231,7 +231,7 @@ mutation {
 **Deactivate account temporarily:**
 ```graphql
 mutation {
-  deactivateAccount(reason: "Taking time off") {
+  deactivateAccount(reasonCode: "USER_REQUESTED", justification: "Taking time off") {
     status
     deactivatedAt
     message

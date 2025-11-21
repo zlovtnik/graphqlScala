@@ -82,6 +82,7 @@ BEGIN
         user_id NUMBER(19) NOT NULL,
         key_name VARCHAR2(255) NOT NULL,
         key_hash VARCHAR2(255) NOT NULL,
+        key_preview VARCHAR2(255),
         last_used_at NUMBER(19),
         revoked_at NUMBER(19),
         expires_at NUMBER(19),
@@ -115,6 +116,51 @@ END;
 
 BEGIN
     EXECUTE IMMEDIATE 'CREATE INDEX idx_api_key_active ON api_keys(user_id, revoked_at, expires_at)';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE = -955 THEN
+            NULL; -- Index already exists
+        ELSE
+            RAISE;
+        END IF;
+END;
+/
+
+-- Create account_deactivation_audit table for tracking account deactivations
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE TABLE account_deactivation_audit (
+        id NUMBER(19) DEFAULT user_id_seq.NEXTVAL PRIMARY KEY,
+        user_id NUMBER(19) NOT NULL,
+        timestamp NUMBER(19) NOT NULL,
+        reason_code VARCHAR2(100),
+        justification CLOB,
+        CONSTRAINT fk_audit_user_id FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE = -955 THEN
+            NULL; -- Table already exists
+        ELSE
+            RAISE;
+        END IF;
+END;
+/
+
+-- Create indexes for audit queries
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE INDEX idx_deactivation_audit_user_id ON account_deactivation_audit(user_id)';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE = -955 THEN
+            NULL; -- Index already exists
+        ELSE
+            RAISE;
+        END IF;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'CREATE INDEX idx_deactivation_audit_timestamp ON account_deactivation_audit(timestamp)';
 EXCEPTION
     WHEN OTHERS THEN
         IF SQLCODE = -955 THEN

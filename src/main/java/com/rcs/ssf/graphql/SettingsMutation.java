@@ -73,7 +73,8 @@ public class SettingsMutation {
 
     /**
      * Query: Get account status for current user.
-     * Now uses reactive service and blocks for GraphQL response (implicit blocking at transport layer).
+     * Fully reactive resolver that returns Mono<String> without explicit blocking.
+     * GraphQL transport layer handles the Mono subscription and emission.
      */
     @QueryMapping
     @Timed(value = "graphql.resolver.duration", percentiles = { 0.5, 0.95, 0.99 })
@@ -137,6 +138,8 @@ public class SettingsMutation {
     /**
      * Mutation: Delete API key (reactive).
      * Returns Mono that completes when deletion is done.
+     * Propagates expected exceptions (e.g., not found, unauthorized) as GraphQL errors
+     * instead of swallowing them as false, allowing clients to distinguish user vs server errors.
      */
     @MutationMapping
     @Timed(value = "graphql.resolver.duration", percentiles = { 0.5, 0.95, 0.99 })
@@ -144,8 +147,9 @@ public class SettingsMutation {
         Long userId = getCurrentUserId();
         log.debug("Deleting API key {} for user: {}", keyId, userId);
         return apiKeyService.deleteApiKey(userId, keyId)
-                .then(Mono.just(true))
-                .onErrorReturn(false);
+                .then(Mono.just(true));
+                // Allow exceptions to propagate for proper error handling
+                // Previously: .onErrorReturn(false) swallowed all errors
     }
 
     /**

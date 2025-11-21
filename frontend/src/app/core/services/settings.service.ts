@@ -1,4 +1,5 @@
 import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { Apollo, gql } from 'apollo-angular';
 import { Observable, map } from 'rxjs';
 
@@ -11,6 +12,7 @@ import { Observable, map } from 'rxjs';
 })
 export class SettingsService {
   private apollo = inject(Apollo);
+  private http = inject(HttpClient);
 
   /**
    * GraphQL query to get current user's preferences
@@ -21,10 +23,10 @@ export class SettingsService {
         userId
         theme
         language
-        emailNotifications
-        pushNotifications
-        apiKeyNotifications
-        accountActivityNotifications
+        notificationEmails
+        notificationPush
+        notificationLoginAlerts
+        notificationSecurityUpdates
         updatedAt
       }
     }
@@ -286,25 +288,20 @@ export class SettingsService {
   /**
    * Upload avatar to MinIO via HTTP endpoint
    * @param file Avatar file to upload
+   * @return Observable with upload response containing avatarKey and avatarUrl
    */
   uploadAvatar(file: File): Observable<any> {
     const formData = new FormData();
     formData.append('file', file);
 
-    return new Observable(observer => {
-      // This would typically use HttpClient to POST to /api/user/avatar
-      // For now, this is a placeholder for GraphQL integration
-      // In practice, avatar upload may use a separate HTTP endpoint:
-      //
-      // return this.http.post<any>('/api/user/avatar', formData).pipe(
-      //   map(response => ({
-      //     success: true,
-      //     avatarKey: response.avatarKey,
-      //     avatarUrl: response.avatarUrl
-      //   }))
-      // );
-
-      observer.error(new Error('Avatar upload endpoint not yet implemented'));
-    });
+    // Use HttpClient to POST multipart form data to the REST endpoint
+    return this.http.post<any>('/api/user/avatar', formData).pipe(
+      map(response => ({
+        success: true,
+        avatarKey: response.avatarKey,
+        avatarUrl: response.avatarUrl,
+        message: response.message
+      }))
+    );
   }
 }

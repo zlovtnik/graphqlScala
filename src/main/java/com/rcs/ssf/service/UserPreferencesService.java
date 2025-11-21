@@ -13,7 +13,11 @@ import java.util.Optional;
 
 /**
  * Service for managing user preferences with Redis caching.
- * Preferences are cached for 60 minutes to reduce database hits.
+ * Preferences are cached for approximately 60 minutes (per cache configuration) to reduce database hits.
+ * 
+ * Note: On cache miss, concurrent requests may attempt to create duplicate default preferences.
+ * Relies on database uniqueness constraint on user_id to enforce single record per user.
+ * Consider implementing idempotent upsert at repository layer if duplicates become a concern.
  */
 @Slf4j
 @Service
@@ -59,6 +63,7 @@ public class UserPreferencesService {
 
     /**
      * Update user preferences with cache eviction.
+     * Sets updatedAt timestamp to track when preferences were last modified.
      */
     @CacheEvict(value = CACHE_NAME, key = "#userId")
     public UserPreferencesDto updatePreferences(Long userId, UserPreferencesDto dto) {
@@ -85,6 +90,10 @@ public class UserPreferencesService {
         if (dto.getNotificationSecurityUpdates() != null) {
             existing.setNotificationSecurityUpdates(dto.getNotificationSecurityUpdates());
         }
+        
+        // Update the modification timestamp
+        existing.setUpdatedAt(System.currentTimeMillis());
+        
         UserPreferences updated = userPreferencesRepository
                 .save(existing)
                 .timeout(OPERATION_TIMEOUT)

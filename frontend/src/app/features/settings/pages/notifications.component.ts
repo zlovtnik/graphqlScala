@@ -255,7 +255,15 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.isSavingEmail = true;
-    const preferences = this.emailForm.value;
+    const formValue = this.emailForm.value;
+    
+    // Map frontend field names to backend UserPreferencesInput field names
+    const preferences = {
+      notificationEmails: formValue.emailEnabled,
+      notificationPush: null, // Don't override other fields
+      notificationLoginAlerts: null,
+      notificationSecurityUpdates: null
+    };
 
     // Call GraphQL mutation
     this.settingsService.updateUserPreferences(preferences)
@@ -279,7 +287,15 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.isSavingPush = true;
-    const preferences = this.pushForm.value;
+    const formValue = this.pushForm.value;
+    
+    // Map frontend field names to backend UserPreferencesInput field names
+    const preferences = {
+      notificationEmails: null, // Don't override other fields
+      notificationPush: formValue.pushEnabled,
+      notificationLoginAlerts: null,
+      notificationSecurityUpdates: null
+    };
 
     // Call GraphQL mutation
     this.settingsService.updateUserPreferences(preferences)
@@ -303,7 +319,15 @@ export class NotificationsSettingsComponent implements OnInit, OnDestroy {
     }
 
     this.isSavingActivity = true;
-    const preferences = this.activityForm.value;
+    const formValue = this.activityForm.value;
+    
+    // Map frontend field names to backend UserPreferencesInput field names
+    const preferences = {
+      notificationEmails: null, // Don't override other fields
+      notificationPush: null,
+      notificationLoginAlerts: formValue.activityLogins,
+      notificationSecurityUpdates: null
+    };
 
     // Call GraphQL mutation
     this.settingsService.updateUserPreferences(preferences)

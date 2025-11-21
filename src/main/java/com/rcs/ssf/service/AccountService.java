@@ -7,8 +7,10 @@ import com.rcs.ssf.entity.AccountStatus;
 import com.rcs.ssf.entity.User;
 import com.rcs.ssf.repository.AccountDeactivationAuditRepository;
 import com.rcs.ssf.repository.UserRepository;
+import com.rcs.ssf.util.AccountConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -34,6 +36,7 @@ public class AccountService {
      * Deactivate a user account with optional reason tracking.
      * Creates an audit record capturing the deactivation reason.
      */
+    @Transactional
     public Mono<AccountStatusDto> deactivateAccount(Long userId, DeactivationReasonDto reason) {
         if (userId == null) {
             return Mono.error(new IllegalArgumentException("User ID cannot be null"));
@@ -51,7 +54,7 @@ public class AccountService {
                     // Create audit record
                     String reasonCode = reason != null && reason.getReasonCode() != null 
                         ? reason.getReasonCode() 
-                        : "USER_INITIATED";
+                        : AccountConstants.DEFAULT_REASON_CODE;
                     String justification = reason != null ? reason.getJustification() : null;
 
                     AccountDeactivationAudit audit = new AccountDeactivationAudit(

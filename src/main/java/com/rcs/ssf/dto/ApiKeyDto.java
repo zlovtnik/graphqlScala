@@ -26,4 +26,6 @@ public class ApiKeyDto {
     private Long expiresAt;
     private Long createdAt;
     private Long updatedAt;
+    
+    private String status; // ACTIVE, REVOKED, or EXPIRED
 }

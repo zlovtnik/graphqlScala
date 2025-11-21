@@ -13,8 +13,10 @@ import { NzMessageModule } from 'ng-zorro-antd/message';
 import { NzModalModule } from 'ng-zorro-antd/modal';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzDividerModule } from 'ng-zorro-antd/divider';
+import { NzGridModule } from 'ng-zorro-antd/grid';
 import { AuthService, User } from '../../../core/services/auth.service';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { SettingsService } from '../../../core/services/settings.service';
 
 /**
  * Profile settings page for avatar management and password reset.
@@ -34,7 +36,8 @@ import { NzMessageService } from 'ng-zorro-antd/message';
     NzMessageModule,
     NzModalModule,
     NzIconModule,
-    NzDividerModule
+    NzDividerModule,
+    NzGridModule
   ],
   template: `
     <div class="profile-settings">
@@ -171,6 +174,7 @@ export class ProfileSettingsComponent implements OnInit, OnDestroy {
   isUpdatingPassword = false;
 
   private authService = inject(AuthService);
+  private settingsService = inject(SettingsService);
   private fb = inject(FormBuilder);
   private msg = inject(NzMessageService);
   private destroy$ = new Subject<void>();
@@ -246,17 +250,19 @@ export class ProfileSettingsComponent implements OnInit, OnDestroy {
     const { currentPassword, newPassword } = this.passwordForm.value;
 
     // Call GraphQL mutation to update password
-    // this.settingsService.updatePassword(currentPassword, newPassword).subscribe(
-    //   () => {
-    //     this.msg.success('Password updated successfully');
-    //     this.passwordForm.reset();
-    //     this.isUpdatingPassword = false;
-    //   },
-    //   () => {
-    //     this.msg.error('Failed to update password');
-    //     this.isUpdatingPassword = false;
-    //   }
-    // );
+    this.settingsService.updatePassword(currentPassword, newPassword)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: () => {
+          this.msg.success('Password updated successfully');
+          this.passwordForm.reset();
+          this.isUpdatingPassword = false;
+        },
+        error: () => {
+          this.msg.error('Failed to update password');
+          this.isUpdatingPassword = false;
+        }
+      });
   }
 
   ngOnDestroy(): void {
