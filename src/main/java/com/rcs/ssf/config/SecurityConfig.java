@@ -5,7 +5,6 @@ import com.rcs.ssf.security.CspHeaderFilter;
 import com.rcs.ssf.security.GraphQLRequestLoggingFilter;
 import com.rcs.ssf.security.JwtAuthenticationFilter;
 import com.rcs.ssf.security.JwtTokenProvider;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,9 +25,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Spring Security Configuration for JWT-based authentication.
@@ -84,16 +81,16 @@ public class SecurityConfig {
     private final UserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
-    private final List<String> corsAllowedOriginPatterns;
+    private final CorsProperties corsProperties;
 
     public SecurityConfig(UserDetailsService userDetailsService,
             PasswordEncoder passwordEncoder,
             JwtTokenProvider jwtTokenProvider,
-            @Value("${app.cors.allowed-origins:http://localhost:4200}") String corsAllowedOrigins) {
+            CorsProperties corsProperties) {
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
-        this.corsAllowedOriginPatterns = parseAllowedOrigins(corsAllowedOrigins);
+        this.corsProperties = corsProperties;
     }
 
     @Bean
@@ -215,21 +212,27 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        if (!corsAllowedOriginPatterns.isEmpty()) {
-            configuration.setAllowedOriginPatterns(corsAllowedOriginPatterns);
+        
+        // Parse allowed origins from configuration property
+        String allowedOrigins = corsProperties.getAllowedOrigins();
+        if (allowedOrigins != null && !allowedOrigins.isEmpty()) {
+            List<String> originPatterns = parseAllowedOrigins(allowedOrigins);
+            configuration.setAllowedOriginPatterns(originPatterns);
         }
+        
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With"));
         configuration.setAllowCredentials(false);
+        
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 
     private List<String> parseAllowedOrigins(String origins) {
-        return Arrays.stream(origins.split(","))
+        return java.util.Arrays.stream(origins.split(","))
                 .map(String::trim)
                 .filter(origin -> !origin.isEmpty())
-                .collect(Collectors.toList());
+                .toList();
     }
 }

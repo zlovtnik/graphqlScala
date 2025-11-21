@@ -99,6 +99,186 @@ mc ls local
 | Oracle connection fails (`ORA-01017`) | Bad credentials or DB offline | Verify env vars, confirm container/instance is healthy |
 | MinIO health check DOWN | MinIO not running or invalid credentials | Start container and align `minio.*` properties with environment |
 | GraphQL `AccessDeniedException` | Missing token header | Provide `Authorization: Bearer <token>` in GraphiQL/HTTP client |
+| Avatar upload fails (413 Payload Too Large) | File exceeds max size | Default is 5MB; configure `app.avatar.max-size-mb` environment variable |
+| Avatar upload fails (415 Unsupported Media Type) | Invalid image format | Only JPEG, PNG, WebP supported; configure `app.avatar.allowed-types` to allow others |
+| API key generation returns empty `rawKey` | Client cache issue | Fetch new key immediately after generation (key shown only once) |
+| Preferences cache not invalidating | Redis connection issue | Verify Redis connectivity and that `cache.preferences.ttl-minutes` is set correctly |
+| Account deactivation fails | User already deactivated | Call reactivateAccount first to restore access |
+
+## 🔐 User Settings Operations
+
+### REST Avatar Management
+
+**Upload avatar (multipart/form-data):**
+```bash
+curl -X POST https://localhost:8443/api/user/avatar \
+  -H "Authorization: Bearer <token>" \
+  -F "file=@avatar.jpg"
+```
+
+**Download avatar:**
+```bash
+curl -X GET https://localhost:8443/api/user/avatar/<avatarKey> \
+  -H "Authorization: Bearer <token>"
+```
+
+**Delete avatar:**
+```bash
+curl -X DELETE https://localhost:8443/api/user/avatar \
+  -H "Authorization: Bearer <token>"
+```
+
+### GraphQL Settings Queries & Mutations
+
+**Fetch preferences (cached via Redis, 60-min TTL):**
+```graphql
+query {
+  getUserPreferences {
+    theme
+    language
+    notificationEmails
+    notificationPush
+    notificationLoginAlerts
+    notificationSecurityUpdates
+  }
+}
+```
+
+**List active API keys:**
+```graphql
+query {
+  getApiKeys {
+    id
+    keyName
+    keyPreview
+    createdAt
+    expiresAt
+    lastUsedAt
+    status
+  }
+}
+```
+
+**Check account status:**
+```graphql
+query {
+  getAccountStatus
+}
+```
+
+**Update preferences with cache invalidation:**
+```graphql
+mutation {
+  updateUserPreferences(preferences: {
+    theme: "dark"
+    language: "es"
+    notificationEmails: false
+    notificationPush: true
+    notificationLoginAlerts: true
+    notificationSecurityUpdates: true
+  }) {
+    theme
+    language
+    updatedAt
+  }
+}
+```
+
+**Change password (validates current password first):**
+```graphql
+mutation {
+  updatePassword(
+    currentPassword: "CurrentPassword123"
+    newPassword: "NewSecurePassword456"
+  )
+}
+```
+
+**Generate API key (shows raw key only once):**
+```graphql
+mutation {
+  generateApiKey(input: {
+    keyName: "ci-deploy"
+    expiresInDays: 365
+    description: "CI/CD automation key"
+  }) {
+    rawKey
+    keyPreview
+    expiresAt
+    warning
+  }
+}
+```
+
+**Revoke API key (soft delete via timestamp):**
+```graphql
+mutation {
+  revokeApiKey(keyId: 42) {
+    id
+    status
+    revokedAt
+  }
+}
+```
+
+**Delete API key (hard delete from database):**
+```graphql
+mutation {
+  deleteApiKey(keyId: 42)
+}
+```
+
+**Deactivate account temporarily:**
+```graphql
+mutation {
+  deactivateAccount(reasonCode: "USER_REQUESTED", justification: "Taking time off") {
+    status
+    deactivatedAt
+    message
+  }
+}
+```
+
+**Reactivate account:**
+```graphql
+mutation {
+  reactivateAccount {
+    status
+    message
+  }
+}
+```
+
+### User Settings Frontend Routes
+
+| Route | Component | Purpose |
+| --- | --- | --- |
+| `/settings` | SettingsComponent | Main settings container with sidebar navigation |
+| `/settings/profile` | ProfileSettingsComponent | Avatar upload, password change, profile info |
+| `/settings/preferences` | PreferencesSettingsComponent | Theme, language, notification toggles |
+| `/settings/api-keys` | ApiKeysSettingsComponent | API key lifecycle management |
+| `/settings/notifications` | NotificationsSettingsComponent | Detailed notification categories and frequency |
+
+## ⚙️ User Settings Configuration
+
+Add these environment variables to control settings behavior:
+
+```bash
+export APP_AVATAR_MAX_SIZE_MB=5
+export APP_AVATAR_ALLOWED_TYPES=image/jpeg,image/png,image/webp
+export CACHE_PREFERENCES_TTL_MINUTES=60
+```
+
+Or set in `application.yml`:
+```yaml
+app:
+  avatar:
+    max-size-mb: 5
+    allowed-types: image/jpeg,image/png,image/webp
+cache:
+  preferences:
+    ttl-minutes: 60
+```
 
 ### Authentication Error Handling (v1.1+)
 

@@ -40,6 +40,10 @@ minio:
   secret-key: ${MINIO_SECRET_KEY}
   bucket: ${MINIO_BUCKET:ssf-bucket}
 
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}  # Required in production; set comma-separated trusted origins (e.g., https://app.example.com,https://www.example.com)
+
 management:
   endpoints:
     web:

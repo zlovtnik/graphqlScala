@@ -73,7 +73,8 @@ public class AuthController {
 
             return ResponseEntity.ok(new AuthResponse(jwt, UserDto.from(user)));
         } catch (AuthenticationException e) {
-            auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
+            auditService.logLoginAttempt(username, false, ipAddress, userAgent, 
+                    AuditService.truncateFailureReason(e.getMessage()));
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body("Invalid username or password");
         }

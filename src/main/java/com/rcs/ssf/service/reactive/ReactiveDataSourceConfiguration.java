@@ -21,6 +21,8 @@ import org.springframework.data.r2dbc.repository.config.EnableR2dbcRepositories;
 import org.springframework.data.relational.core.mapping.RelationalMappingContext;
 import org.springframework.lang.NonNull;
 import org.springframework.r2dbc.core.DatabaseClient;
+import org.springframework.transaction.ReactiveTransactionManager;
+import org.springframework.r2dbc.connection.R2dbcTransactionManager;
 import reactor.netty.resources.ConnectionProvider;
 
 import java.time.Duration;
@@ -335,6 +337,21 @@ public class ReactiveDataSourceConfiguration {
             @NonNull R2dbcDialect dialect) {
         log.info("Creating R2dbcEntityTemplate with DatabaseClient and R2dbcDialect");
         return new R2dbcEntityTemplate(databaseClient, dialect);
+    }
+
+    /**
+     * Configures the reactive transaction manager for R2DBC.
+     * Required to support @Transactional on reactive methods that use Mono.zip and other reactive operations.
+     * Wires the transaction manager to the same ConnectionFactory used by repositories.
+     *
+     * @param connectionPool the R2DBC connection pool/factory
+     * @return ReactiveTransactionManager configured for R2DBC transactions
+     */
+    @Bean
+    public ReactiveTransactionManager transactionManager(
+            @Qualifier("connectionPool") @NonNull ConnectionFactory connectionPool) {
+        log.info("Creating R2dbcTransactionManager for reactive transaction support");
+        return new R2dbcTransactionManager(connectionPool);
     }
 
     /**
