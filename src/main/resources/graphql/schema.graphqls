@@ -9,12 +9,22 @@ enum HealthStatus {
     DEGRADED
 }
 
+# Account status enum
+enum AccountStatus {
+    ACTIVE
+    DEACTIVATED
+    SUSPENDED
+}
+
 type Query {
     validateToken(token: String!): Boolean!
     getCurrentUser: User
     getUserById(id: Long!): User
     getUserByUsername(username: String!): User
     getDashboardStats: DashboardStats!
+    getUserPreferences: UserPreferences
+    getApiKeys: [ApiKeyInfo!]!
+    getAccountStatus: AccountStatus!
 }
 
 type Mutation {
@@ -23,6 +33,16 @@ type Mutation {
     createUser(input: CreateUserInput!): User!
     updateUser(id: Long!, input: UpdateUserInput!): User!
     deleteUser(id: Long!): Boolean!
+    
+    # Settings mutations
+    uploadAvatar(file: String!): ProfileResponse!
+    updateUserPreferences(input: UserPreferencesInput!): UserPreferences!
+    generateApiKey(input: GenerateApiKeyInput!): GenerateApiKeyResponse!
+    revokeApiKey(keyId: Long!): ApiKeyInfo!
+    deleteApiKey(keyId: Long!): Boolean!
+    deactivateAccount(reason: String): AccountStatusResponse!
+    reactivateAccount: AccountStatusResponse!
+    updatePassword(currentPassword: String!, newPassword: String!): Boolean!
 }
 
 type Subscription {
@@ -37,6 +57,56 @@ type User {
     id: Long!
     username: String!
     email: String
+    avatarKey: String
+    accountStatus: AccountStatus!
+}
+
+type UserPreferences {
+    id: Long!
+    userId: Long!
+    theme: String!
+    language: String!
+    notificationEmails: Boolean!
+    notificationPush: Boolean!
+    notificationLoginAlerts: Boolean!
+    notificationSecurityUpdates: Boolean!
+    createdAt: Long!
+    updatedAt: Long!
+}
+
+type ApiKeyInfo {
+    id: Long!
+    keyName: String!
+    keyPreview: String!
+    lastUsedAt: Long
+    revokedAt: Long
+    expiresAt: Long
+    createdAt: Long!
+    updatedAt: Long!
+    isActive: Boolean!
+}
+
+type GenerateApiKeyResponse {
+    id: Long!
+    keyName: String!
+    rawKey: String!
+    keyPreview: String!
+    expiresAt: Long!
+    createdAt: Long!
+    warning: String!
+}
+
+type ProfileResponse {
+    success: Boolean!
+    avatarKey: String
+    message: String!
+}
+
+type AccountStatusResponse {
+    userId: Long!
+    status: AccountStatus!
+    deactivatedAt: Long
+    message: String!
 }
 
 type DashboardStats {
@@ -67,3 +137,19 @@ input UpdateUserInput {
     email: String
     password: String
 }
+
+input UserPreferencesInput {
+    theme: String
+    language: String
+    notificationEmails: Boolean
+    notificationPush: Boolean
+    notificationLoginAlerts: Boolean
+    notificationSecurityUpdates: Boolean
+}
+
+input GenerateApiKeyInput {
+    keyName: String!
+    expiresInDays: Long
+    description: String
+}
+

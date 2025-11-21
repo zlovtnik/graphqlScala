@@ -35,12 +35,41 @@ public class User {
     @Size(max = 254, message = "Email must not exceed 254 characters")
     private String email;
 
+    @Column("avatar_key")
+    private String avatarKey;
+
+    @Column("account_status")
+    private AccountStatus accountStatus = AccountStatus.ACTIVE;
+
+    @Column("account_deactivated_at")
+    private Long accountDeactivatedAt;
+
+    @PersistenceCreator
+    public User(Long id, String username, String password, String email, String avatarKey,
+            String accountStatus, Long accountDeactivatedAt) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+        this.email = email;
+        this.avatarKey = avatarKey;
+        // Defensively parse account status, falling back to ACTIVE for invalid values
+        try {
+            this.accountStatus = accountStatus != null ? AccountStatus.valueOf(accountStatus) : AccountStatus.ACTIVE;
+        } catch (IllegalArgumentException | NullPointerException e) {
+            org.slf4j.LoggerFactory.getLogger(User.class)
+                .warn("Invalid account status value: '{}', falling back to ACTIVE", accountStatus, e);
+            this.accountStatus = AccountStatus.ACTIVE;
+        }
+        this.accountDeactivatedAt = accountDeactivatedAt;
+    }
+
     @PersistenceCreator
     public User(Long id, String username, String password, String email) {
         this.id = id;
         this.username = username;
         this.password = password;
         this.email = email;
+        this.accountStatus = AccountStatus.ACTIVE;
     }
 
     // Custom constructor for convenient creation
@@ -74,5 +103,6 @@ public class User {
         this.username = username;
         this.password = password;
         this.email = email;
+        this.accountStatus = AccountStatus.ACTIVE;
     }
 }

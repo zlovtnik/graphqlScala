@@ -51,9 +51,47 @@ export const routes: Routes = [
   },
   {
     path: 'settings',
-    loadComponent: loadPlaceholder,
+    loadComponent: () =>
+      import('./features/settings/settings.component').then(
+        (m) => m.SettingsComponent
+      ),
     canActivate: [authGuard],
     data: { title: 'Settings' },
+    children: [
+      {
+        path: 'profile',
+        loadComponent: () =>
+          import('./features/settings/pages/profile.component').then(
+            (m) => m.ProfileSettingsComponent
+          ),
+      },
+      {
+        path: 'preferences',
+        loadComponent: () =>
+          import('./features/settings/pages/preferences.component').then(
+            (m) => m.PreferencesSettingsComponent
+          ),
+      },
+      {
+        path: 'api-keys',
+        loadComponent: () =>
+          import('./features/settings/pages/api-keys.component').then(
+            (m) => m.ApiKeysSettingsComponent
+          ),
+      },
+      {
+        path: 'notifications',
+        loadComponent: () =>
+          import('./features/settings/pages/notifications.component').then(
+            (m) => m.NotificationsSettingsComponent
+          ),
+      },
+      {
+        path: '',
+        pathMatch: 'full',
+        redirectTo: 'profile',
+      },
+    ],
   },
   {
     path: 'data',

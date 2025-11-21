@@ -121,6 +121,8 @@ app:
     secret: ${JWT_SECRET}
   security:
     enable-default-user-role: true  # Enable default ROLE_USER for all authenticated users
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}  # Comma-separated list of allowed origins; configure per environment
   minio:
     url: http://localhost:9000
     access-key: ${MINIO_ACCESS_KEY}
@@ -156,6 +158,12 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  metrics:
+    enable:
+      cache: true
+      jvm: true
+      process: true
+      system: true
 
 schema:
   bootstrap:
@@ -167,16 +175,16 @@ schema:
 logging:
   level:
     # Production defaults: INFO/WARN for external libraries
-    org.springframework.data.r2dbc: WARN
+    org.springframework.data.r2dbc: INFO
     org.springframework.jdbc: WARN
     org.springframework.data.jpa: WARN
-    oracle.r2dbc: DEBUG
+    oracle.r2dbc: INFO
     oracle.jdbc: WARN
     # Redis operations
-    com.rcs.ssf.http.filter.CompressionFilter: DEBUG
-    com.rcs.ssf.service.DynamicCrudService: DEBUG      # Oracle streaming logs
-    com.rcs.ssf.config.MinioConfig: DEBUG              # MinIO metrics/interceptors
-    org.springframework.data.redis: DEBUG    
+    com.rcs.ssf.http.filter.CompressionFilter: INFO
+    com.rcs.ssf.service.DynamicCrudService: INFO      # Oracle streaming logs
+    com.rcs.ssf.config.MinioConfig: INFO              # MinIO metrics/interceptors
+    org.springframework.data.redis: INFO    
     # MinIO operations
     io.minio: INFO
     # Custom application logs - INFO for production

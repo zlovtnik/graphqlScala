@@ -188,6 +188,7 @@ The following environment variables **MUST** be set before starting the applicat
 | `JWT_SECRET` | Symmetric key for signing and validating JWT tokens | Must be ≥32 characters and contain at least `min(20, length/2)` distinct characters (e.g., 16 distinct characters for a 32-char secret). |
 | `MINIO_ACCESS_KEY` | Access key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
 | `MINIO_SECRET_KEY` | Secret key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list of trusted origins for CORS | Optional in dev; required in production. Example: `https://app.example.com,https://www.example.com`. If not set, defaults to `http://localhost:4200`. |
 
 **Example: Setting Strong Credentials**
 
@@ -198,6 +199,9 @@ export JWT_SECRET=$(openssl rand -base64 32)
 # MinIO credentials (use strong, unique values in production)
 export MINIO_ACCESS_KEY=$(openssl rand -base64 16)
 export MINIO_SECRET_KEY=$(openssl rand -base64 32)
+
+# CORS allowed origins (comma-separated, required for production)
+export CORS_ALLOWED_ORIGINS="https://app.example.com,https://www.example.com"
 ```
 
 ### Secrets Management for Production
@@ -330,6 +334,9 @@ Spring Boot properties can be set via `application.yml`, profile-specific files,
 | `app.minio.access-key` | MinIO credentials | **YES** | **None** (must be set via `MINIO_ACCESS_KEY` environment variable) |
 | `app.minio.secret-key` | MinIO credentials | **YES** | **None** (must be set via `MINIO_SECRET_KEY` environment variable) |
 | `security.password.bcrypt.strength` | BCrypt cost factor for password hashing (4-31) | No | `12` |
+| `app.avatar.max-size-mb` | Maximum avatar file size (MB) | No | `5` |
+| `app.avatar.allowed-types` | Comma-separated MIME types for avatars | No | `image/jpeg,image/png,image/webp` |
+| `cache.preferences.ttl-minutes` | User preferences cache TTL (Redis) | No | `60` |
 
 **BCrypt Strength Configuration:**
 
@@ -423,6 +430,156 @@ query {
   }
 }
 ```
+
+### Example: Manage User Settings
+
+#### Get User Preferences (Cached)
+
+```graphql
+query {
+  getUserPreferences {
+    theme
+    language
+    notificationEmails
+    notificationPush
+    notificationLoginAlerts
+  }
+}
+```
+
+#### Update User Preferences
+
+```graphql
+mutation {
+  updateUserPreferences(preferences: {
+    theme: "dark"
+    language: "en"
+    notificationEmails: true
+    notificationPush: false
+    notificationLoginAlerts: true
+    notificationSecurityUpdates: true
+  }) {
+    theme
+    language
+    updatedAt
+  }
+}
+```
+
+#### Change Password
+
+```graphql
+mutation {
+  updatePassword(
+    currentPassword: "OldPassword123"
+    newPassword: "NewPassword456"
+  )
+}
+```
+
+#### Generate API Key
+
+```graphql
+mutation {
+  generateApiKey(input: {
+    keyName: "integration-key"
+    expiresInDays: 90
+    description: "Service-to-service authentication"
+  }) {
+    rawKey
+    keyPreview
+    expiresAt
+    warning
+  }
+}
+```
+
+#### List API Keys
+
+```graphql
+query {
+  getApiKeys {
+    id
+    keyName
+    keyPreview
+    createdAt
+    expiresAt
+    lastUsedAt
+    status
+  }
+}
+```
+
+#### Revoke API Key
+
+```graphql
+mutation {
+  revokeApiKey(keyId: 123) {
+    id
+    revokedAt
+    status
+  }
+}
+```
+
+#### Deactivate Account
+
+```graphql
+mutation {
+  deactivateAccount(reason: "Taking a break") {
+    status
+    deactivatedAt
+    message
+  }
+}
+```
+
+#### Reactivate Account
+
+```graphql
+mutation {
+  reactivateAccount {
+    status
+    message
+  }
+}
+```
+
+### Avatar Upload (REST Endpoint)
+
+The user settings module also provides REST endpoints for avatar management:
+
+**Upload Avatar:**
+```http
+POST /api/user/avatar
+Content-Type: multipart/form-data
+
+file: <avatar_image_file>
+```
+
+Response:
+```json
+{
+  "avatarKey": "user_12345_a1b2c3d4.jpg",
+  "avatarUrl": "/api/user/avatar/user_12345_a1b2c3d4.jpg",
+  "message": "Avatar uploaded successfully"
+}
+```
+
+**Download Avatar:**
+```http
+GET /api/user/avatar/user_12345_a1b2c3d4.jpg
+```
+
+**Delete Avatar:**
+```http
+DELETE /api/user/avatar
+```
+
+**Avatar Constraints:**
+- Maximum file size: 5 MB (configurable via `app.avatar.max-size-mb`)
+- Supported formats: JPEG, PNG, WebP (configurable via `app.avatar.allowed-types`)
+- Uploaded avatars are stored in MinIO with secure key generation
 
 ### Postman Collections & SSL Verification
 

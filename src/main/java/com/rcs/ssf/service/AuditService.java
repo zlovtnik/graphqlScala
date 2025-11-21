@@ -15,10 +15,30 @@ import org.springframework.lang.Nullable;
 @Slf4j
 public class AuditService {
 
+    private static final int MAX_FAILURE_REASON_LENGTH = 500;
     private final @Nullable JdbcTemplate jdbcTemplate;
 
     public AuditService(@Nullable DataSource dataSource) {
         this.jdbcTemplate = (dataSource != null) ? new JdbcTemplate(dataSource) : null;
+    }
+
+    /**
+     * Truncate failure reason to fit within the database column limit.
+     * If the reason exceeds MAX_FAILURE_REASON_LENGTH, it will be truncated and
+     * a note about truncation will be appended.
+     *
+     * @param reason the original failure reason
+     * @return truncated reason safe for database storage
+     */
+    public static String truncateFailureReason(String reason) {
+        if (reason == null) {
+            return null;
+        }
+        if (reason.length() <= MAX_FAILURE_REASON_LENGTH) {
+            return reason;
+        }
+        // Truncate and add indicator that message was truncated
+        return reason.substring(0, MAX_FAILURE_REASON_LENGTH - 4) + "...";
     }
 
     public void logLoginAttempt(String username, boolean success, String ipAddress, String userAgent,

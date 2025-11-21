@@ -1,6 +1,10 @@
 # Development-specific logging configuration
 # This profile enables verbose DEBUG/TRACE logging for development and debugging
 
+app:
+  cors:
+    allowed-origins: "http://localhost:4200,http://localhost:3000,http://127.0.0.1:4200,http://127.0.0.1:3000,http://localhost:8080"
+
 logging:
   level:
     # Database operations - verbose for development

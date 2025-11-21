@@ -222,15 +222,24 @@ public class UserService {
                 null);
 
         if (hasJdbcSupport()) {
-            dynamicCrudGateway.execute(request);
-            return existing;
+            DynamicCrudResponse response = dynamicCrudGateway.execute(request);
+            if (response.affectedRows() > 0) {
+                return existing;
+            }
+            // User may have been deleted between findById and save - treat as update failure
+            throw new IllegalArgumentException("USER_UPDATE_FAILED: No rows affected. User may have been deleted.");
         }
 
         // Use blocking repository save - R2dbcRepository returns Mono<User>, block it
-        User saved = blockOptional(userRepository.save(existing)).orElseThrow(() -> new RuntimeException(
+        blockOptional(userRepository.save(existing)).orElseThrow(() -> new RuntimeException(
                 String.format("Failed to persist updated user: userId=%d, email=%s. Save returned null.",
                         userId, existing.getEmail())));
-        return saved;
+        
+        // Verify the save actually persisted by refetching the record
+        return findById(userId)
+                .orElseThrow(() -> new IllegalStateException(
+                        String.format("Updated user record disappeared after save: userId=%d. Possible concurrent deletion or data integrity issue.",
+                                userId)));
     }
 
     public boolean deleteUser(Long userId) {
@@ -376,5 +385,61 @@ public class UserService {
         } catch (NumberFormatException ex) {
             throw new IllegalStateException("Unable to parse generated id: " + rawId, ex);
         }
+    }
+
+    /**
+     * Update password for a user after verifying the current password.
+     *
+     * @param userId User ID
+     * @param currentPassword Current password for verification
+     * @param newPassword New password to set
+     * @return true if password was updated successfully
+     * @throws IllegalArgumentException if user not found, current password is incorrect, or new password is invalid
+     */
+    public boolean updatePassword(Long userId, String currentPassword, String newPassword) {
+        if (userId == null) {
+            throw new IllegalArgumentException("USER_ID_NULL");
+        }
+
+        validateRawPassword(newPassword);
+
+        User user = findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("USER_NOT_FOUND"));
+
+        // Verify current password
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new IllegalArgumentException("PASSWORD_INCORRECT");
+        }
+
+        // Update with new password
+        user.setPassword(passwordEncoder.encode(newPassword));
+
+        List<DynamicCrudColumnValue> columns = List.of(
+                new DynamicCrudColumnValue("password", user.getPassword())
+        );
+
+        List<DynamicCrudFilter> filters = List.of(
+                new DynamicCrudFilter("id", "=", userId.toString())
+        );
+
+        DynamicCrudRequest request = new DynamicCrudRequest(
+                "users",
+                DynamicCrudOperation.UPDATE,
+                columns,
+                filters,
+                null,
+                null
+        );
+
+        if (hasJdbcSupport()) {
+            DynamicCrudResponse response = dynamicCrudGateway.execute(request);
+            return response.affectedRows() > 0;
+        }
+
+        // Use blocking repository save
+        User savedUser = blockOptional(userRepository.save(user))
+            .orElseThrow(() -> new IllegalStateException("USER_PASSWORD_UPDATE_FAILED"));
+        log.info("Password updated successfully for user: {}", savedUser.getId());
+        return true;
     }
 }

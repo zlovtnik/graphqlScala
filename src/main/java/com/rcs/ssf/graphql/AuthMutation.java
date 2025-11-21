@@ -132,7 +132,8 @@ public class AuthMutation {
             // to prevent username enumeration
             LOGGER.warn("Login attempt failed: authentication error. username={}, ipAddress={}, userAgent={}, error={}",
                     username, ipAddress, userAgent, e.getMessage());
-            auditService.logLoginAttempt(username, false, ipAddress, userAgent, e.getMessage());
+            auditService.logLoginAttempt(username, false, ipAddress, userAgent, 
+                    AuditService.truncateFailureReason(e.getMessage()));
             complianceMetricsService.incrementFailedLoginAttempts("INVALID_CREDENTIALS");
             throw GraphqlErrorException.newErrorException()
                     .message("Invalid username or password")
