@@ -18,6 +18,7 @@ import { provideEcharts } from 'ngx-echarts';
 import { jwtInterceptor } from './core/interceptors/jwt.interceptor';
 import { dynamicCrudDebugInterceptor } from './core/interceptors/dynamic-crud-debug.interceptor';
 import { NzModalService } from 'ng-zorro-antd/modal';
+import { PosthogService } from './core/services/posthog.service';
 
 registerLocaleData(en);
 
@@ -34,6 +35,7 @@ export const appConfig: ApplicationConfig = {
     HttpLink,
     provideEcharts(),
     NzModalService,
+    PosthogService,
     provideServiceWorker('ngsw-worker.js', {
       enabled: !isDevMode(),
       registrationStrategy: 'registerWhenStable:30000'

@@ -12,4 +12,9 @@ export const environment = {
   graphqlEndpoint: 'https://localhost:8443/graphql',
   apiUrl: 'https://localhost:8443',
   enableHydration: false,
+  posthog: {
+    enabled: true,
+    key: 'phc_iZMXiVykuSm6uzfC9UHeJ0r6g4xQzes75co6pq7uLdq',
+    apiHost: 'https://us.i.posthog.com',
+  },
 };

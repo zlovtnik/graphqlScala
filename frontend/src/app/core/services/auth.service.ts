@@ -10,6 +10,7 @@ import {
 } from '../graphql';
 import { TokenStorageAdapter } from './token-storage.adapter';
 import { RefreshTokenService } from './refresh-token.service';
+import { PosthogService } from './posthog.service';
 
 /**
  * Authentication state tri-state enum
@@ -50,6 +51,7 @@ export class AuthService implements OnDestroy {
   private apollo = inject(Apollo);
   private tokenStorage = inject(TokenStorageAdapter);
   private refreshTokenService = inject(RefreshTokenService);
+  private posthogService = inject(PosthogService);
   private platformId = inject(PLATFORM_ID);
 
   constructor() {
@@ -159,6 +161,12 @@ export class AuthService implements OnDestroy {
     this.tokenStorage.markAuthenticated(false);
     this.currentUser$.next(null);
     this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
+    // Reset PostHog user tracking (non-blocking)
+    try {
+      this.posthogService.resetUser();
+    } catch (error) {
+      console.warn('Failed to reset PostHog user:', error);
+    }
     try {
       await this.apollo.client.clearStore();
     } catch (error) {
@@ -189,17 +197,23 @@ export class AuthService implements OnDestroy {
       tap(user => {
         if (user) {
           this.currentUser$.next(user);
-          this.authStateSubject$.next(AuthState.AUTHENTICATED);
-        } else {
-          // No user in response - invalid token
-          this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
+          // Only update auth state if we're still in a loading/indeterminate state
+          if (this.authStateSubject$.value === AuthState.LOADING) {
+            this.authStateSubject$.next(AuthState.AUTHENTICATED);
+          }
         }
+        // If no user but auth state is already set, don't change it
+        // This allows async user loading without reverting auth state
       }),
       catchError((error) => {
-        // Query failed - token is invalid or expired
-        console.error('Failed to load current user:', error);
-        this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
-        this.tokenStorage.clearToken();
+        // Query failed - but keep user authenticated since they have a valid token
+        console.warn('Failed to load current user details:', error);
+        // Only logout if it's a 401/403 auth error
+        if (error?.networkError?.status === 401 || error?.networkError?.status === 403) {
+          this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
+          this.tokenStorage.clearToken();
+        }
+        // For other errors, keep current auth state (likely AUTHENTICATED from setAuthToken)
         return of(null);
       }),
       take(1)
@@ -214,6 +228,27 @@ export class AuthService implements OnDestroy {
   private setAuthToken(response: AuthResponse): void {
     this.tokenStorage.setToken(response.token);
     this.tokenStorage.markAuthenticated(true);
+
+    const nextUser = response.user ?? null;
+    if (nextUser) {
+      this.currentUser$.next(nextUser);
+      this.authStateSubject$.next(AuthState.AUTHENTICATED);
+      // Track user login to PostHog (non-blocking)
+      try {
+        this.posthogService.identifyUser(nextUser.id, {
+          username: nextUser.username,
+          email: nextUser.email
+        });
+      } catch (error) {
+        console.warn('Failed to track user in PostHog:', error);
+      }
+    } else {
+      // No user data in response, but we have a valid token
+      // Set AUTHENTICATED immediately so guards pass
+      this.authStateSubject$.next(AuthState.AUTHENTICATED);
+      // Load user details asynchronously in background
+      this.loadCurrentUser();
+    }
     
     // Schedule proactive token refresh
     this.refreshTokenService.scheduleRefresh(response.token).pipe(take(1)).subscribe({
@@ -222,20 +257,6 @@ export class AuthService implements OnDestroy {
         // Non-fatal: token will be re-validated on next request
       }
     });
-
-    const nextUser = response.user ?? null;
-    if (nextUser) {
-      this.currentUser$.next(nextUser);
-      this.authStateSubject$.next(AuthState.AUTHENTICATED);
-    } else if (!this.currentUser$.value) {
-      // We only re-fetch when we do not already have user context
-      // Set LOADING state before async fetch to prevent stale data inconsistency
-      this.authStateSubject$.next(AuthState.LOADING);
-      this.loadCurrentUser();
-    } else {
-      // We already have user context from a previous successful load
-      this.authStateSubject$.next(AuthState.AUTHENTICATED);
-    }
   }
 
   /**
