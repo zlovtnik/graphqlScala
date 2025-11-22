@@ -196,10 +196,19 @@ management:
 otel:
   exporter:
     otlp:
-      # Endpoint for OTLP/gRPC exporter (Jaeger or Tempo backend)
-      # Default: http://localhost:4317 for local development
+      # Endpoint for OTLP exporter (Jaeger or Tempo backend)
+      # IMPORTANT: Endpoint URL must use http:// or https:// (Java URL validation requirement)
+      # The gRPC protocol is specified separately via the 'protocol' property below.
+      # - gRPC (port 4317): Binary protocol, low latency, used by Java SDK
+      # - HTTP (port 4318): Text protocol with higher overhead, not recommended for Java
       # Environment: OTEL_EXPORTER_OTLP_ENDPOINT
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+      # Protocol: grpc or http/protobuf (default: grpc for port 4317)
+      # This determines the transport protocol; endpoint URL is separate
+      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:grpc}
+  logs:
+    # Disable logs exporter (Jaeger all-in-one doesn't have logs receiver)
+    exporter: ${OTEL_LOGS_EXPORTER:none}
   service:
     # Service name for tracing - must match docker-compose and OtelConfig.java
     # Explicit default: ssf-graphql (not fallback to spring.application.name)

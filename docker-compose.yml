@@ -67,13 +67,37 @@ services:
       timeout: 5s
       retries: 3
 
+  # Elasticsearch - Persistent storage for Jaeger spans and dependencies
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: jaeger-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - oracle-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"yellow\\|green\"'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   # Jaeger - Distributed Tracing Backend
   # Receives OpenTelemetry traces from Spring Boot application via OTLP/gRPC (port 4317)
   # Provides trace visualization UI on port 16686
-  # In-memory storage suitable for development (use Cassandra/Elasticsearch for production)
+  # Uses Elasticsearch for persistent storage of spans and service dependencies
   jaeger:
     image: jaegertracing/all-in-one:latest
     container_name: jaeger-tracing
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
     environment:
       # Collector configuration
       COLLECTOR_OTLP_ENABLED: "true"
@@ -84,12 +108,15 @@ services:
       AGENT_BINARY_THRIFT_HOST_PORT: "0.0.0.0:6832"
       # Query service configuration
       QUERY_PORT: "16686"
+      # Storage backend - use Elasticsearch for persistent span storage and dependency calculation
+      SPAN_STORAGE_TYPE: elasticsearch
+      ES_SERVER_URLS: http://elasticsearch:9200
       # Sampling configuration (server-side; applies to all traces received by Jaeger)
-      # Jaeger samples 10% of traces for storage, providing global trace volume control
+      # Jaeger samples traces for storage based on this config
       SAMPLING_TYPE: "probabilistic"
       SAMPLING_PARAM: "0.1"  # Server-side: 10% of traces stored for analysis
-      # UI configuration
-      SPAN_STORAGE_TYPE: memory  # In-memory for development (use cassandra/elasticsearch for production)
+      # Dependency storage with Elasticsearch
+      DEPENDENCIES_STORAGE_TYPE: elasticsearch
     ports:
       # OTLP/gRPC receiver (from OpenTelemetry exporters)
       - "4317:4317"
@@ -130,20 +157,27 @@ services:
       ORACLE_USER: ${ORACLE_USER:-APP_USER}
       ORACLE_PASSWORD: ${ORACLE_PASSWORD:-ssfpassword}
       ORACLE_ADMIN_PASSWORD: ${ORACLE_ADMIN_PASSWORD:-AdminPassword123}
+      DB_USER_PASSWORD: ${DB_USER_PASSWORD:-ssfpassword}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-o-cara-esta-pedindo-uma-chave-de-acesso}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-o-cara-esta-pedindo-uma-chave-secreta}
       JWT_SECRET: ${JWT_SECRET:-0123456789abcdefghijklmnopqrstuv0123456789abcdefghijklmnopqrstuv}
       KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD:-changeit}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # Trace PII Salt - for hashing sensitive data in traces (minimum 16 chars, mixed case/numbers/special)
+      TRACE_PII_SALT: ${TRACE_PII_SALT:-some_random_salt_value_for_hashing_pii}
+      TRACE_INCLUDE_PII: "true"
       # OpenTelemetry Configuration
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
       OTEL_SERVICE_NAME: ssf-graphql
+      # Disable logs exporter (Jaeger all-in-one doesn't have logs receiver)
+      OTEL_LOGS_EXPORTER: none
       # Sampling configuration (client-side; reduces telemetry export volume before transmission)
       # Client samples 10% of traces locally, reducing network load; Jaeger further samples at ingestion.
       # Effective sampling: 10% × 10% = 1% of traces reach storage for detailed debugging.
       # For higher visibility during development, increase OTEL_TRACES_SAMPLER_ARG to 1.0 (100%).
-      OTEL_TRACES_SAMPLER: probabilistic
+      OTEL_TRACES_SAMPLER: traceidratio
       OTEL_TRACES_SAMPLER_ARG: "0.1"  # Client-side: 10% of traces exported to Jaeger
     ports:
       - "8443:8443"
@@ -162,6 +196,7 @@ volumes:
   oracle_data:
   minio_data:
   redis_data:
+  elasticsearch_data:
 
 networks:
   oracle-network:
