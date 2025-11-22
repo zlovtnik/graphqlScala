@@ -54,8 +54,10 @@ public class UserService {
             user.setId(rs.wasNull() ? null : id);
             user.setUsername(rs.getString("username"));
             user.setEmail(rs.getString("email"));
-            String password = rs.getString("password");
-            user.setPassword(rs.wasNull() ? null : password);
+            // Note: password is intentionally not mapped from PL/SQL result sets
+            // PL/SQL package functions (get_user_by_id, get_user_by_username, get_user_by_email)
+            // only return id, username, email for security reasons.
+            // Password hashes are never retrieved in query result sets.
             return user;
         }
     };

@@ -1,9 +1,8 @@
 spring:
   application:
-    name: ssf
+    name: ssf-graphql
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
-  # DataSourceAutoConfiguration is required for JDBC DataSource creation (used by AuditService).
   # R2DBC configuration is handled separately via custom ReactiveDataSourceConfiguration bean.
   # Both JDBC and R2DBC are used: JDBC for blocking audit operations, R2DBC for reactive GraphQL endpoints.
   
@@ -149,6 +148,34 @@ ssf:
   cache:
     default-max-age: 3600            # Default Cache-Control max-age in seconds (1 hour)
 
+# Trace Configuration
+# PII Tracing: By default, userId and client_ip are hashed (SHA-256) to avoid raw PII in traces
+# 
+# IMPORTANT: PII hashing is REQUIRED for production deployments.
+# The salt must be:
+#   - Non-empty and at least 16 characters long
+#   - Mix of uppercase, lowercase, digits, and special characters (validated at startup)
+#   - Loaded from a secure secrets manager (AWS Secrets Manager, HashiCorp Vault, Azure KeyVault, etc.)
+#   - NEVER hardcoded in application properties or source control
+#
+# Configuration:
+#   1. RECOMMENDED (Secrets Manager):
+#      - Store salt in AWS Secrets Manager / Vault / etc.
+#      - Inject via TRACE_PII_SALT environment variable at runtime
+#   2. ALTERNATIVE (Environment Variable):
+#      - Set TRACE_PII_SALT=<strong-salt> at container/pod startup
+#   3. NOT RECOMMENDED (Application Properties):
+#      - trace.pii-salt: Can be set in properties files for development ONLY
+#
+# Example strong salt (for development testing only):
+#   trace.pii-salt: "DevTest@2024#Salt!Secure"
+#
+# To disable PII hashing and include raw values (NOT recommended):
+#   trace.include-pii: true
+#
+trace:
+  includePii: ${TRACE_INCLUDE_PII:false}     # Include raw PII in traces (default: false = hash)
+  piiSalt: ${TRACE_PII_SALT:}                # REQUIRED if include-pii is false. Load from secrets manager.
 
 management:
   endpoints:
@@ -164,6 +191,39 @@ management:
       jvm: true
       process: true
       system: true
+
+# OpenTelemetry Configuration for Distributed Tracing
+otel:
+  exporter:
+    otlp:
+      # Endpoint for OTLP exporter (Jaeger or Tempo backend)
+      # IMPORTANT: Endpoint URL must use http:// or https:// (Java URL validation requirement)
+      # The gRPC protocol is specified separately via the 'protocol' property below.
+      # - gRPC (port 4317): Binary protocol, low latency, used by Java SDK
+      # - HTTP (port 4318): Text protocol with higher overhead, not recommended for Java
+      # Environment: OTEL_EXPORTER_OTLP_ENDPOINT
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+      # Protocol: grpc or http/protobuf (default: grpc for port 4317)
+      # This determines the transport protocol; endpoint URL is separate
+      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:grpc}
+  logs:
+    # Disable logs exporter (Jaeger all-in-one doesn't have logs receiver)
+    exporter: ${OTEL_LOGS_EXPORTER:none}
+  service:
+    # Service name for tracing - must match docker-compose and OtelConfig.java
+    # Explicit default: ssf-graphql (not fallback to spring.application.name)
+    # Can be overridden via OTEL_SERVICE_NAME environment variable
+    name: ${OTEL_SERVICE_NAME:ssf-graphql}
+  traces:
+    # Tracer configuration
+    exporter: otlp  # Use OTLP exporter for Jaeger/Tempo
+    sampler:
+      # Sampling strategy for traces
+      # - always_on: Always sample (high volume, not production)
+      # - always_off: Never sample
+      # - probability: Sample based on probability (0.0-1.0)
+      type: ${OTEL_TRACES_SAMPLER:probability}
+      arg: ${OTEL_TRACES_SAMPLER_ARG:0.1}  # Sample 10% of traces by default
 
 schema:
   bootstrap:
