@@ -188,6 +188,7 @@ The following environment variables **MUST** be set before starting the applicat
 | `JWT_SECRET` | Symmetric key for signing and validating JWT tokens | Must be ≥32 characters and contain at least `min(20, length/2)` distinct characters (e.g., 16 distinct characters for a 32-char secret). |
 | `MINIO_ACCESS_KEY` | Access key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
 | `MINIO_SECRET_KEY` | Secret key for MinIO object storage authentication | Cannot use default values; must be explicitly set. |
+| `TRACE_PII_SALT` | Salt for hashing PII in traces (userId, client_ip) | **REQUIRED in production.** Min 16 chars, must include uppercase, lowercase, digits, and special characters. Load from secure secrets manager (AWS Secrets Manager, Vault, etc.), NOT from hardcoded properties. |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated list of trusted origins for CORS | Optional in dev; required in production. Example: `https://app.example.com,https://www.example.com`. If not set, defaults to `http://localhost:4200`. |
 
 **Example: Setting Strong Credentials**
@@ -199,6 +200,10 @@ export JWT_SECRET=$(openssl rand -base64 32)
 # MinIO credentials (use strong, unique values in production)
 export MINIO_ACCESS_KEY=$(openssl rand -base64 16)
 export MINIO_SECRET_KEY=$(openssl rand -base64 32)
+
+# PII hash salt (must include uppercase, lowercase, digits, and special chars)
+# For production, load from AWS Secrets Manager, Vault, or similar secure store
+export TRACE_PII_SALT="Prod@Salt!2024#Secure$(openssl rand -hex 8)"
 
 # CORS allowed origins (comma-separated, required for production)
 export CORS_ALLOWED_ORIGINS="https://app.example.com,https://www.example.com"
@@ -218,6 +223,7 @@ vault login -method=ldap username=<your-username>
 export JWT_SECRET=$(vault kv get -field=jwt_secret secret/ssf/prod)
 export MINIO_ACCESS_KEY=$(vault kv get -field=access_key secret/ssf/prod)
 export MINIO_SECRET_KEY=$(vault kv get -field=secret_key secret/ssf/prod)
+export TRACE_PII_SALT=$(vault kv get -field=trace_pii_salt secret/ssf/prod)
 
 # 3. Start the application
 ./gradlew bootRun
@@ -233,6 +239,7 @@ aws configure
 export JWT_SECRET=$(aws secretsmanager get-secret-value --secret-id ssf/jwt_secret --query SecretString --output text)
 export MINIO_ACCESS_KEY=$(aws secretsmanager get-secret-value --secret-id ssf/minio_access_key --query SecretString --output text)
 export MINIO_SECRET_KEY=$(aws secretsmanager get-secret-value --secret-id ssf/minio_secret_key --query SecretString --output text)
+export TRACE_PII_SALT=$(aws secretsmanager get-secret-value --secret-id ssf/trace_pii_salt --query SecretString --output text)
 
 # 3. Start the application
 ./gradlew bootRun

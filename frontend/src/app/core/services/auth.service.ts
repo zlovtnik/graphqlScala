@@ -162,12 +162,14 @@ export class AuthService implements OnDestroy {
     this.tokenStorage.markAuthenticated(false);
     this.currentUser$.next(null);
     this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
-    // Reset PostHog user tracking (non-blocking)
-    // Normalize return value with Promise.resolve() to handle both sync/async returns
-    Promise.resolve(this.posthogService.resetUser())
-      .catch((error) => {
-        console.warn('Failed to reset PostHog user:', error);
-      });
+    
+    // Reset PostHog user tracking (synchronous call, wrapped in try/catch for safety)
+    try {
+      this.posthogService.resetUser();
+    } catch (error) {
+      console.warn('Failed to reset PostHog user:', error);
+    }
+    
     this.lastIdentifiedUserId = null;
     try {
       await this.apollo.client.clearStore();
@@ -213,9 +215,10 @@ export class AuthService implements OnDestroy {
         console.warn('Failed to load current user details:', error);
         // Only logout if it's a 401/403 auth error
         if (error?.networkError?.status === 401 || error?.networkError?.status === 403) {
-          // Fire logout async without blocking
+          // Fire logout async without blocking - logout() sets authState to UNAUTHENTICATED
           this.logout().catch(err => console.warn('Logout failed:', err));
         } else if (this.authStateSubject$.value === AuthState.LOADING) {
+          // Only update state if we haven't already (e.g., from a logout() call)
           this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
         }
         // For other errors, keep current auth state (likely AUTHENTICATED from setAuthToken)

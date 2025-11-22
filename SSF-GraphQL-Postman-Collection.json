@@ -14,6 +14,43 @@
       }
     ]
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Generate W3C Trace Context headers for OpenTelemetry integration",
+          "function generateTraceId() {",
+          "  return [...Array(16)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');",
+          "}",
+          "",
+          "function generateSpanId() {",
+          "  return [...Array(16)].map(() => Math.floor(Math.random() * 16).toString(16)).join('');",
+          "}",
+          "",
+          "// Generate new trace context for each request",
+          "const traceId = generateTraceId();",
+          "const spanId = generateSpanId();",
+          "const traceFlags = '01'; // Sampled",
+          "",
+          "// W3C Trace Context format: version-traceId-spanId-traceFlags",
+          "const traceContext = `00-${traceId}-${spanId}-${traceFlags}`;",
+          "",
+          "// Set collection-wide environment variables for trace context",
+          "pm.environment.set('otel_trace_id', traceId);",
+          "pm.environment.set('otel_span_id', spanId);",
+          "pm.environment.set('otel_trace_context', traceContext);",
+          "pm.environment.set('otel_trace_parent', traceContext);",
+          "",
+          "// Set baggage for additional context",
+          "pm.environment.set('otel_baggage', `userId=${pm.environment.get('user_id') || 'anonymous'},environment=dev,service=postman-client`);",
+          "",
+          "console.log('[OTel] Generated Trace Context:', traceContext);"
+        ]
+      }
+    }
+  ],
   "item": [
     {
       "name": "Authentication",
@@ -43,6 +80,21 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}",
+                "description": "W3C Trace Context format: version-traceId-spanId-traceFlags"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1",
+                "description": "OpenTelemetry tracestate header"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}",
+                "description": "OpenTelemetry baggage for distributed context"
               }
             ],
             "body": {
@@ -70,6 +122,21 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}",
+                "description": "W3C Trace Context format: version-traceId-spanId-traceFlags"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1",
+                "description": "OpenTelemetry tracestate header"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}",
+                "description": "OpenTelemetry baggage for distributed context"
               }
             ],
             "body": {
@@ -97,6 +164,21 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}",
+                "description": "W3C Trace Context format: version-traceId-spanId-traceFlags"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1",
+                "description": "OpenTelemetry tracestate header"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}",
+                "description": "OpenTelemetry baggage for distributed context"
               }
             ],
             "body": {
@@ -129,6 +211,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}"
               }
             ],
             "body": {
@@ -156,6 +250,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}"
               }
             ],
             "body": {
@@ -183,6 +289,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}"
               }
             ],
             "body": {
@@ -233,6 +351,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}"
               }
             ],
             "body": {
@@ -260,6 +390,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}"
               }
             ],
             "body": {
@@ -287,6 +429,18 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "traceparent",
+                "value": "{{otel_trace_parent}}"
+              },
+              {
+                "key": "tracestate",
+                "value": "ssf-graphql=1"
+              },
+              {
+                "key": "baggage",
+                "value": "{{otel_baggage}}"
               }
             ],
             "body": {
@@ -351,6 +505,36 @@
       "value": "",
       "type": "string",
       "description": "Email for user operations - must be set per developer environment for testing"
+    },
+    {
+      "key": "otel_trace_id",
+      "value": "",
+      "type": "string",
+      "description": "OpenTelemetry Trace ID (auto-generated) - 32-character hex string identifying the entire trace"
+    },
+    {
+      "key": "otel_span_id",
+      "value": "",
+      "type": "string",
+      "description": "OpenTelemetry Span ID (auto-generated) - 16-character hex string identifying this request span"
+    },
+    {
+      "key": "otel_trace_context",
+      "value": "",
+      "type": "string",
+      "description": "OpenTelemetry Trace Context (auto-generated) - W3C format for distributed tracing"
+    },
+    {
+      "key": "otel_trace_parent",
+      "value": "",
+      "type": "string",
+      "description": "OpenTelemetry traceparent header (auto-generated) - W3C Trace Context: version-traceId-spanId-traceFlags"
+    },
+    {
+      "key": "otel_baggage",
+      "value": "",
+      "type": "string",
+      "description": "OpenTelemetry baggage (auto-generated) - Additional context data: userId, environment, service"
     }
   ],
   "protocolProfileBehavior": {

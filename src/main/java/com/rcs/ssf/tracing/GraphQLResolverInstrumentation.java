@@ -76,7 +76,18 @@ public class GraphQLResolverInstrumentation {
      */
     private Object traceResolver(String operationType, ProceedingJoinPoint joinPoint) throws Throwable {
         String methodName = joinPoint.getSignature().getName();
-        String className = joinPoint.getTarget().getClass().getSimpleName();
+        
+        // Safely get class name: check if target exists, otherwise fall back to declaring type
+        String className = "UnknownClass";
+        if (joinPoint.getTarget() != null) {
+            className = joinPoint.getTarget().getClass().getSimpleName();
+        } else {
+            Class<?> declaringClass = joinPoint.getSignature().getDeclaringType();
+            if (declaringClass != null) {
+                className = declaringClass.getSimpleName();
+            }
+        }
+        
         String spanName = String.format("%s.%s", operationType, methodName);
 
         Span span = tracer

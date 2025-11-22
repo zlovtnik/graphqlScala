@@ -1,6 +1,6 @@
 spring:
   application:
-    name: ssf
+    name: ssf-graphql
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   # R2DBC configuration is handled separately via custom ReactiveDataSourceConfiguration bean.
@@ -148,6 +148,34 @@ ssf:
   cache:
     default-max-age: 3600            # Default Cache-Control max-age in seconds (1 hour)
 
+# Trace Configuration
+# PII Tracing: By default, userId and client_ip are hashed (SHA-256) to avoid raw PII in traces
+# 
+# IMPORTANT: PII hashing is REQUIRED for production deployments.
+# The salt must be:
+#   - Non-empty and at least 16 characters long
+#   - Mix of uppercase, lowercase, digits, and special characters (validated at startup)
+#   - Loaded from a secure secrets manager (AWS Secrets Manager, HashiCorp Vault, Azure KeyVault, etc.)
+#   - NEVER hardcoded in application properties or source control
+#
+# Configuration:
+#   1. RECOMMENDED (Secrets Manager):
+#      - Store salt in AWS Secrets Manager / Vault / etc.
+#      - Inject via TRACE_PII_SALT environment variable at runtime
+#   2. ALTERNATIVE (Environment Variable):
+#      - Set TRACE_PII_SALT=<strong-salt> at container/pod startup
+#   3. NOT RECOMMENDED (Application Properties):
+#      - trace.pii-salt: Can be set in properties files for development ONLY
+#
+# Example strong salt (for development testing only):
+#   trace.pii-salt: "DevTest@2024#Salt!Secure"
+#
+# To disable PII hashing and include raw values (NOT recommended):
+#   trace.include-pii: true
+#
+trace:
+  includePii: ${TRACE_INCLUDE_PII:false}     # Include raw PII in traces (default: false = hash)
+  piiSalt: ${TRACE_PII_SALT:}                # REQUIRED if include-pii is false. Load from secrets manager.
 
 management:
   endpoints:
@@ -173,8 +201,10 @@ otel:
       # Environment: OTEL_EXPORTER_OTLP_ENDPOINT
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
   service:
-    # Service name for tracing
-    name: ${OTEL_SERVICE_NAME:${spring.application.name}}
+    # Service name for tracing - must match docker-compose and OtelConfig.java
+    # Explicit default: ssf-graphql (not fallback to spring.application.name)
+    # Can be overridden via OTEL_SERVICE_NAME environment variable
+    name: ${OTEL_SERVICE_NAME:ssf-graphql}
   traces:
     # Tracer configuration
     exporter: otlp  # Use OTLP exporter for Jaeger/Tempo

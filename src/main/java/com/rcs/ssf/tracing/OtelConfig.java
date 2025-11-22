@@ -54,4 +54,34 @@ public class OtelConfig {
         log.info("OpenTelemetry Tracer initialized for service: {}", serviceName);
         return tracer;
     }
+
+    /**
+     * Factory method for MFAOperationInstrumentation AOP bean.
+     * 
+     * Creates the aspect that automatically instruments WebAuthn and MFA service calls.
+     * Uses default slow-operation threshold of 2000ms.
+     * 
+     * @param tracer OpenTelemetry tracer for span creation
+     * @return MFAOperationInstrumentation AOP aspect
+     */
+    @Bean
+    public MFAOperationInstrumentation mfaOperationInstrumentation(Tracer tracer) {
+        log.info("MFAOperationInstrumentation bean created with default threshold (2000ms)");
+        return new MFAOperationInstrumentation(tracer);
+    }
+
+    /**
+     * Factory method for DatabaseOperationInstrumentation AOP bean.
+     * 
+     * Creates the aspect that automatically instruments repository method calls.
+     * Uses default slow-query threshold of 1000ms.
+     * 
+     * @param tracer OpenTelemetry tracer for span creation
+     * @return DatabaseOperationInstrumentation AOP aspect
+     */
+    @Bean
+    public DatabaseOperationInstrumentation databaseOperationInstrumentation(Tracer tracer) {
+        log.info("DatabaseOperationInstrumentation bean created with default threshold (1000ms)");
+        return new DatabaseOperationInstrumentation(tracer);
+    }
 }

@@ -102,10 +102,11 @@ services:
     networks:
       - oracle-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:16686/api/traces?limit=1"]
-      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:16686/api/traces", "--connect-timeout", "2", "--max-time", "3"]
+      interval: 15s
       timeout: 5s
       retries: 3
+      start_period: 15s
 
   # Spring Boot Application
   app: 

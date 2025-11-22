@@ -8,8 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
 /**
  * AOP aspect for automatic span instrumentation of database operations.
@@ -26,11 +24,12 @@ import org.springframework.stereotype.Component;
  * 
  * Complements SQL query logging with semantic span information.
  * 
- * Usage (automatic):
+ * Usage (automatic via OtelConfig):
  * User user = userRepository.findById(123);  // Traced as db.query.find
+ * 
+ * Bean instantiation: Created by OtelConfig.databaseOperationInstrumentation() factory method.
  */
 @Aspect
-@Component
 @Slf4j
 public class DatabaseOperationInstrumentation {
 
@@ -42,12 +41,11 @@ public class DatabaseOperationInstrumentation {
     private final long slowQueryThresholdMs;
 
     /**
-     * Constructor for Spring dependency injection.
+     * Constructor for bean creation via OtelConfig factory method.
      * Initializes slow-query threshold with default of 1000ms.
      * 
-     * @param tracer the OpenTelemetry tracer (injected by Spring)
+     * @param tracer the OpenTelemetry tracer (injected via factory method)
      */
-    @Autowired
     public DatabaseOperationInstrumentation(Tracer tracer) {
         this(tracer, 1000L);
     }
@@ -56,12 +54,12 @@ public class DatabaseOperationInstrumentation {
      * Constructor for testing; allows explicit threshold override.
      * 
      * @param tracer the OpenTelemetry tracer
-     * @param slowQueryThresholdMs threshold in milliseconds; must be non-negative
-     * @throws IllegalArgumentException if threshold is negative
+     * @param slowQueryThresholdMs threshold in milliseconds; must be positive (> 0)
+     * @throws IllegalArgumentException if threshold is not positive
      */
     private DatabaseOperationInstrumentation(Tracer tracer, long slowQueryThresholdMs) {
-        if (slowQueryThresholdMs < 0) {
-            throw new IllegalArgumentException("slowQueryThresholdMs must be non-negative, got: " + slowQueryThresholdMs);
+        if (slowQueryThresholdMs <= 0) {
+            throw new IllegalArgumentException("slowQueryThresholdMs must be positive, got: " + slowQueryThresholdMs);
         }
         this.tracer = tracer;
         this.slowQueryThresholdMs = slowQueryThresholdMs;
@@ -71,9 +69,9 @@ public class DatabaseOperationInstrumentation {
      * Factory method for creating instances with custom slow-query threshold (for testing).
      * 
      * @param tracer the OpenTelemetry tracer
-     * @param slowQueryThresholdMs custom threshold in milliseconds
+     * @param slowQueryThresholdMs custom threshold in milliseconds; must be positive (> 0)
      * @return new instance with custom threshold
-     * @throws IllegalArgumentException if threshold is negative
+     * @throws IllegalArgumentException if threshold is not positive
      */
     public static DatabaseOperationInstrumentation withThreshold(Tracer tracer, long slowQueryThresholdMs) {
         return new DatabaseOperationInstrumentation(tracer, slowQueryThresholdMs);

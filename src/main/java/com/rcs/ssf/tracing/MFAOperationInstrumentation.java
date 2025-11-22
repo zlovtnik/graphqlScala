@@ -8,11 +8,12 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.util.Locale;
 
 /**
  * AOP aspect for automatic span instrumentation of MFA operations.
@@ -33,19 +34,37 @@ import java.lang.reflect.Parameter;
  * - Tracks authentication attempts for security monitoring
  * - Records MFA bypass attempts or failures
  * 
- * Usage (automatic):
+ * Usage (automatic via OtelConfig):
  * webAuthnService.completeRegistration(userId, response, nickname);
  * // Traced as mfa.registration with attributes: user_id, method, status
+ * 
+ * Bean instantiation: Created by OtelConfig.mfaOperationInstrumentation() factory method.
  */
 @Aspect
-@Component
 @Slf4j
 public class MFAOperationInstrumentation {
 
     private final Tracer tracer;
+    private final long slowOperationThresholdMs;
 
+    @Autowired
     public MFAOperationInstrumentation(Tracer tracer) {
+        this(tracer, 2000);
+    }
+
+    private MFAOperationInstrumentation(Tracer tracer, long slowOperationThresholdMs) {
+        if (slowOperationThresholdMs <= 0) {
+            throw new IllegalArgumentException("slowOperationThresholdMs must be positive, got: " + slowOperationThresholdMs);
+        }
         this.tracer = tracer;
+        this.slowOperationThresholdMs = slowOperationThresholdMs;
+    }
+
+    /**
+     * Factory method for testing with custom slow-operation threshold.
+     */
+    public static MFAOperationInstrumentation withThreshold(Tracer tracer, long slowOperationThresholdMs) {
+        return new MFAOperationInstrumentation(tracer, slowOperationThresholdMs);
     }
 
     /**
@@ -141,7 +160,7 @@ public class MFAOperationInstrumentation {
             span.setAttribute("mfa.duration_ms", duration);
             
             // Flag slow MFA operations
-            if (duration > 2000) {
+            if (duration > slowOperationThresholdMs) {
                 span.setAttribute("mfa.slow_operation", true);
             }
             
@@ -201,18 +220,19 @@ public class MFAOperationInstrumentation {
      * - verify → verify
      */
     private String inferMFAOperationType(String methodName) {
-        if (methodName.contains("registration") || methodName.contains("Register")) {
+        String normalized = methodName.toLowerCase(Locale.ROOT);
+        
+        if (normalized.contains("registration") || normalized.contains("register")) {
             return "registration";
-        } else if (methodName.contains("authentication") || 
-                   methodName.contains("authenticate") || 
-                   methodName.contains("assertion") ||
-                   methodName.contains("Authenticate")) {
+        } else if (normalized.contains("authentication") || 
+                   normalized.contains("authenticate") || 
+                   normalized.contains("assertion")) {
             return "authentication";
-        } else if (methodName.contains("verify") || methodName.contains("Verify")) {
+        } else if (normalized.contains("verify")) {
             return "verify";
-        } else if (methodName.contains("enroll")) {
+        } else if (normalized.contains("enroll")) {
             return "enrollment";
-        } else if (methodName.contains("challenge")) {
+        } else if (normalized.contains("challenge")) {
             return "challenge";
         } else {
             return "operation";

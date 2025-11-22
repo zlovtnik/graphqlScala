@@ -1,6 +1,7 @@
 package com.rcs.ssf.tracing;
 
 import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
 import lombok.extern.slf4j.Slf4j;
@@ -80,8 +81,7 @@ public class CacheOperationInstrumentation {
             scope = span.makeCurrent();
         } catch (Throwable scopeError) {
             span.recordException(scopeError);
-            span.setAttribute("error", true);
-            span.setAttribute("error.type", scopeError.getClass().getSimpleName());
+            span.setStatus(StatusCode.ERROR);
             span.end();
             throw scopeError;
         }
@@ -109,8 +109,7 @@ public class CacheOperationInstrumentation {
 
         } catch (Throwable e) {
             span.recordException(e);
-            span.setAttribute("error", true);
-            span.setAttribute("error.type", e.getClass().getSimpleName());
+            span.setStatus(StatusCode.ERROR);
             log.error("Cache operation error: {} on {}", spanName, cacheName, e);
             throw e;
         } finally {
