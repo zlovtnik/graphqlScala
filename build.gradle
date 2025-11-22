@@ -19,6 +19,17 @@ repositories {
 	mavenCentral()
 }
 
+dependencyManagement {
+	imports {
+		mavenBom "io.opentelemetry:opentelemetry-bom:1.40.0"
+		mavenBom "io.opentelemetry.instrumentation:opentelemetry-instrumentation-bom:2.6.0"
+	}
+	dependencies {
+		// Override semconv because OTEL 1.40.0 BOM references an unpublished version
+		dependency 'io.opentelemetry.semconv:opentelemetry-semconv:1.37.0'
+	}
+}
+
 sourceSets {
 	main {
 		resources {
@@ -63,6 +74,17 @@ configurations {
 		implementation 'io.github.resilience4j:resilience4j-timelimiter:2.1.0'
 		implementation 'io.github.resilience4j:resilience4j-micrometer:2.1.0'
 		implementation 'io.micrometer:micrometer-registry-prometheus' // Use Spring Boot 3.5.7 managed version (1.15.0)
+		
+		// OpenTelemetry - Distributed Tracing
+		implementation 'io.opentelemetry:opentelemetry-api' // Use Spring Boot 3.5.7 managed version (1.40.0)
+		implementation 'io.opentelemetry:opentelemetry-sdk' // Use Spring Boot 3.5.7 managed version (1.40.0)
+		implementation 'io.opentelemetry:opentelemetry-exporter-otlp' // OTLP exporter for Jaeger/Tempo
+		implementation 'io.opentelemetry.instrumentation:opentelemetry-instrumentation-annotations' // @WithSpan annotations (version via OTEL BOM)
+		implementation 'io.opentelemetry:opentelemetry-sdk-extension-jaeger-remote-sampler' // Jaeger remote sampling
+		implementation 'io.opentelemetry.semconv:opentelemetry-semconv' // Semantic conventions for attributes (version via OTEL BOM)
+		
+		// Structured Logging - JSON output for ELK integration
+		implementation 'net.logstash.logback:logstash-logback-encoder:7.4' // JSON log encoder
 		
 		// Oracle Database Driver
 		implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'

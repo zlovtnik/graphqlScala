@@ -67,6 +67,46 @@ services:
       timeout: 5s
       retries: 3
 
+  # Jaeger - Distributed Tracing Backend
+  # Receives OpenTelemetry traces from Spring Boot application via OTLP/gRPC (port 4317)
+  # Provides trace visualization UI on port 16686
+  # In-memory storage suitable for development (use Cassandra/Elasticsearch for production)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger-tracing
+    environment:
+      # Collector configuration
+      COLLECTOR_OTLP_ENABLED: "true"
+      COLLECTOR_OTLP_HOST_PORT: "0.0.0.0:4317"
+      # Agent configuration (UDP for legacy clients)
+      AGENT_ZIPKIN_HOST_PORT: "0.0.0.0:5775"
+      AGENT_COMPACT_THRIFT_HOST_PORT: "0.0.0.0:6831"
+      AGENT_BINARY_THRIFT_HOST_PORT: "0.0.0.0:6832"
+      # Query service configuration
+      QUERY_PORT: "16686"
+      # Sampling configuration (server-side; applies to all traces received by Jaeger)
+      # Jaeger samples 10% of traces for storage, providing global trace volume control
+      SAMPLING_TYPE: "probabilistic"
+      SAMPLING_PARAM: "0.1"  # Server-side: 10% of traces stored for analysis
+      # UI configuration
+      SPAN_STORAGE_TYPE: memory  # In-memory for development (use cassandra/elasticsearch for production)
+    ports:
+      # OTLP/gRPC receiver (from OpenTelemetry exporters)
+      - "4317:4317"
+      # Jaeger UI
+      - "16686:16686"
+      # Legacy Thrift/Zipkin receivers (if needed)
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+    networks:
+      - oracle-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:16686/api/traces?limit=1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   # Spring Boot Application
   app: 
     build:
@@ -79,6 +119,8 @@ services:
       minio:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     environment:
       ORACLE_HOST: oracle
@@ -93,6 +135,15 @@ services:
       KEYSTORE_PASSWORD: ${KEYSTORE_PASSWORD:-changeit}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      # OpenTelemetry Configuration
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: ssf-graphql
+      # Sampling configuration (client-side; reduces telemetry export volume before transmission)
+      # Client samples 10% of traces locally, reducing network load; Jaeger further samples at ingestion.
+      # Effective sampling: 10% × 10% = 1% of traces reach storage for detailed debugging.
+      # For higher visibility during development, increase OTEL_TRACES_SAMPLER_ARG to 1.0 (100%).
+      OTEL_TRACES_SAMPLER: probabilistic
+      OTEL_TRACES_SAMPLER_ARG: "0.1"  # Client-side: 10% of traces exported to Jaeger
     ports:
       - "8443:8443"
     volumes:

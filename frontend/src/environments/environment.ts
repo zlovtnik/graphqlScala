@@ -1,3 +1,17 @@
+const readNgEnv = (key: string, fallback = ''): string => {
+  const globalEnv = (globalThis as any)?.__env;
+  if (globalEnv && typeof globalEnv[key] === 'string') {
+    return globalEnv[key] as string;
+  }
+
+  const processEnv = (globalThis as any)?.process?.env;
+  if (processEnv && typeof processEnv[key] === 'string') {
+    return processEnv[key] as string;
+  }
+
+  return fallback;
+};
+
 export const environment = {
   production: false,
   // BACKEND ENDPOINTS: The graphqlEndpoint and apiUrl below point to the backend service on port 8443.
@@ -12,9 +26,19 @@ export const environment = {
   graphqlEndpoint: 'https://localhost:8443/graphql',
   apiUrl: 'https://localhost:8443',
   enableHydration: false,
-  posthog: {
-    enabled: true,
-    key: 'phc_iZMXiVykuSm6uzfC9UHeJ0r6g4xQzes75co6pq7uLdq',
-    apiHost: 'https://us.i.posthog.com',
-  },
+  posthog: (() => {
+    const isProduction = typeof window !== 'undefined' && window.location.hostname === 'prod.example.com';
+    const posthogKey = readNgEnv('NG_APP_POSTHOG_KEY');
+    // Use dev fallback key only when not in production
+    const key = posthogKey || (isProduction ? '' : 'local-dev-posthog-key');
+    const enabled = !!(key && key.length > 0);
+    if (!enabled) {
+      console.warn('PostHog disabled: API key not configured. Set NG_APP_POSTHOG_KEY environment variable to enable analytics.');
+    }
+    return {
+      enabled,
+      key,
+      apiHost: readNgEnv('NG_APP_POSTHOG_HOST', 'https://us.i.posthog.com'),
+    };
+  })(),
 };

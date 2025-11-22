@@ -47,6 +47,7 @@ export class AuthService implements OnDestroy {
   private loadCurrentUserSubscription?: Subscription;
   private refreshSuccessSubscription?: Subscription;
   private refreshFailureSubscription?: Subscription;
+  private lastIdentifiedUserId: string | null = null;
 
   private apollo = inject(Apollo);
   private tokenStorage = inject(TokenStorageAdapter);
@@ -162,11 +163,12 @@ export class AuthService implements OnDestroy {
     this.currentUser$.next(null);
     this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
     // Reset PostHog user tracking (non-blocking)
-    try {
-      this.posthogService.resetUser();
-    } catch (error) {
-      console.warn('Failed to reset PostHog user:', error);
-    }
+    // Normalize return value with Promise.resolve() to handle both sync/async returns
+    Promise.resolve(this.posthogService.resetUser())
+      .catch((error) => {
+        console.warn('Failed to reset PostHog user:', error);
+      });
+    this.lastIdentifiedUserId = null;
     try {
       await this.apollo.client.clearStore();
     } catch (error) {
@@ -201,6 +203,7 @@ export class AuthService implements OnDestroy {
           if (this.authStateSubject$.value === AuthState.LOADING) {
             this.authStateSubject$.next(AuthState.AUTHENTICATED);
           }
+          this.identifyUserIfNeeded(user);
         }
         // If no user but auth state is already set, don't change it
         // This allows async user loading without reverting auth state
@@ -210,8 +213,10 @@ export class AuthService implements OnDestroy {
         console.warn('Failed to load current user details:', error);
         // Only logout if it's a 401/403 auth error
         if (error?.networkError?.status === 401 || error?.networkError?.status === 403) {
+          // Fire logout async without blocking
+          this.logout().catch(err => console.warn('Logout failed:', err));
+        } else if (this.authStateSubject$.value === AuthState.LOADING) {
           this.authStateSubject$.next(AuthState.UNAUTHENTICATED);
-          this.tokenStorage.clearToken();
         }
         // For other errors, keep current auth state (likely AUTHENTICATED from setAuthToken)
         return of(null);
@@ -234,14 +239,7 @@ export class AuthService implements OnDestroy {
       this.currentUser$.next(nextUser);
       this.authStateSubject$.next(AuthState.AUTHENTICATED);
       // Track user login to PostHog (non-blocking)
-      try {
-        this.posthogService.identifyUser(nextUser.id, {
-          username: nextUser.username,
-          email: nextUser.email
-        });
-      } catch (error) {
-        console.warn('Failed to track user in PostHog:', error);
-      }
+      this.identifyUserIfNeeded(nextUser);
     } else {
       // No user data in response, but we have a valid token
       // Set AUTHENTICATED immediately so guards pass
@@ -291,7 +289,26 @@ export class AuthService implements OnDestroy {
     this.refreshFailureSubscription = this.refreshTokenService.refreshFailures$()
       .subscribe((error) => {
         console.warn('Token refresh failed after retries:', error);
-        void this.logout();
+        // Fire logout async without blocking
+        this.logout().catch(err => console.warn('Logout failed:', err));
       });
+  }
+
+  private identifyUserIfNeeded(user: User): void {
+    if (!user?.id) {
+      return;
+    }
+
+    if (this.lastIdentifiedUserId === user.id) {
+      return;
+    }
+
+    this.lastIdentifiedUserId = user.id;
+    try {
+      // Only send the stable user ID to PostHog to avoid leaking PII.
+      this.posthogService.identifyUser(user.id);
+    } catch (error) {
+      console.warn('Failed to track user in PostHog:', error);
+    }
   }
 }

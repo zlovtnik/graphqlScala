@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Spring Boot default configuration location -->
+    <!-- This file enables JSON structured logging with trace correlation -->
+    
+    <!-- Import Spring Boot default logback configuration -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    
+    <!-- Spring profile-specific logging -->
+    <springProperty scope="context" name="LOG_FILE" source="logging.file.name" defaultValue="${LOG_FILE:-${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-/tmp}}/}spring.log}"/>
+    
+    <!-- Application name for structured logging -->
+    <springProperty scope="context" name="APPLICATION_NAME" source="spring.application.name" defaultValue="ssf-graphql"/>
+    
+    <!-- Environment for structured logging -->
+    <springProperty scope="context" name="ENVIRONMENT" source="spring.profiles.active" defaultValue="dev"/>
+    
+    <!-- JSON Layout Appender for structured logging -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Include trace context in JSON output -->
+            <customFields>{"service":"${APPLICATION_NAME}","environment":"${ENVIRONMENT:-dev}"}</customFields>
+            <!-- Include MDC fields for trace correlation -->
+            <includeContext>true</includeContext>
+            <!-- Pretty print JSON (set to false in production for log efficiency) -->
+            <prettyPrint>false</prettyPrint>
+            <!-- Additional fields in JSON log -->
+            <fieldNames>
+                <timestamp>@timestamp</timestamp>
+                <version>@version</version>
+                <message>message</message>
+                <logger>logger_name</logger>
+                <thread>thread_name</thread>
+                <level>log_level</level>
+                <levelValue>log_level_value</levelValue>
+                <caller>caller</caller>
+                <stackTrace>stacktrace</stackTrace>
+                <mdc>mdc</mdc>
+            </fieldNames>
+        </encoder>
+        
+        <!-- Rolling policy: rotate daily or at 100MB -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>10GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    
+    <!-- Console Appender (plain text for development) -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Async Appender for JSON file to improve performance -->
+    <!-- Configured with larger queue (2048) and discardingThreshold=0 to handle high-volume logging -->
+    <!-- without dropping ERROR/WARN messages under backpressure -->
+    <appender name="ASYNC_JSON_FILE" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>2048</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <appender-ref ref="JSON_FILE"/>
+    </appender>
+    
+    <!-- Development profile: console + async file, DEBUG level for app -->
+    <springProfile name="dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="ASYNC_JSON_FILE"/>
+        </root>
+        
+        <!-- Debug tracing components -->
+        <logger name="com.rcs.ssf.tracing" level="DEBUG"/>
+        <logger name="com.rcs.ssf.http.filter" level="DEBUG"/>
+        <logger name="io.opentelemetry" level="INFO"/>
+    </springProfile>
+    
+    <!-- Production profile: async file only, WARN for external libs -->
+    <springProfile name="production,prod">
+        <root level="INFO">
+            <appender-ref ref="ASYNC_JSON_FILE"/>
+        </root>
+        
+        <!-- Suppress verbose external library logging -->
+        <logger name="org.springframework" level="WARN"/>
+        <logger name="org.springframework.data" level="WARN"/>
+        <logger name="org.springframework.security" level="WARN"/>
+        <logger name="io.opentelemetry" level="WARN"/>
+        <logger name="com.oracle" level="WARN"/>
+    </springProfile>
+    
+    <!-- Default configuration if no profile matches -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ASYNC_JSON_FILE"/>
+    </root>
+</configuration>

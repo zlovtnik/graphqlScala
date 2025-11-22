@@ -39,6 +39,19 @@ src/
 
 Defined in `src/app/graphql.config.ts` with auth token support via `localStorage['auth_token']` and environment-driven endpoint URLs (`src/environments`).
 
+## Telemetry configuration (PostHog)
+
+- The Angular environments no longer embed analytics keys. Set `NG_APP_POSTHOG_KEY` (and optionally `NG_APP_POSTHOG_HOST`) before running `npm start`/`npm run build`.
+- Example:
+
+  ```bash
+  export NG_APP_POSTHOG_KEY="phc_dev_local_only"  # use a fake key for local dev
+  export NG_APP_POSTHOG_HOST="https://us.i.posthog.com"
+  npm start
+  ```
+
+- CI/CD pipelines should inject the real key via environment variables and rotate/revoke any previously exposed secrets in PostHog.
+
 ## Code generation
 
 Configure operations under `src/app/graphql`. Schema is read from `https://localhost:8443/graphql`. Generated types are written to `src/app/graphql/generated.ts`.
