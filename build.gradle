@@ -77,8 +77,8 @@ configurations {
 		implementation 'io.micrometer:micrometer-registry-prometheus' // Use Spring Boot 3.5.7 managed version (1.15.0)
 		
 		// OpenTelemetry - Distributed Tracing
-		implementation 'io.opentelemetry:opentelemetry-api' // Use Spring Boot 3.5.7 managed version (1.40.0)
-		implementation 'io.opentelemetry:opentelemetry-sdk' // Use Spring Boot 3.5.7 managed version (1.40.0)
+		implementation 'io.opentelemetry:opentelemetry-api' // Use Spring Boot 3.5.7 managed version (1.49.0)
+		implementation 'io.opentelemetry:opentelemetry-sdk' // Use Spring Boot 3.5.7 managed version (1.49.0)
 		implementation 'io.opentelemetry.instrumentation:opentelemetry-spring-boot-starter:2.6.0' // Spring Boot 3.5 auto-configuration
 		implementation 'io.opentelemetry:opentelemetry-exporter-otlp:1.40.0' // OTLP exporter with gRPC support for Jaeger
 		implementation 'io.opentelemetry.instrumentation:opentelemetry-instrumentation-annotations' // @WithSpan annotations (version via OTEL BOM)
@@ -86,7 +86,7 @@ configurations {
 		implementation 'io.opentelemetry.semconv:opentelemetry-semconv' // Semantic conventions for attributes (version via OTEL BOM)
 		
 		// Structured Logging - JSON output for ELK integration
-		implementation 'net.logstash.logback:logstash-logback-encoder:7.4' // JSON log encoder
+		implementation 'net.logstash.logback:logstash-logback-encoder:8.1' // JSON log encoder with improved performance and modern JDK support
 		
 		// Oracle Database Driver
 		implementation 'com.oracle.database.jdbc:ojdbc11:23.26.0.0.0'

@@ -306,12 +306,14 @@ export class AuthService implements OnDestroy {
       return;
     }
 
-    this.lastIdentifiedUserId = user.id;
     try {
       // Only send the stable user ID to PostHog to avoid leaking PII.
       this.posthogService.identifyUser(user.id);
+      // Mark as identified only after successful call to enable retry on failure
+      this.lastIdentifiedUserId = user.id;
     } catch (error) {
       console.warn('Failed to track user in PostHog:', error);
+      // lastIdentifiedUserId remains unset to allow retry on next call
     }
   }
 }
